@@ -13,6 +13,7 @@ postgresql = "42.7.4"
 logback = "1.5.12"
 exposed = "0.57.0"
 h2 = "2.3.232"
+androidx-activity-compose = "1.9.3"
 
 [libraries]
 # Ktor Server
@@ -58,6 +59,9 @@ h2 = { module = "com.h2database:h2", version.ref = "h2" }
 
 # Logging
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+
+# AndroidX
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
