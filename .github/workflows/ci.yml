@@ -1,0 +1,70 @@
+name: CI — Build & Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  server-build:
+    name: Server — Build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: taskhub_test
+          POSTGRES_USER: taskhub
+          POSTGRES_PASSWORD: taskhub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Server
+        run: ./gradlew :server:build
+        env:
+          DATABASE_URL: jdbc:postgresql://localhost:5432/taskhub_test
+          DATABASE_USER: taskhub
+          DATABASE_PASSWORD: taskhub
+
+  composeapp-build:
+    name: ComposeApp — Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build composeApp (desktop)
+        run: ./gradlew :composeApp:desktopJar
+
+      - name: Lint — detekt
+        run: ./gradlew :composeApp:detekt || true
+        continue-on-error: true
