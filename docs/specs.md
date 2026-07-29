@@ -73,7 +73,7 @@ Como miembro del hogar, quiero ver la lista de tareas pendientes filtrada por re
 Como responsable de una tarea, quiero marcarla como hecha con un botón simple para recibir los puntos correspondientes de forma automática.
 
 **HU-10 — Penalización configurable por retraso**  
-Como admin del hogar, quiero configurar penalizaciones por retraso al crear una tarea: elegir entre reducción de puntos fijos (ej. «-10 pts por cada día de retraso») o porcentuales (ej. «-20% de los puntos por cada semana de retraso»), con un tope máximo para que la penalización nunca supere los puntos totales de la tarea.
+Como admin del hogar, quiero configurar penalizaciones por retraso al crear una tarea: elegir entre reducción de puntos fijos (ej. «-10 pts por cada día de retraso») o porcentuales (ej. «-20% de los puntos por cada semana de retraso»), con posibilidad de intervalo mensual, con un tope máximo para que la penalización nunca supere los puntos totales de la tarea.
 
 ### 2.3 Épica: Gamificación
 
@@ -162,7 +162,7 @@ CREATE TABLE Task (
     tags         TEXT[],               -- etiquetas libres + predefinidas (limpieza, cocina, compras, mascotas, mantenimiento, niños, exterior, administración, otro)
     penalty_mode      TEXT,            -- 'fixed' | 'percentage' | NULL (sin penalización)
     penalty_value     INTEGER,         -- cantidad de puntos o porcentaje a restar
-    penalty_interval  TEXT,            -- 'hour' | 'day' | 'week'
+    penalty_interval  TEXT,            -- 'day' | 'week' | 'month'
     penalty_max       INTEGER,         -- tope máximo de penalización (nunca > puntos totales)
     created_at   INTEGER NOT NULL,
     updated_at   INTEGER NOT NULL
@@ -242,7 +242,7 @@ CREATED → ASSIGNED → COMPLETED
 - `CREATED`: la tarea existe pero no está asignada a nadie
 - `ASSIGNED`: tiene responsable y deadline. Para tareas recurrentes, cada ocurrencia genera su propia instancia de `TaskAssignment` con `due_date` calculado a partir de `recurrence_days` (ej. próximo lunes, próximo miércoles...)
 - `COMPLETED`: marcada como hecha por el responsable. Los puntos se otorgan automáticamente al marcar «Hecho», aplicando la penalización configurada si la tarea está fuera de plazo.
-- `OVERDUE`: el deadline pasó sin completarse → se aplica penalización automática según el modo configurado (fijo o porcentaje) y el intervalo definido (hora/día/semana), respetando el tope máximo.
+- `OVERDUE`: el deadline pasó sin completarse → se aplica penalización automática según el modo configurado (fijo o porcentaje) y el intervalo definido (día/semana/mes), respetando el tope máximo.
 - **Recurrencia:** al completar una instancia de tarea recurrente, el sistema genera automáticamente la siguiente instancia con deadline en el próximo día configurado. Si `recurrence_days = [1, 3, 5]` (L, X, V) y hoy es lunes, la siguiente instancia tendrá deadline el miércoles.
 
 ---
@@ -548,7 +548,7 @@ FASE 4 (MVP completo) ██████████░░░░  Semana 9
 
 ### 8.2 Decisiones pendientes
 
-- [ ] **Puntuación y penalización:** ¿debe el usuario poder configurar la penalización? → Sí: dos modos configurables al crear la tarea — puntos fijos por intervalo (-10 pts/día) o porcentaje (-20%/semana), con tope máximo. Ver §3.2 tabla Task.
+- [ ] **Puntuación y penalización:** ¿debe el usuario poder configurar la penalización? → Sí: dos modos configurables al crear la tarea — puntos fijos por intervalo (-10 pts/día) o porcentaje (-20%/semana), con opción mensual, con tope máximo. Ver §3.2 tabla Task.
 - [ ] **Avatar de miembros:** ¿Gravatar, cámara, o iniciales? → Iniciales en MVP, Gravatar como opción futura
 - [ ] **Etiquetas de tareas:** ¿etiquetas libres o predefinidas? → Ambas: predefinidas (limpieza, cocina, compras, mascotas, mantenimiento, niños, exterior, administración, otro) + libres con autocompletado desde tags del hogar
 - [ ] **Idiomas:** ¿solo español o multi-idioma? → Bilingüe español/inglés desde el MVP usando string resources multiplataforma. Otros idiomas post-MVP.
