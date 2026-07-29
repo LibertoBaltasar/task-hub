@@ -7,6 +7,6 @@ import org.taskhub.ui.screens.HomeScreen
 @Composable
 fun App() {
     KoinContext {
-        HomeScreen.Content()
+        HomeScreen()
     }
 }
