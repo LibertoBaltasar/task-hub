@@ -1,0 +1,26 @@
+*.iml
+.gradle/
+build/
+.idea/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# iOS
+iosApp/Pods/
+iosApp/*.xcworkspace
+iosApp/DerivedData/
+
+# Desktop
+*.dmg
+*.deb
+*.AppImage
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+*.env.local
