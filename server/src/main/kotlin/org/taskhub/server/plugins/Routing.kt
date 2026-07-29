@@ -7,6 +7,10 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import org.taskhub.server.routes.healthRouting
+import org.taskhub.server.routes.householdRouting
+import org.taskhub.server.routes.memberRouting
+import org.taskhub.server.services.HouseholdService
+import org.taskhub.server.services.MemberService
 
 fun Application.configureRouting() {
     install(CORS) {
@@ -27,7 +31,12 @@ fun Application.configureRouting() {
         }
     }
 
+    val householdService = HouseholdService()
+    val memberService = MemberService()
+
     routing {
         healthRouting()
+        householdRouting(householdService)
+        memberRouting(memberService, householdService)
     }
 }

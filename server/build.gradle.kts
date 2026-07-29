@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.flyway.core)
     implementation(libs.flyway.database.postgresql)
     implementation(libs.postgresql)
+    implementation(libs.hikaricp)
     implementation(libs.exposed.core)
     implementation(libs.exposed.dao)
     implementation(libs.exposed.jdbc)
@@ -36,6 +37,14 @@ dependencies {
 
     // H2 for local dev/testing
     implementation(libs.h2)
+
+    // Testing
+    testImplementation(libs.ktor.server.test.host)
+    testImplementation(kotlin("test"))
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 application {
