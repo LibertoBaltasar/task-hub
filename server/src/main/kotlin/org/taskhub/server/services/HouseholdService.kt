@@ -1,28 +1,35 @@
 package org.taskhub.server.services
 
+import com.google.cloud.firestore.DocumentSnapshot
+import com.google.cloud.firestore.Query
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import org.taskhub.server.models.HouseholdCreatedResponse
 import org.taskhub.server.models.HouseholdResponse
-import org.taskhub.server.models.Households
+import org.taskhub.server.plugins.FirebasePlugin
 import java.util.UUID
 import kotlin.random.Random
 
 class HouseholdService {
 
-    fun create(name: String): HouseholdCreatedResponse = transaction {
+    private val households
+        get() = FirebasePlugin.firestore.collection("households")
+
+    suspend fun create(name: String): HouseholdCreatedResponse = withContext(Dispatchers.IO) {
         val now = Clock.System.now().toEpochMilliseconds()
         val id = UUID.randomUUID().toString()
         val inviteCode = generateInviteCode()
 
-        Households.insert {
-            it[Households.id] = id
-            it[Households.name] = name
-            it[Households.inviteCode] = inviteCode
-            it[Households.createdAt] = now
-            it[Households.updatedAt] = now
-        }
+        val doc = mapOf(
+            "id" to id,
+            "name" to name,
+            "inviteCode" to inviteCode,
+            "createdAt" to now,
+            "updatedAt" to now
+        )
+
+        households.document(id).set(doc).get()
 
         HouseholdCreatedResponse(
             id = id,
@@ -33,32 +40,37 @@ class HouseholdService {
         )
     }
 
-    fun getById(id: String): HouseholdResponse? = transaction {
-        Households.selectAll().where { Households.id eq id }.singleOrNull()?.let { row ->
-            HouseholdResponse(
-                id = row[Households.id],
-                name = row[Households.name],
-                inviteCode = row[Households.inviteCode],
-                createdAt = row[Households.createdAt],
-                updatedAt = row[Households.updatedAt]
-            )
-        }
+    suspend fun getById(id: String): HouseholdResponse? = withContext(Dispatchers.IO) {
+        val doc = households.document(id).get().get()
+        if (!doc.exists()) return@withContext null
+        doc.toHouseholdResponse()
     }
 
-    fun join(inviteCode: String): HouseholdResponse? = transaction {
-        Households.selectAll().where { Households.inviteCode eq inviteCode }.singleOrNull()?.let { row ->
-            HouseholdResponse(
-                id = row[Households.id],
-                name = row[Households.name],
-                inviteCode = row[Households.inviteCode],
-                createdAt = row[Households.createdAt],
-                updatedAt = row[Households.updatedAt]
-            )
-        }
+    suspend fun join(inviteCode: String): HouseholdResponse? = withContext(Dispatchers.IO) {
+        val snapshot = households
+            .whereEqualTo("inviteCode", inviteCode)
+            .limit(1)
+            .get()
+            .get()
+
+        if (snapshot.isEmpty) return@withContext null
+        snapshot.documents.first().toHouseholdResponse()
     }
 
-    fun exists(id: String): Boolean = transaction {
-        Households.selectAll().where { Households.id eq id }.count() > 0
+    suspend fun exists(id: String): Boolean = withContext(Dispatchers.IO) {
+        val doc = households.document(id).get().get()
+        doc.exists()
+    }
+
+    private fun DocumentSnapshot.toHouseholdResponse(): HouseholdResponse {
+        val data = this.data ?: emptyMap()
+        return HouseholdResponse(
+            id = data["id"] as? String ?: "",
+            name = data["name"] as? String ?: "",
+            inviteCode = data["inviteCode"] as? String ?: "",
+            createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+            updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: 0L
+        )
     }
 
     private fun generateInviteCode(): String {

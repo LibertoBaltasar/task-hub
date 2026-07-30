@@ -1,38 +1,52 @@
 package org.taskhub.server.services
 
+import com.google.cloud.firestore.DocumentSnapshot
+import com.google.cloud.firestore.Query
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
-import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.transaction
 import org.taskhub.server.models.MemberResponse
-import org.taskhub.server.models.Members
+import org.taskhub.server.plugins.FirebasePlugin
 import java.util.UUID
 
 class MemberService {
 
-    fun listByHousehold(householdId: String): List<MemberResponse> = transaction {
-        Members.selectAll()
-            .where { (Members.householdId eq householdId) and (Members.leftAt.isNull()) }
-            .map { row -> row.toMemberResponse() }
+    private fun membersCollection(householdId: String) =
+        FirebasePlugin.firestore
+            .collection("households")
+            .document(householdId)
+            .collection("members")
+
+    suspend fun listByHousehold(householdId: String): List<MemberResponse> = withContext(Dispatchers.IO) {
+        val snapshot = membersCollection(householdId)
+            .whereEqualTo("leftAt", null)
+            .get()
+            .get()
+
+        snapshot.documents.map { it.toMemberResponse() }
     }
 
-    fun create(
+    suspend fun create(
         householdId: String,
         displayName: String,
         role: String = "child",
         avatarUrl: String? = null
-    ): MemberResponse = transaction {
+    ): MemberResponse = withContext(Dispatchers.IO) {
         val now = Clock.System.now().toEpochMilliseconds()
         val id = UUID.randomUUID().toString()
 
-        Members.insert {
-            it[Members.id] = id
-            it[Members.householdId] = householdId
-            it[Members.displayName] = displayName
-            it[Members.role] = role
-            it[Members.avatarUrl] = avatarUrl
-            it[Members.totalPoints] = 0
-            it[Members.joinedAt] = now
-        }
+        val doc = mapOf(
+            "id" to id,
+            "householdId" to householdId,
+            "displayName" to displayName,
+            "role" to role,
+            "avatarUrl" to avatarUrl,
+            "totalPoints" to 0,
+            "joinedAt" to now,
+            "leftAt" to null
+        )
+
+        membersCollection(householdId).document(id).set(doc).get()
 
         MemberResponse(
             id = id,
@@ -45,30 +59,35 @@ class MemberService {
         )
     }
 
-    fun leave(householdId: String, memberId: String): Boolean = transaction {
+    suspend fun leave(householdId: String, memberId: String): Boolean = withContext(Dispatchers.IO) {
+        val docRef = membersCollection(householdId).document(memberId)
+        val doc = docRef.get().get()
+
+        if (!doc.exists()) return@withContext false
+        if (doc.getLong("leftAt") != null) return@withContext false // already left
+
         val now = Clock.System.now().toEpochMilliseconds()
-        Members.update({
-            (Members.householdId eq householdId) and
-            (Members.id eq memberId) and
-            (Members.leftAt.isNull())
-        }) {
-            it[leftAt] = now
-        } > 0
+        docRef.update("leftAt", now).get()
+
+        return@withContext true
     }
 
-    fun exists(householdId: String, memberId: String): Boolean = transaction {
-        Members.selectAll()
-            .where { (Members.householdId eq householdId) and (Members.id eq memberId) and (Members.leftAt.isNull()) }
-            .count() > 0
+    suspend fun exists(householdId: String, memberId: String): Boolean = withContext(Dispatchers.IO) {
+        val doc = membersCollection(householdId).document(memberId).get().get()
+        if (!doc.exists()) return@withContext false
+        doc.getLong("leftAt") == null
     }
 
-    private fun ResultRow.toMemberResponse() = MemberResponse(
-        id = this[Members.id],
-        householdId = this[Members.householdId],
-        displayName = this[Members.displayName],
-        avatarUrl = this[Members.avatarUrl],
-        role = this[Members.role],
-        totalPoints = this[Members.totalPoints],
-        joinedAt = this[Members.joinedAt]
-    )
+    private fun DocumentSnapshot.toMemberResponse(): MemberResponse {
+        val data = this.data ?: emptyMap()
+        return MemberResponse(
+            id = data["id"] as? String ?: "",
+            householdId = data["householdId"] as? String ?: "",
+            displayName = data["displayName"] as? String ?: "",
+            role = data["role"] as? String ?: "child",
+            avatarUrl = data["avatarUrl"] as? String?,
+            totalPoints = (data["totalPoints"] as? Number)?.toInt() ?: 0,
+            joinedAt = (data["joinedAt"] as? Number)?.toLong() ?: 0L
+        )
+    }
 }

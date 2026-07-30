@@ -1,7 +1,7 @@
 package org.taskhub.server
 
 import io.ktor.server.application.*
-import org.taskhub.server.plugins.DatabaseFactory
+import org.taskhub.server.plugins.FirebasePlugin
 import org.taskhub.server.plugins.configureRouting
 import org.taskhub.server.plugins.configureSerialization
 
@@ -10,7 +10,7 @@ fun main() {
 }
 
 fun Application.module() {
-    DatabaseFactory.init(environment)
+    FirebasePlugin.init()
     configureSerialization()
     configureRouting()
 }

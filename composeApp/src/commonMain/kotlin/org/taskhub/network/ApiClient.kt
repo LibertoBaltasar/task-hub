@@ -2,6 +2,7 @@ package org.taskhub.network
 
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
@@ -18,6 +19,10 @@ class ApiClient(baseUrl: String = DEFAULT_BASE_URL) {
                 isLenient = true
                 prettyPrint = false
             })
+        }
+        install(HttpTimeout) {
+            connectTimeoutMillis = 15_000
+            requestTimeoutMillis = 30_000
         }
     }
 
@@ -72,6 +77,6 @@ class ApiClient(baseUrl: String = DEFAULT_BASE_URL) {
 
     companion object {
         // 10.0.2.2 reaches host localhost from Android emulator
-        const val DEFAULT_BASE_URL = "http://10.0.2.2:8080"
+        const val DEFAULT_BASE_URL = "http://192.168.1.113:8080"
     }
 }
