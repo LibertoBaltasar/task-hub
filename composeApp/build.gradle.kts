@@ -62,6 +62,8 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
             implementation(compose.preview)
+            implementation(libs.firebase.auth)
+            implementation(libs.play.services.auth)
         }
 
         iosMain.dependencies {

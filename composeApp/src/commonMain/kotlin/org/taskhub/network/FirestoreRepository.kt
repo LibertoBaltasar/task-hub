@@ -23,7 +23,8 @@ import kotlin.random.Random
  */
 class FirestoreRepository(
     private val projectId: String = "task-hub-62f98",
-    private val apiKey: String = DEFAULT_API_KEY
+    private val apiKey: String = DEFAULT_API_KEY,
+    private val googleIdToken: String? = null
 ) {
     private val baseUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
 
@@ -38,6 +39,18 @@ class FirestoreRepository(
         install(HttpTimeout) {
             connectTimeoutMillis = 15_000
             requestTimeoutMillis = 30_000
+        }
+    }
+
+    /**
+     * Apply auth to a request: uses Bearer token if available,
+     * falls back to ?key= API key for unauthenticated access.
+     */
+    private fun HttpRequestBuilder.applyAuth() {
+        if (!googleIdToken.isNullOrBlank()) {
+            header(HttpHeaders.Authorization, "Bearer $googleIdToken")
+        } else {
+            parameter("key", apiKey)
         }
     }
 
@@ -58,7 +71,7 @@ class FirestoreRepository(
         )
 
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households") {
-            parameter("key", apiKey)
+            applyAuth()
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }.body()
@@ -70,7 +83,7 @@ class FirestoreRepository(
     /** Get a household by id. */
     suspend fun getHousehold(id: String): HouseholdResponse {
         val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$id") {
-            parameter("key", apiKey)
+            applyAuth()
         }.body()
 
         return toHouseholdResponse(response)
@@ -93,7 +106,7 @@ class FirestoreRepository(
         )
 
         val items: List<RunQueryResponseItem> = client.post("$baseUrl:runQuery") {
-            parameter("key", apiKey)
+            applyAuth()
             contentType(ContentType.Application.Json)
             setBody(query)
         }.body()
@@ -111,7 +124,7 @@ class FirestoreRepository(
     /** List members of a household. */
     suspend fun getMembers(householdId: String): List<MemberResponse> {
         val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/members") {
-            parameter("key", apiKey)
+            applyAuth()
         }.body()
 
         return response.documents.map { toMemberResponse(it, householdId) }
@@ -140,7 +153,7 @@ class FirestoreRepository(
         }
 
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/members") {
-            parameter("key", apiKey)
+            applyAuth()
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }.body()
@@ -158,7 +171,7 @@ class FirestoreRepository(
         )
 
         client.patch("$baseUrl/households/$householdId/members/$memberId") {
-            parameter("key", apiKey)
+            applyAuth()
             parameter("updateMask.fieldPaths", "leftAt")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
@@ -212,6 +225,6 @@ class FirestoreRepository(
          * TODO: Replace with the real key from your Firebase project,
          *       or inject it via build config / environment.
          */
-        const val DEFAULT_API_KEY = "YOUR_FIREBASE_WEB_API_KEY"
+        const val DEFAULT_API_KEY = "AIzaSyCOSray4XhnZGdgT91U14KlByk6ySuyhW0"
     }
 }
