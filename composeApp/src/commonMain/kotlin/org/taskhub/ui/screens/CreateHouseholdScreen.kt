@@ -32,10 +32,10 @@ class CreateHouseholdScreen : Screen {
             model.reset()
         }
 
-        // Navegar directamente al hogar cuando se crea exitosamente
+        // Navegar a la pantalla de crear perfil cuando se crea exitosamente
         LaunchedEffect(uiState) {
             if (uiState is HouseholdUiState.Success) {
-                navigator.replaceAll(HouseholdScreen((uiState as HouseholdUiState.Success).household.id))
+                navigator.replaceAll(CreateProfileScreen((uiState as HouseholdUiState.Success).household.id))
             }
         }
 
