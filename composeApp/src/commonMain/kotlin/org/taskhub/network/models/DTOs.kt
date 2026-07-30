@@ -41,3 +41,38 @@ data class MemberResponse(
 
 @Serializable
 data class ErrorResponse(val error: String)
+
+// ── Task DTOs ────────────────────────────────────────────
+
+@Serializable
+data class TaskResponse(
+    val id: String,
+    val householdId: String,
+    val createdBy: String,
+    val title: String,
+    val description: String = "",
+    val points: Int = 10,
+    val frequency: String = "once", // once | daily | weekly | monthly
+    val recurrenceDays: List<Int> = emptyList(), // 1=Monday..7=Sunday
+    val tags: List<String> = emptyList(),
+    val penaltyMode: String? = null, // "fixed" | "percentage" | null
+    val penaltyValue: Int = 0,
+    val penaltyInterval: String = "day", // day | week | month
+    val penaltyMax: Int = 0,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0
+)
+
+@Serializable
+data class TaskAssignmentResponse(
+    val id: String,
+    val taskId: String,
+    val memberId: String,
+    val mandatory: Boolean = false,
+    val dueDate: Long = 0, // epoch millis
+    val status: String = "assigned", // assigned | completed | overdue | penalized
+    val completedAt: Long? = null,
+    val pointsAwarded: Int? = null,
+    val onTime: Boolean? = null,
+    val assignedAt: Long = 0
+)

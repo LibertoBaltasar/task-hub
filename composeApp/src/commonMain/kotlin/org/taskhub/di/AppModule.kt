@@ -5,6 +5,7 @@ import org.koin.dsl.module
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.MemberScreenModel
+import org.taskhub.ui.models.TaskScreenModel
 
 val appModule: Module = module {
     // Network — talks directly to Firestore REST API
@@ -13,4 +14,5 @@ val appModule: Module = module {
     // ScreenModels (Voyager — each screen gets its own instance via factory)
     factory { HouseholdScreenModel(repo = get()) }
     factory { MemberScreenModel(repo = get()) }
+    factory { TaskScreenModel(repo = get()) }
 }

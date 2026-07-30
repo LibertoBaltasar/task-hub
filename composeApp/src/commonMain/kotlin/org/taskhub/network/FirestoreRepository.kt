@@ -8,9 +8,21 @@ import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
+import kotlinx.datetime.todayIn
+import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.TaskResponse
+import org.taskhub.network.models.TaskAssignmentResponse
 import kotlin.random.Random
 
 /**
@@ -210,6 +222,373 @@ class FirestoreRepository(
         }
 
         return true
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  Tasks (subcollection under households/{id})
+    // ────────────────────────────────────────────────────────
+
+    /** Create a task. Returns the created task. */
+    suspend fun createTask(
+        householdId: String,
+        createdBy: String,
+        title: String,
+        description: String,
+        points: Int,
+        frequency: String,
+        recurrenceDays: List<Int>,
+        tags: List<String>,
+        penaltyMode: String?,
+        penaltyValue: Int,
+        penaltyInterval: String,
+        penaltyMax: Int
+    ): TaskResponse {
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        val fields = mutableMapOf<String, FirestoreValue>(
+            "householdId" to FirestoreValue(stringValue = householdId),
+            "createdBy" to FirestoreValue(stringValue = createdBy),
+            "title" to FirestoreValue(stringValue = title),
+            "description" to FirestoreValue(stringValue = description),
+            "points" to FirestoreValue(integerValue = points.toString()),
+            "frequency" to FirestoreValue(stringValue = frequency),
+            "createdAt" to FirestoreValue(integerValue = now.toString()),
+            "updatedAt" to FirestoreValue(integerValue = now.toString())
+        )
+
+        // Tags as array
+        if (tags.isNotEmpty()) {
+            fields["tags"] = FirestoreValue(
+                arrayValue = FirestoreArrayValue(
+                    values = tags.map { FirestoreValue(stringValue = it) }
+                )
+            )
+        } else {
+            fields["tags"] = FirestoreValue(
+                arrayValue = FirestoreArrayValue(values = emptyList())
+            )
+        }
+
+        // Recurrence days as array
+        if (recurrenceDays.isNotEmpty()) {
+            fields["recurrenceDays"] = FirestoreValue(
+                arrayValue = FirestoreArrayValue(
+                    values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }
+                )
+            )
+        }
+
+        // Penalty configuration
+        if (penaltyMode != null) {
+            fields["penaltyMode"] = FirestoreValue(stringValue = penaltyMode)
+            fields["penaltyValue"] = FirestoreValue(integerValue = penaltyValue.toString())
+            fields["penaltyInterval"] = FirestoreValue(stringValue = penaltyInterval)
+            fields["penaltyMax"] = FirestoreValue(integerValue = penaltyMax.toString())
+        }
+
+        val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/tasks") {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }.body()
+
+        val id = extractDocId(response.name)
+        return TaskResponse(
+            id = id, householdId = householdId, createdBy = createdBy,
+            title = title, description = description, points = points,
+            frequency = frequency, recurrenceDays = recurrenceDays, tags = tags,
+            penaltyMode = penaltyMode, penaltyValue = penaltyValue,
+            penaltyInterval = penaltyInterval, penaltyMax = penaltyMax,
+            createdAt = now, updatedAt = now
+        )
+    }
+
+    /** List all tasks for a household. */
+    suspend fun getTasks(householdId: String): List<TaskResponse> {
+        val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/tasks") {
+            tryAuthOrApiKey()
+        }.body()
+
+        return response.documents.map { toTaskResponse(it, householdId) }
+    }
+
+    /** Assign a task to one or more members with a due date. */
+    suspend fun assignTask(
+        householdId: String,
+        taskId: String,
+        memberIds: List<String>,
+        mandatory: Boolean,
+        dueDate: Long
+    ): List<TaskAssignmentResponse> {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val results = mutableListOf<TaskAssignmentResponse>()
+
+        for (memberId in memberIds) {
+            val fields = mutableMapOf<String, FirestoreValue>(
+                "taskId" to FirestoreValue(stringValue = taskId),
+                "memberId" to FirestoreValue(stringValue = memberId),
+                "mandatory" to FirestoreValue(booleanValue = mandatory),
+                "dueDate" to FirestoreValue(integerValue = dueDate.toString()),
+                "status" to FirestoreValue(stringValue = "assigned"),
+                "assignedAt" to FirestoreValue(integerValue = now.toString())
+            )
+
+            val response: FirestoreDocumentResponse = client.post(
+                "$baseUrl/households/$householdId/tasks/$taskId/assignments"
+            ) {
+                withAuth()
+                contentType(ContentType.Application.Json)
+                setBody(FirestoreDocument(fields))
+            }.body()
+
+            val id = extractDocId(response.name)
+            results.add(TaskAssignmentResponse(
+                id = id, taskId = taskId, memberId = memberId,
+                mandatory = mandatory, dueDate = dueDate, status = "assigned",
+                assignedAt = now
+            ))
+        }
+
+        return results
+    }
+
+    /** Get all assignments for a specific task. */
+    suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> {
+        val response: FirestoreListResponse = client.get(
+            "$baseUrl/households/$householdId/tasks/$taskId/assignments"
+        ) {
+            tryAuthOrApiKey()
+        }.body()
+
+        return response.documents.map { toTaskAssignmentResponse(it, taskId) }
+    }
+
+    /** Get all assignments across all tasks for a household. */
+    suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> {
+        val tasks = getTasks(householdId)
+        val allAssignments = mutableListOf<TaskAssignmentResponse>()
+        for (task in tasks) {
+            try {
+                val assignments = getAssignments(householdId, task.id)
+                allAssignments.addAll(assignments)
+            } catch (_: Exception) {
+                // Task has no assignments yet — skip
+            }
+        }
+        return allAssignments
+    }
+
+    /**
+     * Complete a task assignment. Calculates penalty if overdue, handles recurrence.
+     * Returns the updated assignment.
+     */
+    suspend fun completeAssignment(
+        householdId: String,
+        taskId: String,
+        task: TaskResponse,
+        assignmentId: String,
+        assignment: TaskAssignmentResponse
+    ): TaskAssignmentResponse {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val onTime = now <= assignment.dueDate
+
+        // Calculate points (with penalty if overdue)
+        val pointsAwarded = if (onTime) {
+            task.points
+        } else {
+            val penalty = calculatePenalty(task, assignment.dueDate, now)
+            maxOf(task.points - penalty, 0)
+        }
+
+        // Update assignment
+        val fields = mapOf<String, FirestoreValue>(
+            "status" to FirestoreValue(stringValue = "completed"),
+            "completedAt" to FirestoreValue(integerValue = now.toString()),
+            "pointsAwarded" to FirestoreValue(integerValue = pointsAwarded.toString()),
+            "onTime" to FirestoreValue(booleanValue = onTime)
+        )
+
+        client.patch(
+            "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
+        ) {
+            withAuth()
+            parameter("updateMask.fieldPaths", "status,completedAt,pointsAwarded,onTime")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+
+        // Handle recurrence: create next assignment for recurring tasks
+        if (task.frequency != "once" && task.recurrenceDays.isNotEmpty()) {
+            val nextDueDate = calculateNextDueDate(task, now)
+            if (nextDueDate != null) {
+                // Create next assignment for the same members
+                assignTask(
+                    householdId = householdId,
+                    taskId = taskId,
+                    memberIds = listOf(assignment.memberId),
+                    mandatory = assignment.mandatory,
+                    dueDate = nextDueDate
+                )
+            }
+        }
+
+        return assignment.copy(
+            status = "completed",
+            completedAt = now,
+            pointsAwarded = pointsAwarded,
+            onTime = onTime
+        )
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  Penalty & Recurrence Logic
+    // ────────────────────────────────────────────────────────
+
+    /**
+     * Calculate penalty points for an overdue task.
+     *
+     * - fixed mode: subtracts `penaltyValue` per interval
+     * - percentage mode: subtracts `penaltyValue`% of task.points per interval
+     * - Capped at `penaltyMax` (which should not exceed task.points)
+     */
+    private fun calculatePenalty(task: TaskResponse, dueDate: Long, now: Long): Int {
+        val mode = task.penaltyMode ?: return 0
+        if (now <= dueDate) return 0
+
+        val overdueMs = now - dueDate
+        val intervalMs = when (task.penaltyInterval) {
+            "week" -> 7L * 24 * 60 * 60 * 1000
+            "month" -> 30L * 24 * 60 * 60 * 1000
+            else -> 24L * 60 * 60 * 1000 // day
+        }
+
+        val intervals = (overdueMs / intervalMs).toInt() + 1 // +1 because first interval starts immediately
+
+        val penalty = when (mode) {
+            "fixed" -> task.penaltyValue * intervals
+            "percentage" -> (task.points * task.penaltyValue * intervals) / 100
+            else -> 0
+        }
+
+        // Cap at penaltyMax (if set) and never go below 0
+        val capped = if (task.penaltyMax > 0) minOf(penalty, task.penaltyMax) else penalty
+        return minOf(capped, task.points)
+    }
+
+    /**
+     * Calculate the next due date for a recurring task.
+     *
+     * Given the current time, finds the next occurrence based on recurrenceDays.
+     * If frequency is "daily", returns next day.
+     * If frequency is "weekly", returns the next matching weekday from recurrenceDays.
+     * If frequency is "monthly", returns the same day next month.
+     */
+    private fun calculateNextDueDate(task: TaskResponse, afterMs: Long): Long? {
+        val tz = TimeZone.currentSystemDefault()
+        val afterInstant = kotlinx.datetime.Instant.fromEpochMilliseconds(afterMs)
+        val afterDateTime = afterInstant.toLocalDateTime(tz)
+        val afterDate = afterDateTime.date
+
+        // Compute epoch millis for a given date at 12:00 local time
+        // by going through Instant -> LocalDateTime -> back to Instant
+        fun dateToEpoch(year: Int, month: Int, day: Int): Long {
+            // Use the afterDateTime's offset by computing from Instant
+            val baseInstant = kotlinx.datetime.Instant.fromEpochMilliseconds(afterMs)
+            val baseLocal = baseInstant.toLocalDateTime(tz)
+            // Build target LocalDateTime
+            val targetLdt = LocalDateTime(year, month, day, 12, 0, 0)
+            // Compute the epoch using the timezone offset from base
+            return targetLdt.toInstant(tz).toEpochMilliseconds()
+        }
+
+        val nextDate: LocalDate? = when (task.frequency) {
+            "daily" -> afterDate.plus(1, DateTimeUnit.DAY)
+            "weekly" -> {
+                if (task.recurrenceDays.isEmpty()) {
+                    afterDate.plus(7, DateTimeUnit.DAY)
+                } else {
+                    // Find the next matching day of the week
+                    var candidate = afterDate.plus(1, DateTimeUnit.DAY)
+                    var safety = 0
+                    while (safety < 14) {
+                        val dayOfWeek = candidate.dayOfWeek.ordinal + 1 // 1=Monday
+                        if (dayOfWeek in task.recurrenceDays) {
+                            return dateToEpoch(candidate.year, candidate.monthNumber, candidate.dayOfMonth)
+                        }
+                        candidate = candidate.plus(1, DateTimeUnit.DAY)
+                        safety++
+                    }
+                    null // Should not happen
+                }
+            }
+            "monthly" -> {
+                // Next month, same day (capped at month length)
+                val nextMonth = afterDate.monthNumber + 1
+                val nextYear = if (nextMonth > 12) afterDate.year + 1 else afterDate.year
+                val nextMonthNum = if (nextMonth > 12) nextMonth - 12 else nextMonth
+                val maxDay = daysInMonth(nextYear, nextMonthNum)
+                val dayOfMonth = minOf(afterDate.dayOfMonth, maxDay)
+                LocalDate(nextYear, nextMonthNum, dayOfMonth)
+            }
+            else -> afterDate.plus(1, DateTimeUnit.DAY)
+        }
+
+        return nextDate?.let { dateToEpoch(it.year, it.monthNumber, it.dayOfMonth) }
+    }
+
+    private fun daysInMonth(year: Int, month: Int): Int {
+        return when (month) {
+            1, 3, 5, 7, 8, 10, 12 -> 31
+            4, 6, 9, 11 -> 30
+            2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28
+            else -> 30
+        }
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  Task helpers
+    // ────────────────────────────────────────────────────────
+
+    private fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse {
+        val f = doc.fields
+        return TaskResponse(
+            id = extractDocId(doc.name),
+            householdId = f["householdId"]?.stringValue ?: householdId,
+            createdBy = f["createdBy"]?.stringValue ?: "",
+            title = f["title"]?.stringValue ?: "",
+            description = f["description"]?.stringValue ?: "",
+            points = f["points"]?.integerValue?.toIntOrNull() ?: 10,
+            frequency = f["frequency"]?.stringValue ?: "once",
+            recurrenceDays = f["recurrenceDays"]?.arrayValue?.values
+                ?.mapNotNull { it.integerValue?.toIntOrNull() } ?: emptyList(),
+            tags = f["tags"]?.arrayValue?.values
+                ?.mapNotNull { it.stringValue } ?: emptyList(),
+            penaltyMode = f["penaltyMode"]?.stringValue,
+            penaltyValue = f["penaltyValue"]?.integerValue?.toIntOrNull() ?: 0,
+            penaltyInterval = f["penaltyInterval"]?.stringValue ?: "day",
+            penaltyMax = f["penaltyMax"]?.integerValue?.toIntOrNull() ?: 0,
+            createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
+            updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
+        )
+    }
+
+    private fun toTaskAssignmentResponse(
+        doc: FirestoreDocumentResponse,
+        taskId: String
+    ): TaskAssignmentResponse {
+        val f = doc.fields
+        return TaskAssignmentResponse(
+            id = extractDocId(doc.name),
+            taskId = f["taskId"]?.stringValue ?: taskId,
+            memberId = f["memberId"]?.stringValue ?: "",
+            mandatory = f["mandatory"]?.booleanValue ?: false,
+            dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
+            status = f["status"]?.stringValue ?: "assigned",
+            completedAt = f["completedAt"]?.integerValue?.toLongOrNull(),
+            pointsAwarded = f["pointsAwarded"]?.integerValue?.toIntOrNull(),
+            onTime = f["onTime"]?.booleanValue,
+            assignedAt = f["assignedAt"]?.integerValue?.toLongOrNull() ?: 0L
+        )
     }
 
     // ────────────────────────────────────────────────────────

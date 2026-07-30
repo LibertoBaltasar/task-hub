@@ -11,7 +11,13 @@ data class FirestoreValue(
     val integerValue: String? = null,   // NOTE: Firestore REST API sends ints as strings
     val booleanValue: Boolean? = null,
     val nullValue: String? = null,
-    val mapValue: FirestoreMapValue? = null
+    val mapValue: FirestoreMapValue? = null,
+    val arrayValue: FirestoreArrayValue? = null
+)
+
+@Serializable
+data class FirestoreArrayValue(
+    val values: List<FirestoreValue> = emptyList()
 )
 
 @Serializable

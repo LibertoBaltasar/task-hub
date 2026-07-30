@@ -151,6 +151,27 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                 }
                             }
 
+                            // Navigation to tasks
+                            item {
+                                Button(
+                                    onClick = {
+                                        // Use first member as current user (simplified)
+                                        val mState = memberState
+                                        val memberId = if (mState is MemberUiState.Success) mState.members.firstOrNull()?.id else null
+                                        navigator.push(TaskListScreen(householdId, memberId))
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Coral500),
+                                    shape = MaterialTheme.shapes.large
+                                ) {
+                                    Text(
+                                        text = "📋 Ver Tareas",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
                             // Members header
                             item {
                                 Row(
