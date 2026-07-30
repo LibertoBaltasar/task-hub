@@ -78,6 +78,21 @@ data class FieldReference(
     val fieldPath: String
 )
 
+// ── Firebase Auth (Anonymous) ──────────────────────────────
+
+@Serializable
+data class FirebaseAuthRequest(
+    val returnSecureToken: Boolean = true
+)
+
+@Serializable
+data class FirebaseAuthResponse(
+    val idToken: String,
+    val refreshToken: String,
+    val expiresIn: String,
+    val localId: String
+)
+
 // ── RunQuery response (one element per result) ─────────────
 
 @Serializable

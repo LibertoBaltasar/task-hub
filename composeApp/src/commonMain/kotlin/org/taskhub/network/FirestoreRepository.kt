@@ -19,13 +19,22 @@ import kotlin.random.Random
  * Firestore REST API docs:
  *   https://firebase.google.com/docs/firestore/reference/rest
  *
- * All requests use ?key=API_KEY for unauthenticated access.
+ * Uses Firebase Anonymous Auth for write access.
+ * The API key alone only allows reads — writes require a Bearer token.
+ * Anonymous Auth requires zero user interaction (no Google Sign-In, no UI).
  */
 class FirestoreRepository(
     private val projectId: String = "task-hub-62f98",
     private val apiKey: String = DEFAULT_API_KEY
 ) {
     private val baseUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
+    private val authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
+
+    // ── Auth state (in-memory, regenerated on app restart — fine for anonymous) ──
+    @Volatile
+    private var bearerToken: String? = null
+    @Volatile
+    private var tokenExpiry: Long = 0L  // epoch millis when token expires (minus safety margin)
 
     private val client = HttpClient {
         install(ContentNegotiation) {
@@ -42,10 +51,45 @@ class FirestoreRepository(
     }
 
     // ────────────────────────────────────────────────────────
+    //  Auth
+    // ────────────────────────────────────────────────────────
+
+    /**
+     * Ensures we have a valid anonymous auth token, signing up anonymously if needed.
+     * Called lazily on first request. Token is cached in memory and refreshed
+     * when within 5 minutes of expiry.
+     *
+     * POST https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=API_KEY
+     * Body: {"returnSecureToken":true}
+     */
+    private suspend fun ensureAuth() {
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (bearerToken != null && now < tokenExpiry) return
+
+        val response: FirebaseAuthResponse = client.post("$authUrl?key=$apiKey") {
+            contentType(ContentType.Application.Json)
+            setBody(FirebaseAuthRequest(returnSecureToken = true))
+        }.body()
+
+        bearerToken = response.idToken
+        // expiresIn is in seconds. Refresh 5 minutes before actual expiry.
+        tokenExpiry = now + (response.expiresIn.toLong() * 1000) - 300_000
+    }
+
+    /**
+     * Adds Authorization header to a request builder if we already have a token.
+     * Calls [ensureAuth] first so the token is always fresh.
+     */
+    private suspend fun HttpRequestBuilder.withAuth() {
+        ensureAuth()
+        bearerToken?.let { header("Authorization", "Bearer $it") }
+    }
+
+    // ────────────────────────────────────────────────────────
     //  Households
     // ────────────────────────────────────────────────────────
 
-    /** Create a household (auto-generated doc ID). */
+    /** Create a household (auto-generated doc ID). Requires auth (write). */
     suspend fun createHousehold(name: String): HouseholdResponse {
         val now = Clock.System.now().toEpochMilliseconds()
         val inviteCode = generateInviteCode()
@@ -58,7 +102,7 @@ class FirestoreRepository(
         )
 
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households") {
-            parameter("key", apiKey)
+            withAuth()
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }.body()
@@ -67,16 +111,17 @@ class FirestoreRepository(
         return HouseholdResponse(id, name, inviteCode, now, now)
     }
 
-    /** Get a household by id. */
+    /** Get a household by id. Falls back to API key if auth fails (read-only). */
     suspend fun getHousehold(id: String): HouseholdResponse {
         val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$id") {
-            parameter("key", apiKey)
+            // Try Bearer token first; API key fallback for reads
+            tryAuthOrApiKey()
         }.body()
 
         return toHouseholdResponse(response)
     }
 
-    /** Find a household by invite code (query). */
+    /** Find a household by invite code (query). Falls back to API key for reads. */
     suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
         val query = RunQueryRequest(
             structuredQuery = StructuredQuery(
@@ -93,7 +138,7 @@ class FirestoreRepository(
         )
 
         val items: List<RunQueryResponseItem> = client.post("$baseUrl:runQuery") {
-            parameter("key", apiKey)
+            tryAuthOrApiKey()
             contentType(ContentType.Application.Json)
             setBody(query)
         }.body()
@@ -108,16 +153,16 @@ class FirestoreRepository(
     //  Members (subcollection under households/{id})
     // ────────────────────────────────────────────────────────
 
-    /** List members of a household. */
+    /** List members of a household. Falls back to API key for reads. */
     suspend fun getMembers(householdId: String): List<MemberResponse> {
         val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/members") {
-            parameter("key", apiKey)
+            tryAuthOrApiKey()
         }.body()
 
         return response.documents.map { toMemberResponse(it, householdId) }
     }
 
-    /** Add a member to a household. */
+    /** Add a member to a household. Requires auth (write). */
     suspend fun createMember(
         householdId: String,
         displayName: String,
@@ -140,7 +185,7 @@ class FirestoreRepository(
         }
 
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/members") {
-            parameter("key", apiKey)
+            withAuth()
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }.body()
@@ -149,7 +194,7 @@ class FirestoreRepository(
         return MemberResponse(id, householdId, displayName, avatarUrl, role, 0, now)
     }
 
-    /** Remove (leave) a member — soft-delete by setting leftAt. */
+    /** Remove (leave) a member — soft-delete by setting leftAt. Requires auth (write). */
     suspend fun deleteMember(householdId: String, memberId: String): Boolean {
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -158,13 +203,31 @@ class FirestoreRepository(
         )
 
         client.patch("$baseUrl/households/$householdId/members/$memberId") {
-            parameter("key", apiKey)
+            withAuth()
             parameter("updateMask.fieldPaths", "leftAt")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
 
         return true
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  Request helpers
+    // ────────────────────────────────────────────────────────
+
+    /**
+     * Tries Bearer auth first; falls back to API key parameter.
+     * Used for read operations where API key alone might suffice.
+     */
+    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() {
+        try {
+            ensureAuth()
+            bearerToken?.let { header("Authorization", "Bearer $it") }
+        } catch (_: Exception) {
+            // Auth failed — fall back to API key for read-only access
+            parameter("key", apiKey)
+        }
     }
 
     // ────────────────────────────────────────────────────────
@@ -212,6 +275,6 @@ class FirestoreRepository(
          * TODO: Replace with the real key from your Firebase project,
          *       or inject it via build config / environment.
          */
-        const val DEFAULT_API_KEY = "«redacted:AIza…»"
+        const val DEFAULT_API_KEY = "AIzaSyCOSray4XhnZGdgT91U14KlByk6ySuyhW0"
     }
 }
