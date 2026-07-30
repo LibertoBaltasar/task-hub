@@ -9,7 +9,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
@@ -31,6 +30,13 @@ class CreateHouseholdScreen : Screen {
 
         LaunchedEffect(Unit) {
             model.reset()
+        }
+
+        // Navegar directamente al hogar cuando se crea exitosamente
+        LaunchedEffect(uiState) {
+            if (uiState is HouseholdUiState.Success) {
+                navigator.replaceAll(HouseholdScreen((uiState as HouseholdUiState.Success).household.id))
+            }
         }
 
         Surface(
@@ -117,65 +123,8 @@ class CreateHouseholdScreen : Screen {
                     }
                 }
 
-                // Show result
+                // Show errors
                 when (val state = uiState) {
-                    is HouseholdUiState.Success -> {
-                        Spacer(modifier = Modifier.height(32.dp))
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(20.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = "✅ ¡Hogar creado!",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Text(
-                                    text = "Código de invitación:",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-
-                                Text(
-                                    text = state.household.inviteCode,
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                Text(
-                                    text = "Comparte este código para que otros se unan",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Button(
-                                    onClick = {
-                                        navigator.replaceAll(HouseholdScreen(state.household.id))
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = MaterialTheme.shapes.large
-                                ) {
-                                    Text("Ir al hogar")
-                                }
-                            }
-                        }
-                    }
-
                     is HouseholdUiState.Error -> {
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
