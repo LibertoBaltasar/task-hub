@@ -11,17 +11,14 @@ import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
-import com.russhwolf.settings.Settings
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.taskhub.di.appModule
-import org.taskhub.network.FirestoreRepository
+import org.taskhub.storage.HouseholdStore
 import org.taskhub.ui.screens.HouseholdListScreen
 import org.taskhub.ui.screens.WelcomeScreen
 import org.taskhub.ui.theme.TaskHubTheme
 import org.taskhub.ui.theme.Teal600
-
-private const val KEY_LOCAL_ID = "taskhub_local_id"
 
 @Composable
 fun App() {
@@ -29,38 +26,16 @@ fun App() {
         modules(appModule)
     }) {
         TaskHubTheme {
-            val settings = koinInject<Settings>()
-            val repo = koinInject<FirestoreRepository>()
+            val householdStore = koinInject<HouseholdStore>()
 
             var initialScreen by remember { mutableStateOf<Screen?>(null) }
 
             LaunchedEffect(Unit) {
-                val savedLocalId = settings.getString(KEY_LOCAL_ID, "")
-
-                if (savedLocalId.isNotEmpty()) {
-                    // User has been here before — check for households
-                    repo.setLocalId(savedLocalId)
-                    try {
-                        val households = repo.getMyHouseholds(savedLocalId)
-                        initialScreen = if (households.isNotEmpty()) {
-                            HouseholdListScreen(savedLocalId)
-                        } else {
-                            WelcomeScreen()
-                        }
-                    } catch (_: Exception) {
-                        initialScreen = WelcomeScreen()
-                    }
+                val savedHouseholds = householdStore.getSavedHouseholds()
+                initialScreen = if (savedHouseholds.isNotEmpty()) {
+                    HouseholdListScreen(savedHouseholds)
                 } else {
-                    // First time — show welcome
-                    initialScreen = WelcomeScreen()
-                }
-            }
-
-            // When localId becomes available (after anonymous auth), persist it to settings
-            LaunchedEffect(repo.getLocalId()) {
-                val localId = repo.getLocalId()
-                if (localId != null && settings.getString(KEY_LOCAL_ID, "").isEmpty()) {
-                    settings.putString(KEY_LOCAL_ID, localId)
+                    WelcomeScreen()
                 }
             }
 

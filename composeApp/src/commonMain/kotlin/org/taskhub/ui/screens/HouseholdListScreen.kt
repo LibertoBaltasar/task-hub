@@ -18,9 +18,10 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
+import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.theme.*
 
-class HouseholdListScreen(val localId: String) : Screen {
+class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
 
     @Composable
     override fun Content() {
@@ -31,13 +32,12 @@ class HouseholdListScreen(val localId: String) : Screen {
         var isLoading by remember { mutableStateOf(true) }
         var error by remember { mutableStateOf<String?>(null) }
 
-        LaunchedEffect(localId) {
+        LaunchedEffect(savedHouseholds) {
             isLoading = true
             error = null
             try {
-                // Ensure auth happens before querying
-                repo.setLocalId(localId)
-                households = repo.getMyHouseholds(localId)
+                val ids = savedHouseholds.map { it.id }
+                households = repo.getHouseholds(ids)
             } catch (e: Exception) {
                 error = e.message ?: "Error al cargar hogares"
             }
@@ -108,7 +108,7 @@ class HouseholdListScreen(val localId: String) : Screen {
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(onClick = {
-                                    navigator.replaceAll(HouseholdListScreen(localId))
+                                    navigator.replaceAll(HouseholdListScreen(savedHouseholds))
                                 }) {
                                     Text("Reintentar")
                                 }
@@ -117,7 +117,7 @@ class HouseholdListScreen(val localId: String) : Screen {
                     }
 
                     households.isEmpty() -> {
-                        // No households — show welcome-like state
+                        // No households — show welcome-like state (stale local IDs)
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()

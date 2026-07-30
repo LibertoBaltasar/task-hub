@@ -94,11 +94,6 @@ class FirestoreRepository(
     /** Returns the anonymous user's localId after auth. Null if not yet authenticated. */
     fun getLocalId(): String? = cachedLocalId
 
-    /** Preload localId from settings before first network call. */
-    fun setLocalId(id: String) {
-        cachedLocalId = id
-    }
-
     /**
      * Adds Authorization header to a request builder if we already have a token.
      * Calls [ensureAuth] first so the token is always fresh.
@@ -144,6 +139,18 @@ class FirestoreRepository(
         return toHouseholdResponse(response)
     }
 
+    /** Batch-fetch multiple households by their document IDs. */
+    suspend fun getHouseholds(ids: List<String>): List<HouseholdResponse> {
+        if (ids.isEmpty()) return emptyList()
+        return ids.mapNotNull { id ->
+            try {
+                getHousehold(id)
+            } catch (_: Exception) {
+                null // stale ID from local store — skip
+            }
+        }
+    }
+
     /** Find a household by invite code (query). Falls back to API key for reads. */
     suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
         val query = RunQueryRequest(
@@ -173,49 +180,8 @@ class FirestoreRepository(
     }
 
     // ────────────────────────────────────────────────────────
-    //  Household membership queries (by userId / localId)
+    //  Household membership
     // ────────────────────────────────────────────────────────
-
-    /**
-     * Get all households where the given user (localId) is a member.
-     * Uses a Firestore collection group query on "members" with allDescendants=true.
-     */
-    suspend fun getMyHouseholds(localId: String): List<HouseholdResponse> {
-        val query = RunQueryRequest(
-            structuredQuery = StructuredQuery(
-                from = listOf(CollectionSelector("members", allDescendants = true)),
-                where = Filter(
-                    fieldFilter = FieldFilter(
-                        field = FieldReference("userId"),
-                        op = "EQUAL",
-                        value = FirestoreValue(stringValue = localId)
-                    )
-                )
-            )
-        )
-
-        val items: List<RunQueryResponseItem> = client.post("$baseUrl:runQuery") {
-            tryAuthOrApiKey()
-            contentType(ContentType.Application.Json)
-            setBody(query)
-        }.body()
-
-        // Extract householdId from each member document, then batch-get households
-        val householdIds = items.mapNotNull { item ->
-            item.document?.fields?.get("householdId")?.stringValue
-        }.distinct()
-
-        if (householdIds.isEmpty()) return emptyList()
-
-        // Fetch each household by ID
-        return householdIds.mapNotNull { id ->
-            try {
-                getHousehold(id)
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
 
     /**
      * Check if a user (localId) is already a member of the given household.

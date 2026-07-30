@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
+import org.taskhub.storage.HouseholdStore
 
 sealed class HouseholdUiState {
     data object Idle : HouseholdUiState()
@@ -18,7 +19,8 @@ sealed class HouseholdUiState {
 }
 
 class HouseholdScreenModel(
-    private val repo: FirestoreRepository
+    private val repo: FirestoreRepository,
+    private val householdStore: HouseholdStore
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<HouseholdUiState>(HouseholdUiState.Idle)
@@ -29,6 +31,7 @@ class HouseholdScreenModel(
             _uiState.value = HouseholdUiState.Loading
             try {
                 val household = repo.createHousehold(name)
+                householdStore.saveHousehold(household.id, household.name, household.inviteCode)
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
@@ -47,8 +50,10 @@ class HouseholdScreenModel(
                 // Check if current user is already a member
                 val localId = repo.getLocalId()
                 if (localId != null && repo.isMember(household.id, localId)) {
+                    householdStore.saveHousehold(household.id, household.name, household.inviteCode)
                     _uiState.value = HouseholdUiState.AlreadyMember(household)
                 } else {
+                    householdStore.saveHousehold(household.id, household.name, household.inviteCode)
                     _uiState.value = HouseholdUiState.Success(household)
                 }
             } catch (e: Exception) {
