@@ -13,6 +13,7 @@ sealed class HouseholdUiState {
     data object Idle : HouseholdUiState()
     data object Loading : HouseholdUiState()
     data class Success(val household: HouseholdResponse) : HouseholdUiState()
+    data class AlreadyMember(val household: HouseholdResponse) : HouseholdUiState()
     data class Error(val message: String) : HouseholdUiState()
 }
 
@@ -42,7 +43,14 @@ class HouseholdScreenModel(
             _uiState.value = HouseholdUiState.Loading
             try {
                 val household = repo.joinHousehold(inviteCode)
-                _uiState.value = HouseholdUiState.Success(household)
+
+                // Check if current user is already a member
+                val localId = repo.getLocalId()
+                if (localId != null && repo.isMember(household.id, localId)) {
+                    _uiState.value = HouseholdUiState.AlreadyMember(household)
+                } else {
+                    _uiState.value = HouseholdUiState.Success(household)
+                }
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: "Código de invitación inválido"
@@ -68,4 +76,6 @@ class HouseholdScreenModel(
     fun reset() {
         _uiState.value = HouseholdUiState.Idle
     }
+
+    fun getLocalId(): String? = repo.getLocalId()
 }

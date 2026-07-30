@@ -44,8 +44,16 @@ class JoinHouseholdScreen : Screen {
 
         // When household join succeeds, capture the household id
         LaunchedEffect(householdState) {
-            if (householdState is HouseholdUiState.Success && joinedHouseholdId == null) {
-                joinedHouseholdId = (householdState as HouseholdUiState.Success).household.id
+            when (val state = householdState) {
+                is HouseholdUiState.Success -> {
+                    if (joinedHouseholdId == null) {
+                        joinedHouseholdId = (state).household.id
+                    }
+                }
+                is HouseholdUiState.AlreadyMember -> {
+                    navigator.replaceAll(HouseholdScreen(state.household.id))
+                }
+                else -> {}
             }
         }
 
@@ -229,7 +237,8 @@ class JoinHouseholdScreen : Screen {
                     Button(
                         onClick = {
                             focusManager.clearFocus()
-                            memberModel.addMember(joinedHouseholdId!!, displayName.trim(), role)
+                            val userId = householdModel.getLocalId()
+                            memberModel.addMember(joinedHouseholdId!!, displayName.trim(), role, userId = userId)
                         },
                         modifier = Modifier
                             .fillMaxWidth()

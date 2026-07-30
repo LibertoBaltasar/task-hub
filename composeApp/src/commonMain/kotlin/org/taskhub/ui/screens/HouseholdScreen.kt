@@ -285,6 +285,14 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         }
                     }
 
+                    is HouseholdUiState.AlreadyMember -> {
+                        // Already a member — this shouldn't normally be shown on this screen
+                        // Navigate directly
+                        LaunchedEffect(Unit) {
+                            navigator.replaceAll(HouseholdScreen(hState.household.id))
+                        }
+                    }
+
                     is HouseholdUiState.Idle -> {}
                 }
             }

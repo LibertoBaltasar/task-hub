@@ -36,7 +36,8 @@ data class MemberResponse(
     val avatarUrl: String? = null,
     val role: String,
     val totalPoints: Int = 0,
-    val joinedAt: Long = 0
+    val joinedAt: Long = 0,
+    val userId: String? = null
 )
 
 @Serializable

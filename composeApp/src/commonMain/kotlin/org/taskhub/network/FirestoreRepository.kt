@@ -47,6 +47,8 @@ class FirestoreRepository(
     private var bearerToken: String? = null
     @Volatile
     private var tokenExpiry: Long = 0L  // epoch millis when token expires (minus safety margin)
+    @Volatile
+    private var cachedLocalId: String? = null  // anonymous user ID — persists across sessions via settings
 
     private val client = HttpClient {
         install(ContentNegotiation) {
@@ -84,8 +86,17 @@ class FirestoreRepository(
         }.body()
 
         bearerToken = response.idToken
+        cachedLocalId = response.localId
         // expiresIn is in seconds. Refresh 5 minutes before actual expiry.
         tokenExpiry = now + (response.expiresIn.toLong() * 1000) - 300_000
+    }
+
+    /** Returns the anonymous user's localId after auth. Null if not yet authenticated. */
+    fun getLocalId(): String? = cachedLocalId
+
+    /** Preload localId from settings before first network call. */
+    fun setLocalId(id: String) {
+        cachedLocalId = id
     }
 
     /**
@@ -162,6 +173,63 @@ class FirestoreRepository(
     }
 
     // ────────────────────────────────────────────────────────
+    //  Household membership queries (by userId / localId)
+    // ────────────────────────────────────────────────────────
+
+    /**
+     * Get all households where the given user (localId) is a member.
+     * Uses a Firestore collection group query on "members" with allDescendants=true.
+     */
+    suspend fun getMyHouseholds(localId: String): List<HouseholdResponse> {
+        val query = RunQueryRequest(
+            structuredQuery = StructuredQuery(
+                from = listOf(CollectionSelector("members", allDescendants = true)),
+                where = Filter(
+                    fieldFilter = FieldFilter(
+                        field = FieldReference("userId"),
+                        op = "EQUAL",
+                        value = FirestoreValue(stringValue = localId)
+                    )
+                )
+            )
+        )
+
+        val items: List<RunQueryResponseItem> = client.post("$baseUrl:runQuery") {
+            tryAuthOrApiKey()
+            contentType(ContentType.Application.Json)
+            setBody(query)
+        }.body()
+
+        // Extract householdId from each member document, then batch-get households
+        val householdIds = items.mapNotNull { item ->
+            item.document?.fields?.get("householdId")?.stringValue
+        }.distinct()
+
+        if (householdIds.isEmpty()) return emptyList()
+
+        // Fetch each household by ID
+        return householdIds.mapNotNull { id ->
+            try {
+                getHousehold(id)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
+    /**
+     * Check if a user (localId) is already a member of the given household.
+     */
+    suspend fun isMember(householdId: String, localId: String): Boolean {
+        return try {
+            val members = getMembers(householdId)
+            members.any { it.userId == localId }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ────────────────────────────────────────────────────────
     //  Members (subcollection under households/{id})
     // ────────────────────────────────────────────────────────
 
@@ -179,7 +247,8 @@ class FirestoreRepository(
         householdId: String,
         displayName: String,
         role: String = "child",
-        avatarUrl: String? = null
+        avatarUrl: String? = null,
+        userId: String? = null
     ): MemberResponse {
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -194,6 +263,11 @@ class FirestoreRepository(
             fields["avatarUrl"] = FirestoreValue(stringValue = avatarUrl)
         } else {
             fields["avatarUrl"] = FirestoreValue(nullValue = "NULL_VALUE")
+        }
+        if (userId != null) {
+            fields["userId"] = FirestoreValue(stringValue = userId)
+        } else {
+            fields["userId"] = FirestoreValue(nullValue = "NULL_VALUE")
         }
 
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/members") {
@@ -637,7 +711,8 @@ class FirestoreRepository(
             avatarUrl = f["avatarUrl"]?.stringValue,
             role = f["role"]?.stringValue ?: "child",
             totalPoints = f["totalPoints"]?.integerValue?.toIntOrNull() ?: 0,
-            joinedAt = f["joinedAt"]?.integerValue?.toLongOrNull() ?: 0L
+            joinedAt = f["joinedAt"]?.integerValue?.toLongOrNull() ?: 0L,
+            userId = f["userId"]?.stringValue
         )
     }
 

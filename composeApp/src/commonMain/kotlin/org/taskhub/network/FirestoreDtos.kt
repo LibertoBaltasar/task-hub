@@ -69,7 +69,14 @@ data class CollectionSelector(
 
 @Serializable
 data class Filter(
-    val fieldFilter: FieldFilter
+    val fieldFilter: FieldFilter? = null,
+    val compositeFilter: CompositeFilter? = null
+)
+
+@Serializable
+data class CompositeFilter(
+    val op: String,
+    val filters: List<Filter>
 )
 
 @Serializable
