@@ -5,7 +5,7 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
 import org.koin.compose.KoinApplication
 import org.taskhub.di.appModule
-import org.taskhub.ui.screens.LoginScreen
+import org.taskhub.ui.screens.WelcomeScreen
 import org.taskhub.ui.theme.TaskHubTheme
 
 @Composable
@@ -14,7 +14,7 @@ fun App() {
         modules(appModule)
     }) {
         TaskHubTheme {
-            Navigator(screen = LoginScreen()) { navigator ->
+            Navigator(screen = WelcomeScreen()) { navigator ->
                 SlideTransition(navigator)
             }
         }
