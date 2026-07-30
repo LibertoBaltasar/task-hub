@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.taskhub.network.ApiClient
+import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
 
 sealed class HouseholdUiState {
@@ -17,7 +17,7 @@ sealed class HouseholdUiState {
 }
 
 class HouseholdScreenModel(
-    private val apiClient: ApiClient
+    private val repo: FirestoreRepository
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<HouseholdUiState>(HouseholdUiState.Idle)
@@ -27,7 +27,7 @@ class HouseholdScreenModel(
         screenModelScope.launch {
             _uiState.value = HouseholdUiState.Loading
             try {
-                val household = apiClient.createHousehold(name)
+                val household = repo.createHousehold(name)
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
@@ -41,7 +41,7 @@ class HouseholdScreenModel(
         screenModelScope.launch {
             _uiState.value = HouseholdUiState.Loading
             try {
-                val household = apiClient.joinHousehold(inviteCode)
+                val household = repo.joinHousehold(inviteCode)
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
@@ -55,7 +55,7 @@ class HouseholdScreenModel(
         screenModelScope.launch {
             _uiState.value = HouseholdUiState.Loading
             try {
-                val household = apiClient.getHousehold(id)
+                val household = repo.getHousehold(id)
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(

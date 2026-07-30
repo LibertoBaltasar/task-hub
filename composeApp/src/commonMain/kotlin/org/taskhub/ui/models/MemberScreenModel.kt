@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.taskhub.network.ApiClient
+import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 
 sealed class MemberUiState {
@@ -17,7 +17,7 @@ sealed class MemberUiState {
 }
 
 class MemberScreenModel(
-    private val apiClient: ApiClient
+    private val repo: FirestoreRepository
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<MemberUiState>(MemberUiState.Idle)
@@ -30,7 +30,7 @@ class MemberScreenModel(
         screenModelScope.launch {
             _uiState.value = MemberUiState.Loading
             try {
-                val members = apiClient.getMembers(householdId)
+                val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
@@ -44,10 +44,10 @@ class MemberScreenModel(
         screenModelScope.launch {
             _uiState.value = MemberUiState.Loading
             try {
-                val member = apiClient.createMember(householdId, displayName, role)
+                val member = repo.createMember(householdId, displayName, role)
                 _lastCreatedMember.value = member
                 // Reload the full member list
-                val members = apiClient.getMembers(householdId)
+                val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
@@ -60,8 +60,8 @@ class MemberScreenModel(
     fun removeMember(householdId: String, memberId: String) {
         screenModelScope.launch {
             try {
-                apiClient.deleteMember(householdId, memberId)
-                val members = apiClient.getMembers(householdId)
+                repo.deleteMember(householdId, memberId)
+                val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(

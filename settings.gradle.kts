@@ -16,4 +16,3 @@ dependencyResolutionManagement {
 rootProject.name = "task-hub"
 
 include(":composeApp")
-include(":server")
