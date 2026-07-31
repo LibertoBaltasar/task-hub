@@ -10,6 +10,8 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.koin.compose.koinInject
+import org.taskhub.storage.HouseholdStore
 import org.taskhub.ui.theme.Coral500
 import org.taskhub.ui.theme.Teal600
 import org.taskhub.ui.theme.Teal50
@@ -19,6 +21,8 @@ class WelcomeScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val householdStore = koinInject<HouseholdStore>()
+        val savedHouseholds = householdStore.getSavedHouseholds()
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -87,6 +91,27 @@ class WelcomeScreen : Screen {
                         text = "Unirse a un hogar",
                         style = MaterialTheme.typography.titleMedium
                     )
+                }
+
+                if (savedHouseholds.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Button(
+                        onClick = { navigator.push(HouseholdListScreen(savedHouseholds)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Teal50,
+                            contentColor = Teal600
+                        ),
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Text(
+                            text = "Mis hogares",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
