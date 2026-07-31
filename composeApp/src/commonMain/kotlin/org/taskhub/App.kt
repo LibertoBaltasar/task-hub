@@ -2,6 +2,8 @@ package org.taskhub
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -39,18 +41,33 @@ fun App() {
                 }
             }
 
-            when (val screen = initialScreen) {
-                null -> {
-                    // Still loading
-                    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = Teal600)
+            // Surface paints the background behind system bars (edge-to-edge)
+            // Inner Box applies system bar padding so content doesn't overlap
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .navigationBarsPadding()
+                ) {
+                    when (val screen = initialScreen) {
+                        null -> {
+                            // Still loading
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Teal600)
+                            }
                         }
-                    }
-                }
-                else -> {
-                    Navigator(screen = screen) { navigator ->
-                        SlideTransition(navigator)
+                        else -> {
+                            Navigator(screen = screen) { navigator ->
+                                SlideTransition(navigator)
+                            }
+                        }
                     }
                 }
             }
