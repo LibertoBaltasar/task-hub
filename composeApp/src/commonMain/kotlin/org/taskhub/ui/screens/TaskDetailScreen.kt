@@ -18,6 +18,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.taskhub.network.models.TaskAssignmentResponse
+import org.taskhub.network.models.TaskInstanceResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
@@ -99,8 +100,16 @@ data class TaskDetailScreen(
                         TaskDetailContent(
                             task = state.task,
                             assignments = state.assignments,
+                            instances = state.instances,
                             memberMap = memberMap,
                             actionState = actionState,
+                            onCompleteInstance = { instance ->
+                                model.completeInstance(
+                                    householdId = householdId,
+                                    task = state.task,
+                                    instance = instance
+                                )
+                            },
                             onComplete = { assignmentId, assignment ->
                                 model.completeAssignment(
                                     householdId = householdId,
@@ -147,13 +156,19 @@ data class TaskDetailScreen(
 private fun TaskDetailContent(
     task: org.taskhub.network.models.TaskResponse,
     assignments: List<TaskAssignmentResponse>,
+    instances: List<TaskInstanceResponse>,
     memberMap: Map<String, MemberResponse>,
     actionState: TaskActionState,
+    onCompleteInstance: (TaskInstanceResponse) -> Unit,
     onComplete: (String, TaskAssignmentResponse) -> Unit
 ) {
     val now = Clock.System.now().toEpochMilliseconds()
     val pendingAssignments = assignments.filter { it.status == "assigned" }
     val completedAssignments = assignments.filter { it.status == "completed" }
+
+    // Instance stats
+    val pendingInstances = instances.filter { !it.completed }
+    val completedInstances = instances.filter { it.completed }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -295,6 +310,84 @@ private fun TaskDetailContent(
                                 color = Coral500
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        // ── Instance status ──
+        item {
+            Text(
+                text = "📆 Instancias (${pendingInstances.size} pendientes, ${completedInstances.size} completadas)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Teal700
+            )
+        }
+
+        if (task.frequency != "once" || instances.isNotEmpty()) {
+            if (pendingInstances.isEmpty() && completedInstances.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            text = "📭 Sin instancias aún",
+                            modifier = Modifier.padding(16.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+
+            if (pendingInstances.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "⏳ Pendientes:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Coral700
+                    )
+                }
+                items(pendingInstances.sortedBy { it.dueDate }) { instance ->
+                    InstanceRow(
+                        instance = instance,
+                        now = now,
+                        isLoading = actionState is TaskActionState.Loading,
+                        onComplete = { onCompleteInstance(instance) }
+                    )
+                }
+            }
+
+            if (completedInstances.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "✅ Completadas:",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Teal700
+                    )
+                }
+                items(completedInstances.sortedByDescending { it.completedAt ?: 0L }.take(5)) { instance ->
+                    InstanceRow(
+                        instance = instance,
+                        now = now,
+                        isLoading = false,
+                        onComplete = null
+                    )
+                }
+                if (completedInstances.size > 5) {
+                    item {
+                        Text(
+                            text = "... y ${completedInstances.size - 5} más",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -487,6 +580,96 @@ private fun AssignmentCard(
                         text = "✅",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+//  InstanceRow
+// ────────────────────────────────────────────────────────────
+
+@Composable
+private fun InstanceRow(
+    instance: TaskInstanceResponse,
+    now: Long,
+    isLoading: Boolean,
+    onComplete: (() -> Unit)?
+) {
+    val isOverdue = !instance.completed && instance.dueDate > 0 && instance.dueDate < now
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "📅 ${formatDateTime(instance.dueDate)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = when {
+                        instance.completed -> Teal600
+                        isOverdue -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
+                    fontWeight = if (!instance.completed) FontWeight.SemiBold else FontWeight.Normal
+                )
+
+                if (instance.completed && instance.completedAt != null) {
+                    Text(
+                        text = "✅ Completada: ${formatDateTime(instance.completedAt!!)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Teal600
+                    )
+                }
+
+                instance.pointsAwarded?.let { pts ->
+                    Text(
+                        text = "⭐ +$pts pts",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Coral600
+                    )
+                }
+            }
+
+            if (onComplete != null && !instance.completed) {
+                Button(
+                    onClick = onComplete,
+                    enabled = !isLoading,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Teal600
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("✅", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            } else if (instance.completed) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = Teal100
+                ) {
+                    Text(
+                        text = "✅",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium
                     )
                 }
             }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
+import org.taskhub.network.models.TaskInstanceResponse
 import org.taskhub.network.models.MemberResponse
 
 // ── UI State ──────────────────────────────────────────────
@@ -19,6 +20,7 @@ sealed class TaskListUiState {
     data class Success(
         val tasks: List<TaskResponse>,
         val assignments: List<TaskAssignmentResponse>,
+        val instances: List<TaskInstanceResponse>,
         val members: List<MemberResponse>
     ) : TaskListUiState()
     data class Error(val message: String) : TaskListUiState()
@@ -30,6 +32,7 @@ sealed class TaskDetailUiState {
     data class Success(
         val task: TaskResponse,
         val assignments: List<TaskAssignmentResponse>,
+        val instances: List<TaskInstanceResponse>,
         val members: List<MemberResponse>
     ) : TaskDetailUiState()
     data class Error(val message: String) : TaskDetailUiState()
@@ -99,6 +102,7 @@ class TaskScreenModel(
             try {
                 val tasks = repo.getTasks(householdId)
                 val assignments = repo.getAllAssignments(householdId)
+                val instances = repo.getTaskInstances(householdId)
                 val members = repo.getMembers(householdId)
 
                 // Collect all unique tags
@@ -108,7 +112,7 @@ class TaskScreenModel(
                 }
                 _allTags.value = tagSet.toList().sorted()
 
-                _listState.value = TaskListUiState.Success(tasks, assignments, members)
+                _listState.value = TaskListUiState.Success(tasks, assignments, instances, members)
             } catch (e: Exception) {
                 _listState.value = TaskListUiState.Error(
                     e.message ?: "Error al cargar tareas"
@@ -181,6 +185,26 @@ class TaskScreenModel(
                     )
                 }
 
+                // Generate task instances for recurring tasks
+                if (frequency != "once") {
+                    repo.generateTaskInstances(
+                        householdId = householdId,
+                        taskId = task.id,
+                        frequency = frequency,
+                        recurrenceDays = recurrenceDays,
+                        points = points
+                    )
+                } else {
+                    // Single instance for non-recurring tasks
+                    repo.generateTaskInstances(
+                        householdId = householdId,
+                        taskId = task.id,
+                        frequency = "once",
+                        recurrenceDays = emptyList(),
+                        points = points
+                    )
+                }
+
                 _actionState.value = TaskActionState.Success
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
@@ -221,6 +245,33 @@ class TaskScreenModel(
         }
     }
 
+    // ── Complete task instance ───────────────────────────────
+
+    fun completeInstance(
+        householdId: String,
+        task: TaskResponse,
+        instance: TaskInstanceResponse
+    ) {
+        screenModelScope.launch {
+            _actionState.value = TaskActionState.Loading
+            try {
+                repo.completeTaskInstance(
+                    householdId = householdId,
+                    task = task,
+                    instance = instance
+                )
+                _actionState.value = TaskActionState.Success
+
+                // Refresh detail
+                loadTaskDetail(householdId, task.id)
+            } catch (e: Exception) {
+                _actionState.value = TaskActionState.Error(
+                    e.message ?: "Error al completar tarea"
+                )
+            }
+        }
+    }
+
     // ── Load task detail ────────────────────────────────────
 
     fun loadTaskDetail(householdId: String, taskId: String) {
@@ -232,9 +283,11 @@ class TaskScreenModel(
                     ?: throw IllegalStateException("Tarea no encontrada")
 
                 val assignments = repo.getAssignments(householdId, taskId)
+                val allInstances = repo.getTaskInstances(householdId)
+                val instances = allInstances.filter { it.taskId == taskId }
                 val members = repo.getMembers(householdId)
 
-                _detailState.value = TaskDetailUiState.Success(task, assignments, members)
+                _detailState.value = TaskDetailUiState.Success(task, assignments, instances, members)
             } catch (e: Exception) {
                 _detailState.value = TaskDetailUiState.Error(
                     e.message ?: "Error al cargar tarea"

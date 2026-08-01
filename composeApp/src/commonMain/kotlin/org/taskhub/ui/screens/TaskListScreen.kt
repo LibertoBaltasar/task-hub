@@ -23,6 +23,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
+import org.taskhub.network.models.TaskInstanceResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
@@ -125,6 +126,10 @@ data class TaskListScreen(
                             onTaskClick = { task ->
                                 navigator.push(TaskDetailScreen(householdId, task.id))
                             },
+                            onCompleteInstance = { task, instance ->
+                                model.completeInstance(householdId, task, instance)
+                                model.loadTasks(householdId)
+                            },
                             onRefresh = { model.loadTasks(householdId) }
                         )
                     }
@@ -156,14 +161,13 @@ data class TaskListScreen(
 }
 
 // ────────────────────────────────────────────────────────────
-//  Day grouping models
+//  Day grouping models (instance-based)
 // ────────────────────────────────────────────────────────────
 
-private data class TaskWithDue(
+private data class InstanceWithTask(
+    val instance: TaskInstanceResponse,
     val task: TaskResponse,
-    val dueDate: Long?,
-    val isOverdue: Boolean,
-    val assignments: List<TaskAssignmentResponse>
+    val isOverdue: Boolean
 )
 
 private data class TaskGroup(
@@ -172,7 +176,7 @@ private data class TaskGroup(
     val dateKey: String,
     val isOverdue: Boolean,
     val isNoDate: Boolean,
-    val tasks: List<TaskWithDue>
+    val items: List<InstanceWithTask>
 )
 
 // ────────────────────────────────────────────────────────────
@@ -205,24 +209,24 @@ private fun spanishMonthName(month: Month): String = when (month) {
 }
 
 // ────────────────────────────────────────────────────────────
-//  Group tasks by day
+//  Group instances by day
 // ────────────────────────────────────────────────────────────
 
-private fun groupTasksByDay(
-    tasks: List<TaskWithDue>,
+private fun groupInstancesByDay(
+    items: List<InstanceWithTask>,
     todayStartEpoch: Long
 ): List<TaskGroup> {
     val tz = TimeZone.currentSystemDefault()
     val todayInstant = Instant.fromEpochMilliseconds(todayStartEpoch)
     val today = todayInstant.toLocalDateTime(tz).date
 
-    // Group key per task
-    val grouped = tasks.groupBy { task ->
+    // Group key per instance
+    val grouped = items.groupBy { item ->
         when {
-            task.isOverdue -> "overdue"
-            task.dueDate == null -> "nodate"
+            item.isOverdue -> "overdue"
+            item.instance.dueDate <= 0 -> "nodate"
             else -> {
-                val dueInstant = Instant.fromEpochMilliseconds(task.dueDate!!)
+                val dueInstant = Instant.fromEpochMilliseconds(item.instance.dueDate)
                 val dueDate = dueInstant.toLocalDateTime(tz).date
                 val daysDiff = dueDate.toEpochDays() - today.toEpochDays()
                 when {
@@ -235,20 +239,19 @@ private fun groupTasksByDay(
         }
     }
 
-    return grouped.entries.map { (key, groupTasks) ->
-        buildGroup(key, groupTasks, today, tz)
+    return grouped.entries.map { (key, groupItems) ->
+        buildGroup(key, groupItems, today, tz)
     }.sortedBy { it.sortKey }
 }
 
 private fun buildGroup(
     key: String,
-    groupTasks: List<TaskWithDue>,
+    groupItems: List<InstanceWithTask>,
     today: LocalDate,
     tz: TimeZone
 ): TaskGroup {
-    // Sort tasks within group by due date (ascending), then by points (descending)
-    val sorted = groupTasks.sortedWith(
-        compareBy<TaskWithDue> { it.dueDate ?: Long.MAX_VALUE }
+    val sorted = groupItems.sortedWith(
+        compareBy<InstanceWithTask> { it.instance.dueDate }
             .thenByDescending { it.task.points }
     )
 
@@ -259,7 +262,7 @@ private fun buildGroup(
             dateKey = "overdue",
             isOverdue = true,
             isNoDate = false,
-            tasks = sorted
+            items = sorted
         )
         key == "today" -> {
             val dow = today.dayOfWeek
@@ -270,7 +273,7 @@ private fun buildGroup(
                 dateKey = "today",
                 isOverdue = false,
                 isNoDate = false,
-                tasks = sorted
+                items = sorted
             )
         }
         key == "tomorrow" -> {
@@ -283,7 +286,7 @@ private fun buildGroup(
                 dateKey = "tomorrow",
                 isOverdue = false,
                 isNoDate = false,
-                tasks = sorted
+                items = sorted
             )
         }
         key.startsWith("week_") -> {
@@ -297,7 +300,7 @@ private fun buildGroup(
                 dateKey = key,
                 isOverdue = false,
                 isNoDate = false,
-                tasks = sorted
+                items = sorted
             )
         }
         key.startsWith("later_") -> {
@@ -312,7 +315,7 @@ private fun buildGroup(
                 dateKey = key,
                 isOverdue = false,
                 isNoDate = false,
-                tasks = sorted
+                items = sorted
             )
         }
         else -> TaskGroup(
@@ -321,13 +324,13 @@ private fun buildGroup(
             dateKey = "nodate",
             isOverdue = false,
             isNoDate = true,
-            tasks = sorted
+            items = sorted
         )
     }
 }
 
 // ────────────────────────────────────────────────────────────
-//  TaskListContent
+//  TaskListContent (instance-based)
 // ────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -343,11 +346,11 @@ private fun TaskListContent(
     onSortChange: (TaskSort) -> Unit,
     onTagFilterChange: (String?) -> Unit,
     onTaskClick: (TaskResponse) -> Unit,
+    onCompleteInstance: (TaskResponse, TaskInstanceResponse) -> Unit,
     onRefresh: () -> Unit
 ) {
+    val taskMap = state.tasks.associateBy { it.id }
     val memberMap = state.members.associateBy { it.id }
-
-    // Build assignment map: taskId -> list of assignments
     val assignmentsByTask = state.assignments.groupBy { it.taskId }
 
     // Compute today start for overdue detection
@@ -356,10 +359,10 @@ private fun TaskListContent(
     val todayStartEpoch = now.toLocalDateTime(tz).date
         .atStartOfDayIn(tz).toEpochMilliseconds()
 
-    // Filter and build TaskWithDue
-    val tasksWithDue = state.tasks
-        .filter { task ->
-            val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
+    // Build InstanceWithTask for each instance (only for non-completed)
+    val instancesWithTasks = state.instances
+        .filter { inst ->
+            val task = taskMap[inst.taskId] ?: return@filter false
 
             // Tag filter
             if (tagFilter != null && tagFilter !in task.tags) return@filter false
@@ -367,36 +370,35 @@ private fun TaskListContent(
             // Status filter
             when (filter) {
                 TaskFilter.ALL -> true
-                TaskFilter.PENDING -> taskAssignments.any { it.status == "assigned" } || taskAssignments.isEmpty()
-                TaskFilter.COMPLETED -> taskAssignments.any { it.status == "completed" }
+                TaskFilter.PENDING -> !inst.completed
+                TaskFilter.COMPLETED -> inst.completed
                 TaskFilter.MINE -> {
                     val mid = currentMemberId ?: return@filter false
+                    val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
                     taskAssignments.any { it.memberId == mid && it.status == "assigned" }
                 }
             }
         }
-        .map { task ->
-            val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
-            // Earliest active due date
-            val dueDate = taskAssignments
-                .filter { it.status == "assigned" && it.dueDate > 0 }
-                .minOfOrNull { it.dueDate }
-            val isOverdue = dueDate != null && dueDate < todayStartEpoch
-            TaskWithDue(
+        .map { inst ->
+            val task = taskMap[inst.taskId]!!
+            val isOverdue = !inst.completed && inst.dueDate > 0 && inst.dueDate < todayStartEpoch
+            InstanceWithTask(
+                instance = inst,
                 task = task,
-                dueDate = dueDate,
-                isOverdue = isOverdue,
-                assignments = taskAssignments
+                isOverdue = isOverdue
             )
         }
 
-    // Group tasks by day
-    val groups = remember(tasksWithDue, filter, sort, tagFilter) {
-        groupTasksByDay(tasksWithDue, todayStartEpoch)
+    // Group by day
+    val groups = remember(instancesWithTasks, filter, sort, tagFilter) {
+        groupInstancesByDay(instancesWithTasks, todayStartEpoch)
     }
 
-    // Collapse state per group — persist across recompositions
+    // Collapse state per group
     val collapsedGroups = remember { mutableStateMapOf<String, Boolean>() }
+
+    // Track which instances are being completed (loading state)
+    val loadingInstanceIds = remember { mutableStateMapOf<String, Boolean>() }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -415,7 +417,7 @@ private fun TaskListContent(
             )
         }
 
-        if (tasksWithDue.isEmpty()) {
+        if (instancesWithTasks.isEmpty()) {
             item {
                 Spacer(Modifier.height(8.dp))
                 Card(
@@ -445,7 +447,7 @@ private fun TaskListContent(
                 stickyHeader(key = "header_${group.dateKey}") {
                     GroupHeader(
                         label = group.label,
-                        count = group.tasks.size,
+                        count = group.items.size,
                         isOverdue = group.isOverdue,
                         isNoDate = group.isNoDate,
                         isCollapsed = isCollapsed,
@@ -457,17 +459,21 @@ private fun TaskListContent(
                     Spacer(modifier = Modifier.height(6.dp))
                 }
 
-                // Animated visibility for collapse/expand
                 if (!isCollapsed) {
                     items(
-                        items = group.tasks,
-                        key = { "task_${it.task.id}" }
-                    ) { taskWithDue ->
-                        TaskCard(
-                            task = taskWithDue.task,
-                            assignments = taskWithDue.assignments,
+                        items = group.items,
+                        key = { "inst_${it.instance.id}" }
+                    ) { item ->
+                        InstanceCard(
+                            item = item,
+                            assignments = assignmentsByTask[item.task.id] ?: emptyList(),
                             memberMap = memberMap,
-                            onClick = { onTaskClick(taskWithDue.task) }
+                            isLoading = loadingInstanceIds[item.instance.id] == true,
+                            onClick = { onTaskClick(item.task) },
+                            onComplete = {
+                                loadingInstanceIds[item.instance.id] = true
+                                onCompleteInstance(item.task, item.instance)
+                            }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -477,6 +483,201 @@ private fun TaskListContent(
 
         // Spacer at bottom
         item { Spacer(modifier = Modifier.height(16.dp)) }
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+//  InstanceCard – shows a task instance with quick-complete
+// ────────────────────────────────────────────────────────────
+
+@Composable
+private fun InstanceCard(
+    item: InstanceWithTask,
+    assignments: List<TaskAssignmentResponse>,
+    memberMap: Map<String, MemberResponse>,
+    isLoading: Boolean,
+    onClick: () -> Unit,
+    onComplete: () -> Unit
+) {
+    val task = item.task
+    val instance = item.instance
+    val pendingCount = assignments.count { it.status == "assigned" }
+    val completedCount = assignments.count { it.status == "completed" }
+    val totalAssigned = assignments.size
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // Title + Complete button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (!instance.completed) {
+                    Button(
+                        onClick = onComplete,
+                        enabled = !isLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Teal600
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("✅ Hecho", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                } else {
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = Teal100
+                    ) {
+                        Text(
+                            text = "✅",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+
+            // Description
+            if (task.description.isNotBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = task.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Frequency + Tags
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Points badge
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = if (task.penaltyMode != null) Coral500 else Teal500
+                ) {
+                    Text(
+                        text = "${task.points} pts",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onTertiary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Frequency badge
+                val freqLabel = when (task.frequency) {
+                    "daily" -> "🔄 Diaria"
+                    "weekly" -> "📅 Semanal"
+                    "monthly" -> "📆 Mensual"
+                    else -> "• Una vez"
+                }
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = Teal50
+                ) {
+                    Text(
+                        text = freqLabel,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Teal700
+                    )
+                }
+
+                // Tags
+                task.tags.take(2).forEach { tag ->
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = Coral50
+                    ) {
+                        Text(
+                            text = tag,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Coral700
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Due date display
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (instance.dueDate > 0) {
+                    val deadlineText = formatDeadline(instance.dueDate)
+                    Text(
+                        text = if (instance.completed) "✅ $deadlineText" else "⏰ $deadlineText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = when {
+                            instance.completed -> Teal600
+                            item.isOverdue -> MaterialTheme.colorScheme.error
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                } else {
+                    Text(
+                        text = "Sin deadline",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Assignment status
+                if (totalAssigned > 0) {
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = Teal100
+                    ) {
+                        Text(
+                            text = "✅ $completedCount/$totalAssigned",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Teal800,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -720,222 +921,6 @@ private fun FilterChipsRow(
                             expandedSort = false
                         }
                     )
-                }
-            }
-        }
-    }
-}
-
-// ────────────────────────────────────────────────────────────
-//  TaskCard
-// ────────────────────────────────────────────────────────────
-
-@Composable
-private fun TaskCard(
-    task: TaskResponse,
-    assignments: List<TaskAssignmentResponse>,
-    memberMap: Map<String, MemberResponse>,
-    onClick: () -> Unit
-) {
-    val pendingCount = assignments.count { it.status == "assigned" }
-    val completedCount = assignments.count { it.status == "completed" }
-    val totalAssigned = assignments.size
-
-    // Find earliest deadline
-    val earliestDeadline = assignments
-        .filter { it.status == "assigned" && it.dueDate > 0 }
-        .minOfOrNull { it.dueDate }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            // Title + Points
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                // Points badge
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = if (task.penaltyMode != null) Coral500 else Teal500
-                ) {
-                    Text(
-                        text = "${task.points} pts",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onTertiary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            // Description (if present)
-            if (task.description.isNotBlank()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = task.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Frequency + Tags
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Frequency badge
-                val freqLabel = when (task.frequency) {
-                    "daily" -> "🔄 Diaria"
-                    "weekly" -> "📅 Semanal"
-                    "monthly" -> "📆 Mensual"
-                    else -> "• Una vez"
-                }
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = Teal50
-                ) {
-                    Text(
-                        text = freqLabel,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Teal700
-                    )
-                }
-
-                // Recurrence days
-                if (task.recurrenceDays.isNotEmpty()) {
-                    val daysStr = task.recurrenceDays.map { day ->
-                        when (day) {
-                            1 -> "L"
-                            2 -> "M"
-                            3 -> "X"
-                            4 -> "J"
-                            5 -> "V"
-                            6 -> "S"
-                            7 -> "D"
-                            else -> "?"
-                        }
-                    }.joinToString(",")
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = Teal50
-                    ) {
-                        Text(
-                            text = daysStr,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Teal700
-                        )
-                    }
-                }
-
-                // Tags
-                task.tags.take(3).forEach { tag ->
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = Coral50
-                    ) {
-                        Text(
-                            text = tag,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Coral700
-                        )
-                    }
-                }
-                if (task.tags.size > 3) {
-                    Text(
-                        text = "+${task.tags.size - 3}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Deadline + Assignments
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Deadline
-                if (earliestDeadline != null) {
-                    val deadlineText = formatDeadline(earliestDeadline)
-                    val isOverdue = earliestDeadline < Clock.System.now().toEpochMilliseconds()
-                    Text(
-                        text = "⏰ $deadlineText",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (isOverdue) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        text = "Sin deadline",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                // Assignment status
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (totalAssigned > 0) {
-                        Surface(
-                            shape = MaterialTheme.shapes.small,
-                            color = Teal100
-                        ) {
-                            Text(
-                                text = "✅ $completedCount/$totalAssigned",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Teal800,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-
-                    // Penalty indicator
-                    if (task.penaltyMode != null) {
-                        val penaltyLabel = when (task.penaltyMode) {
-                            "fixed" -> "-${task.penaltyValue}pts"
-                            "percentage" -> "-${task.penaltyValue}%"
-                            else -> ""
-                        }
-                        Text(
-                            text = "⚠️ $penaltyLabel",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Coral600
-                        )
-                    }
                 }
             }
         }

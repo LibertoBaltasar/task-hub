@@ -77,3 +77,14 @@ data class TaskAssignmentResponse(
     val onTime: Boolean? = null,
     val assignedAt: Long = 0
 )
+
+@Serializable
+data class TaskInstanceResponse(
+    val id: String,
+    val taskId: String,
+    val dueDate: Long = 0, // epoch millis — the specific day this instance is for
+    val completed: Boolean = false,
+    val completedAt: Long? = null,
+    val pointsAwarded: Int? = null,
+    val createdAt: Long = 0
+)
