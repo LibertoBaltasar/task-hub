@@ -1,5 +1,6 @@
 package org.taskhub.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,8 +17,12 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
 import org.taskhub.network.models.TaskResponse
+import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.AssignmentSlot
 import org.taskhub.ui.models.TaskActionState
 import org.taskhub.ui.models.TaskScreenModel
+import org.taskhub.ui.models.MemberScreenModel
+import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.theme.*
 
 // ────────────────────────────────────────────────────────────
@@ -33,10 +38,16 @@ data class EditTaskScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val taskModel = koinScreenModel<TaskScreenModel>()
+        val memberModel = koinScreenModel<MemberScreenModel>()
         val actionState by taskModel.actionState.collectAsState()
+        val memberState by memberModel.uiState.collectAsState()
 
         LaunchedEffect(Unit) {
             taskModel.resetActionState()
+        }
+
+        LaunchedEffect(householdId) {
+            memberModel.loadMembers(householdId)
         }
 
         // Form state — pre-populated from existing task
@@ -52,6 +63,18 @@ data class EditTaskScreen(
         var penaltyValue by remember { mutableStateOf(if (task.penaltyValue > 0) task.penaltyValue.toString() else "") }
         var penaltyInterval by remember { mutableStateOf(task.penaltyInterval) }
         var penaltyMax by remember { mutableStateOf(if (task.penaltyMax > 0) task.penaltyMax.toString() else "") }
+
+        // Assignment state
+        var selectedMembers by remember { mutableStateOf(setOf<String>()) }
+        var hasRotation by remember { mutableStateOf(task.assignmentRotation.isNotEmpty()) }
+        // rotationSlots: dayOfWeek (1..7) → memberId (empty string = not set)
+        var rotationSlots by remember {
+            mutableStateOf(
+                (1..7).associateWith { day ->
+                    task.assignmentRotation.find { it.dayOfWeek == day }?.memberId ?: ""
+                }.toMutableMap()
+            )
+        }
 
         // Handle success — navigate back and refresh detail
         LaunchedEffect(actionState) {
@@ -105,6 +128,17 @@ data class EditTaskScreen(
                                     val pValue = penaltyValue.toIntOrNull() ?: 0
                                     val pMax = penaltyMax.toIntOrNull() ?: 0
 
+                                    // Build assignment rotation from rotation slots
+                                    val rotation: List<AssignmentSlot> = if (hasRotation) {
+                                        rotationSlots.entries
+                                            .filter { it.value.isNotBlank() }
+                                            .map { (day, memberId) ->
+                                                AssignmentSlot(dayOfWeek = day, memberId = memberId)
+                                            }
+                                    } else {
+                                        emptyList()
+                                    }
+
                                     taskModel.updateTask(
                                         householdId = householdId,
                                         taskId = task.id,
@@ -117,7 +151,8 @@ data class EditTaskScreen(
                                         penaltyMode = if (hasPenalty) penaltyMode else null,
                                         penaltyValue = pValue,
                                         penaltyInterval = penaltyInterval,
-                                        penaltyMax = pMax
+                                        penaltyMax = pMax,
+                                        assignmentRotation = rotation
                                     )
                                 },
                                 enabled = actionState !is TaskActionState.Loading,
@@ -371,6 +406,167 @@ data class EditTaskScreen(
                                     label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
                                 )
                             }
+                        }
+                    }
+
+                    // ── Assignment ──
+                    item {
+                        Text(
+                            text = "👥 Asignación",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Teal700
+                        )
+                    }
+
+                    // Members list
+                    when (val mState = memberState) {
+                        is MemberUiState.Success -> {
+                            if (mState.members.isNotEmpty()) {
+                                item {
+                                    mState.members.forEach { member ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    selectedMembers = if (member.id in selectedMembers) {
+                                                        selectedMembers - member.id
+                                                    } else {
+                                                        selectedMembers + member.id
+                                                    }
+                                                }
+                                                .padding(vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Checkbox(
+                                                checked = member.id in selectedMembers,
+                                                onCheckedChange = { checked ->
+                                                    selectedMembers = if (checked) {
+                                                        selectedMembers + member.id
+                                                    } else {
+                                                        selectedMembers - member.id
+                                                    }
+                                                },
+                                                colors = CheckboxDefaults.colors(
+                                                    checkedColor = Teal600
+                                                )
+                                            )
+                                            Text(
+                                                text = "${if (member.role == "admin") "👑" else "🧒"} ${member.displayName}",
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        is MemberUiState.Loading -> {
+                            item {
+                                CircularProgressIndicator(color = Teal600)
+                            }
+                        }
+
+                        else -> {}
+                    }
+
+                    // Rotation toggle
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "🔄 Rotación semanal (diferente persona cada día)",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Switch(
+                                checked = hasRotation,
+                                onCheckedChange = { hasRotation = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedTrackColor = Coral500
+                                )
+                            )
+                        }
+                    }
+
+                    // Day-of-week rotation selectors
+                    if (hasRotation) {
+                        when (val mState = memberState) {
+                            is MemberUiState.Success -> {
+                                val members = mState.members
+                                val days = listOf(
+                                    1 to "Lunes", 2 to "Martes", 3 to "Miércoles",
+                                    4 to "Jueves", 5 to "Viernes", 6 to "Sábado", 7 to "Domingo"
+                                )
+                                days.forEach { (day, label) ->
+                                    item {
+                                        var expanded by remember { mutableStateOf(false) }
+                                        val selectedMember = members.find { it.id == rotationSlots[day] }
+                                        val displayText = selectedMember?.displayName ?: "Sin asignar"
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                modifier = Modifier.width(80.dp),
+                                                fontWeight = FontWeight.Medium
+                                            )
+
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                OutlinedButton(
+                                                    onClick = { expanded = true },
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        text = displayText,
+                                                        modifier = Modifier.weight(1f),
+                                                        maxLines = 1
+                                                    )
+                                                    Text("▼")
+                                                }
+
+                                                DropdownMenu(
+                                                    expanded = expanded,
+                                                    onDismissRequest = { expanded = false }
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("Sin asignar") },
+                                                        onClick = {
+                                                            rotationSlots = rotationSlots.toMutableMap().apply { put(day, "") }
+                                                            expanded = false
+                                                        }
+                                                    )
+                                                    members.forEach { member ->
+                                                        DropdownMenuItem(
+                                                            text = {
+                                                                Text("${if (member.role == "admin") "👑" else "🧒"} ${member.displayName}")
+                                                            },
+                                                            onClick = {
+                                                                rotationSlots = rotationSlots.toMutableMap().apply { put(day, member.id) }
+                                                                expanded = false
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            is MemberUiState.Loading -> {
+                                item {
+                                    CircularProgressIndicator(color = Teal600)
+                                }
+                            }
+
+                            else -> {}
                         }
                     }
 

@@ -700,6 +700,25 @@ private fun TaskCard(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
+                } else {
+                    // Show rotation assignee for today
+                    val rotationMemberId = getTodayAssigneeMemberId(task)
+                    if (rotationMemberId != null) {
+                        val rotationMember = memberMap[rotationMemberId]
+                        if (rotationMember != null) {
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = Coral50
+                            ) {
+                                Text(
+                                    text = "🧑 ${rotationMember.displayName}",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Coral700
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -964,4 +983,20 @@ private fun formatDeadline(epochMillis: Long): String {
     val hour = local.hour.toString().padStart(2, '0')
     val min = local.minute.toString().padStart(2, '0')
     return "$day/$month ${hour}:${min}"
+}
+
+/**
+ * Returns the member ID responsible for this task today based on assignmentRotation.
+ * Returns null if no rotation is defined.
+ */
+private fun getTodayAssigneeMemberId(task: TaskResponse): String? {
+    if (task.assignmentRotation.isEmpty()) return null
+
+    val now = Clock.System.now()
+    val tz = TimeZone.currentSystemDefault()
+    val today = now.toLocalDateTime(tz).date
+    val todayDow = today.dayOfWeek.ordinal + 1 // 1=Monday..7=Sunday
+
+    val slot = task.assignmentRotation.find { it.dayOfWeek == todayDow }
+    return slot?.memberId
 }

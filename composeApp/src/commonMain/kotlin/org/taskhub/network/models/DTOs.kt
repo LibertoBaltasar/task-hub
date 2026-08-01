@@ -46,6 +46,12 @@ data class ErrorResponse(val error: String)
 // ── Task DTOs ────────────────────────────────────────────
 
 @Serializable
+data class AssignmentSlot(
+    val dayOfWeek: Int, // 1=Monday..7=Sunday
+    val memberId: String
+)
+
+@Serializable
 data class TaskResponse(
     val id: String,
     val householdId: String,
@@ -62,6 +68,7 @@ data class TaskResponse(
     val penaltyMax: Int = 0,
     val dueDate: Long = 0, // epoch millis — for "once" tasks; 0 = no specific date
     val lastCompletedDate: Long? = null, // epoch millis — last time this task was completed
+    val assignmentRotation: List<AssignmentSlot> = emptyList(), // daily rotation: who does it each day
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 )

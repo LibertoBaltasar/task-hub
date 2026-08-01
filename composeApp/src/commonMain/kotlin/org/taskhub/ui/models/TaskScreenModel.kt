@@ -10,6 +10,10 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.AssignmentSlot
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 // ── UI State ──────────────────────────────────────────────
 
@@ -150,7 +154,8 @@ class TaskScreenModel(
         penaltyMax: Int,
         memberIds: List<String>,
         mandatory: Boolean,
-        dueDate: Long
+        dueDate: Long,
+        assignmentRotation: List<AssignmentSlot> = emptyList()
     ) {
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
@@ -168,7 +173,8 @@ class TaskScreenModel(
                     penaltyValue = penaltyValue,
                     penaltyInterval = penaltyInterval,
                     penaltyMax = penaltyMax,
-                    dueDate = dueDate
+                    dueDate = dueDate,
+                    assignmentRotation = assignmentRotation
                 )
 
                 // Auto-assign if members selected
@@ -299,7 +305,8 @@ class TaskScreenModel(
         penaltyMode: String?,
         penaltyValue: Int,
         penaltyInterval: String,
-        penaltyMax: Int
+        penaltyMax: Int,
+        assignmentRotation: List<AssignmentSlot> = emptyList()
     ) {
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
@@ -316,7 +323,8 @@ class TaskScreenModel(
                     penaltyMode = penaltyMode,
                     penaltyValue = penaltyValue,
                     penaltyInterval = penaltyInterval,
-                    penaltyMax = penaltyMax
+                    penaltyMax = penaltyMax,
+                    assignmentRotation = assignmentRotation
                 )
                 _actionState.value = TaskActionState.Success
                 // Refresh detail
@@ -346,6 +354,22 @@ class TaskScreenModel(
     }
 
     // ── Helpers ─────────────────────────────────────────────
+
+    /**
+     * Returns the member ID responsible for this task today based on assignmentRotation.
+     * Falls back to null if no rotation is defined — then use fixed assignments.
+     */
+    fun getTodayAssignee(task: TaskResponse): String? {
+        if (task.assignmentRotation.isEmpty()) return null
+
+        val now = Clock.System.now()
+        val tz = TimeZone.currentSystemDefault()
+        val today = now.toLocalDateTime(tz).date
+        val todayDow = today.dayOfWeek.ordinal + 1 // 1=Monday..7=Sunday
+
+        val slot = task.assignmentRotation.find { it.dayOfWeek == todayDow }
+        return slot?.memberId
+    }
 
     fun resetActionState() {
         _actionState.value = TaskActionState.Idle

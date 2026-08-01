@@ -290,7 +290,8 @@ class FirestoreRepository(
         penaltyValue: Int,
         penaltyInterval: String,
         penaltyMax: Int,
-        dueDate: Long = 0
+        dueDate: Long = 0,
+        assignmentRotation: List<org.taskhub.network.models.AssignmentSlot> = emptyList()
     ): TaskResponse {
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -336,6 +337,24 @@ class FirestoreRepository(
             fields["penaltyMax"] = FirestoreValue(integerValue = penaltyMax.toString())
         }
 
+        // Assignment rotation as array of maps
+        if (assignmentRotation.isNotEmpty()) {
+            fields["assignmentRotation"] = FirestoreValue(
+                arrayValue = FirestoreArrayValue(
+                    values = assignmentRotation.map { slot ->
+                        FirestoreValue(
+                            mapValue = FirestoreMapValue(
+                                fields = mapOf(
+                                    "dayOfWeek" to FirestoreValue(integerValue = slot.dayOfWeek.toString()),
+                                    "memberId" to FirestoreValue(stringValue = slot.memberId)
+                                )
+                            )
+                        )
+                    }
+                )
+            )
+        }
+
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/tasks") {
             withAuth()
             contentType(ContentType.Application.Json)
@@ -350,6 +369,7 @@ class FirestoreRepository(
             penaltyMode = penaltyMode, penaltyValue = penaltyValue,
             penaltyInterval = penaltyInterval, penaltyMax = penaltyMax,
             dueDate = dueDate, lastCompletedDate = null,
+            assignmentRotation = assignmentRotation,
             createdAt = now, updatedAt = now
         )
     }
@@ -628,7 +648,8 @@ class FirestoreRepository(
         penaltyMode: String?,
         penaltyValue: Int,
         penaltyInterval: String,
-        penaltyMax: Int
+        penaltyMax: Int,
+        assignmentRotation: List<org.taskhub.network.models.AssignmentSlot> = emptyList()
     ) {
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -666,6 +687,22 @@ class FirestoreRepository(
             fields["penaltyInterval"] = FirestoreValue(nullValue = "NULL_VALUE")
             fields["penaltyMax"] = FirestoreValue(nullValue = "NULL_VALUE")
         }
+
+        // Assignment rotation as array of maps
+        fields["assignmentRotation"] = FirestoreValue(
+            arrayValue = FirestoreArrayValue(
+                values = assignmentRotation.map { slot ->
+                    FirestoreValue(
+                        mapValue = FirestoreMapValue(
+                            fields = mapOf(
+                                "dayOfWeek" to FirestoreValue(integerValue = slot.dayOfWeek.toString()),
+                                "memberId" to FirestoreValue(stringValue = slot.memberId)
+                            )
+                        )
+                    )
+                }
+            )
+        )
 
         val updateMask = fields.keys.joinToString(",")
 
@@ -706,6 +743,13 @@ class FirestoreRepository(
             penaltyMax = f["penaltyMax"]?.integerValue?.toIntOrNull() ?: 0,
             dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
             lastCompletedDate = f["lastCompletedDate"]?.integerValue?.toLongOrNull(),
+            assignmentRotation = f["assignmentRotation"]?.arrayValue?.values
+                ?.mapNotNull { slotValue ->
+                    val sf = slotValue.mapValue?.fields ?: return@mapNotNull null
+                    val dow = sf["dayOfWeek"]?.integerValue?.toIntOrNull() ?: return@mapNotNull null
+                    val mid = sf["memberId"]?.stringValue ?: return@mapNotNull null
+                    org.taskhub.network.models.AssignmentSlot(dayOfWeek = dow, memberId = mid)
+                } ?: emptyList(),
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
             updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
         )
