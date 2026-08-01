@@ -368,19 +368,19 @@ private fun TaskListContent(
     // Build InstanceWithTask for each instance (only for non-completed, non-skipped)
     val instancesWithTasks = state.instances
         .filter { inst ->
-            val task = taskMap[inst.taskId] ?: return@filter false
+            // Always exclude completed and skipped from the pending list
+            if (inst.completed || inst.skipped) return@filter false
 
-            // Exclude skipped instances from the normal view
-            if (inst.skipped) return@filter false
+            val task = taskMap[inst.taskId] ?: return@filter false
 
             // Tag filter
             if (tagFilter != null && tagFilter !in task.tags) return@filter false
 
-            // Status filter
+            // Status filter (completed go to "Completadas hoy" section, not here)
             when (filter) {
                 TaskFilter.ALL -> true
-                TaskFilter.PENDING -> !inst.completed
-                TaskFilter.COMPLETED -> inst.completed
+                TaskFilter.PENDING -> true
+                TaskFilter.COMPLETED -> false
                 TaskFilter.MINE -> {
                     val mid = currentMemberId ?: return@filter false
                     val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
@@ -390,7 +390,7 @@ private fun TaskListContent(
         }
         .map { inst ->
             val task = taskMap[inst.taskId]!!
-            val isOverdue = !inst.completed && inst.dueDate > 0 && inst.dueDate < todayStartEpoch
+            val isOverdue = inst.dueDate > 0 && inst.dueDate < todayStartEpoch
             InstanceWithTask(
                 instance = inst,
                 task = task,
@@ -415,6 +415,26 @@ private fun TaskListContent(
             )
         }
         .sortedByDescending { it.instance.dueDate }
+
+    // Build completed today instances list
+    val completedTodayInstances = state.instances
+        .filter { inst ->
+            if (!inst.completed) return@filter false
+            val task = taskMap[inst.taskId] ?: return@filter false
+            if (tagFilter != null && tagFilter !in task.tags) return@filter false
+            // Only show if completed today
+            val completedAt = inst.completedAt ?: return@filter false
+            completedAt >= todayStartEpoch
+        }
+        .map { inst ->
+            val task = taskMap[inst.taskId]!!
+            InstanceWithTask(
+                instance = inst,
+                task = task,
+                isOverdue = false
+            )
+        }
+        .sortedByDescending { it.instance.completedAt ?: 0 }
 
     // Group by day
     val groups = remember(instancesWithTasks, filter, sort, tagFilter) {
@@ -456,7 +476,7 @@ private fun TaskListContent(
                     Text(
                         text = when (filter) {
                             TaskFilter.PENDING -> "🎉 ¡No hay tareas pendientes!"
-                            TaskFilter.COMPLETED -> "📭 No hay tareas completadas"
+                            TaskFilter.COMPLETED -> "📋 Revisa '✅ Completadas hoy' abajo"
                             TaskFilter.MINE -> "👤 No tienes tareas asignadas"
                             TaskFilter.ALL -> "📋 No hay tareas aún. ¡Crea la primera!"
                         },
@@ -512,6 +532,43 @@ private fun TaskListContent(
             }
         }
 
+        // ── Completed today instances ──
+        if (completedTodayInstances.isNotEmpty()) {
+            item(key = "completed_today_header") {
+                Spacer(Modifier.height(8.dp))
+                GroupHeader(
+                    label = "✅ Completadas hoy",
+                    count = completedTodayInstances.size,
+                    isOverdue = false,
+                    isNoDate = false,
+                    isCollapsed = collapsedGroups["completed_today"] ?: true,
+                    onToggle = { collapsedGroups["completed_today"] = !(collapsedGroups["completed_today"] ?: true) }
+                )
+            }
+
+            item(key = "completed_today_spacer") {
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            if (!(collapsedGroups["completed_today"] ?: true)) {
+                items(
+                    items = completedTodayInstances,
+                    key = { "completed_${it.instance.id}" }
+                ) { item ->
+                    InstanceCard(
+                        item = item,
+                        assignments = assignmentsByTask[item.task.id] ?: emptyList(),
+                        memberMap = memberMap,
+                        isLoading = false,
+                        onClick = { onTaskClick(item.task) },
+                        onComplete = null,
+                        onSkip = null
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        }
+
         // ── Skipped instances ──
         if (skippedInstances.isNotEmpty()) {
             item(key = "skipped_header") {
@@ -521,8 +578,8 @@ private fun TaskListContent(
                     count = skippedInstances.size,
                     isOverdue = false,
                     isNoDate = false,
-                    isCollapsed = collapsedGroups["skipped"] ?: false,
-                    onToggle = { collapsedGroups["skipped"] = !(collapsedGroups["skipped"] ?: false) }
+                    isCollapsed = collapsedGroups["skipped"] ?: true,
+                    onToggle = { collapsedGroups["skipped"] = !(collapsedGroups["skipped"] ?: true) }
                 )
             }
 
@@ -530,7 +587,7 @@ private fun TaskListContent(
                 Spacer(modifier = Modifier.height(6.dp))
             }
 
-            if (!(collapsedGroups["skipped"] ?: false)) {
+            if (!(collapsedGroups["skipped"] ?: true)) {
                 items(
                     items = skippedInstances,
                     key = { "skipped_${it.instance.id}" }
