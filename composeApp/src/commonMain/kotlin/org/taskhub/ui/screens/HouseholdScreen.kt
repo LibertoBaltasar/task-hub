@@ -196,58 +196,62 @@ data class HouseholdScreen(val householdId: String) : Screen {
                             ) {
                                 // Household info card
                                 item {
-                                    Box(
+                                    Card(
                                         modifier = Modifier.fillMaxWidth(),
-                                        contentAlignment = Alignment.Center
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = Teal50
+                                        )
                                     ) {
-                                        Card(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = Teal50
-                                            )
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(20.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
-                                            Column(
-                                                modifier = Modifier.padding(20.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
-                                            ) {
-                                                Text(
-                                                    text = "🏠",
-                                                    style = MaterialTheme.typography.displaySmall
-                                                )
+                                            Text(
+                                                text = "🏠",
+                                                style = MaterialTheme.typography.displaySmall
+                                            )
 
-                                                Spacer(modifier = Modifier.height(8.dp))
+                                            Spacer(modifier = Modifier.height(8.dp))
 
-                                                Text(
-                                                    text = household.name,
-                                                    style = MaterialTheme.typography.headlineSmall,
-                                                    color = Teal900,
-                                                    fontWeight = FontWeight.Bold
-                                                )
+                                            Text(
+                                                text = household.name,
+                                                style = MaterialTheme.typography.headlineSmall,
+                                                color = Teal900,
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
 
-                                                Spacer(modifier = Modifier.height(16.dp))
+                                            Spacer(modifier = Modifier.height(16.dp))
 
-                                                Text(
-                                                    text = "Código de invitación",
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = Teal700
-                                                )
+                                            Text(
+                                                text = "Código de invitación",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = Teal700,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
 
-                                                Text(
-                                                    text = household.inviteCode,
-                                                    style = MaterialTheme.typography.headlineMedium,
-                                                    color = Teal600,
-                                                    fontWeight = FontWeight.Bold,
-                                                    textAlign = TextAlign.Center
-                                                )
+                                            Text(
+                                                text = household.inviteCode,
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                color = Teal600,
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
 
-                                                Spacer(modifier = Modifier.height(4.dp))
+                                            Spacer(modifier = Modifier.height(4.dp))
 
-                                                Text(
-                                                    text = "Comparte este código para invitar miembros",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = Teal700
-                                                )
-                                            }
+                                            Text(
+                                                text = "Comparte este código para invitar miembros",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Teal700,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
                                         }
                                     }
                                 }
