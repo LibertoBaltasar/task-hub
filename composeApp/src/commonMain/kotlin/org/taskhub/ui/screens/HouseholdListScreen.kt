@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -21,6 +23,9 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
+import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.SettingsCallbacks
+import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.theme.*
 
@@ -33,6 +38,7 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
         val repo = koinInject<FirestoreRepository>()
         val householdStore = koinInject<HouseholdStore>()
         val householdModel = koinScreenModel<HouseholdScreenModel>()
+        val appSettings = LocalAppSettings.current
 
         var households by remember { mutableStateOf<List<HouseholdResponse>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
@@ -41,6 +47,9 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
         // Multi-selection state
         var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
         val isSelectionMode = selectedIds.isNotEmpty()
+
+        // Settings dialog state
+        var showSettings by remember { mutableStateOf(false) }
 
         // Double-confirmation dialog state
         var showConfirmDialog1 by remember { mutableStateOf(false) }
@@ -56,6 +65,29 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
                 error = e.message ?: "Error al cargar hogares"
             }
             isLoading = false
+        }
+
+        // ── Settings dialog ──
+        if (showSettings) {
+            Dialog(
+                onDismissRequest = { showSettings = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .fillMaxHeight(0.85f),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    SettingsSheet(
+                        callbacks = SettingsCallbacks(
+                            onExportCsv = { /* CSV export available from task list */ },
+                            onDismiss = { showSettings = false }
+                        )
+                    )
+                }
+            }
         }
 
         // ── Deletion dialogs (multi-select) ──
@@ -187,6 +219,16 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
                                 Text("🗑️", style = MaterialTheme.typography.titleLarge)
                             }
                         } else {
+                            // Settings icon
+                            TextButton(
+                                onClick = { showSettings = true },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Text("⚙️", style = MaterialTheme.typography.titleLarge)
+                            }
+                            Spacer(Modifier.width(8.dp))
                             TextButton(
                                 onClick = { navigator.replaceAll(WelcomeScreen()) },
                                 colors = ButtonDefaults.textButtonColors(
@@ -371,7 +413,6 @@ private fun HouseholdCard(
         ) {
             // Selection indicator
             if (selectionMode) {
-                // Checkbox in selection mode
                 Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onClick() },
@@ -381,7 +422,6 @@ private fun HouseholdCard(
                     )
                 )
             } else {
-                // House icon normally
                 Surface(
                     modifier = Modifier.size(48.dp),
                     shape = MaterialTheme.shapes.medium,

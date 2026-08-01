@@ -7,6 +7,8 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.createNotificationScheduler
 import org.taskhub.storage.HouseholdStore
+import org.taskhub.storage.SettingsStore
+import org.taskhub.storage.ThemeStore
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.TaskScreenModel
@@ -17,6 +19,12 @@ val appModule: Module = module {
 
     // Local household persistence (survives auth changes across restarts)
     single { HouseholdStore(settings = get()) }
+
+    // User settings (theme, language, notifications)
+    single { SettingsStore(settings = get()) }
+
+    // Theme persistence
+    single { ThemeStore(settings = get()) }
 
     // Network — talks directly to Firestore REST API
     single { FirestoreRepository() }

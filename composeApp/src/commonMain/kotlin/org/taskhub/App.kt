@@ -13,28 +13,31 @@ import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
-import com.russhwolf.settings.Settings
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.taskhub.di.appModule
 import org.taskhub.storage.HouseholdStore
+import org.taskhub.storage.SettingsStore
+import org.taskhub.ui.components.AppSettingsState
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.screens.HouseholdListScreen
 import org.taskhub.ui.screens.WelcomeScreen
 import org.taskhub.ui.theme.TaskHubTheme
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.ui.theme.Teal600
-
-private const val KEY_THEME = "taskhub_theme"
+import org.taskhub.platform.shareText
 
 @Composable
 fun App() {
     KoinApplication(application = {
         modules(appModule)
     }) {
-        val settings = remember { Settings() }
+        val settingsStore = koinInject<SettingsStore>()
+
+        // Reactive theme from settings
         var themeType by remember {
             mutableStateOf(
-                when (settings.getString(KEY_THEME, "DEFAULT")) {
+                when (settingsStore.getTheme()) {
                     "NATURALEZA" -> TaskHubThemeType.NATURALEZA
                     "MINIMAL" -> TaskHubThemeType.MINIMAL
                     else -> TaskHubThemeType.DEFAULT
@@ -42,45 +45,79 @@ fun App() {
             )
         }
 
-        TaskHubTheme(themeType = themeType) {
-            val householdStore = koinInject<HouseholdStore>()
+        // Reactive language from settings
+        var currentLanguage by remember {
+            mutableStateOf(settingsStore.getLanguage())
+        }
 
-            var initialScreen by remember { mutableStateOf<Screen?>(null) }
+        // CSV export callback — default no-op unless overridden by a screen
+        var exportCsvCallback by remember {
+            mutableStateOf<(() -> Unit)?>(null)
+        }
 
-            LaunchedEffect(Unit) {
-                val savedHouseholds = householdStore.getSavedHouseholds()
-                initialScreen = if (savedHouseholds.isNotEmpty()) {
-                    HouseholdListScreen(savedHouseholds)
-                } else {
-                    WelcomeScreen()
-                }
-            }
-
-            // Surface paints the background behind system bars (edge-to-edge)
-            // Inner Box applies system bar padding so content doesn't overlap
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .statusBarsPadding()
-                        .navigationBarsPadding()
-                ) {
-                    when (val screen = initialScreen) {
-                        null -> {
-                            // Still loading
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(color = Teal600)
-                            }
+        val appSettings = remember(themeType, currentLanguage) {
+            AppSettingsState(
+                currentLanguage = currentLanguage,
+                currentTheme = themeType,
+                onThemeChanged = { newTheme ->
+                    themeType = newTheme
+                    settingsStore.setTheme(
+                        when (newTheme) {
+                            TaskHubThemeType.NATURALEZA -> "NATURALEZA"
+                            TaskHubThemeType.MINIMAL -> "MINIMAL"
+                            else -> "DEFAULT"
                         }
-                        else -> {
-                            Navigator(screen = screen) { navigator ->
-                                SlideTransition(navigator)
+                    )
+                },
+                onLanguageChanged = { newLang ->
+                    currentLanguage = newLang
+                    settingsStore.setLanguage(newLang)
+                },
+                onExportCsv = { exportCsvCallback?.invoke() }
+            )
+        }
+
+        TaskHubTheme(themeType = themeType) {
+            CompositionLocalProvider(LocalAppSettings provides appSettings) {
+                val householdStore = koinInject<HouseholdStore>()
+
+                var initialScreen by remember { mutableStateOf<Screen?>(null) }
+
+                LaunchedEffect(Unit) {
+                    val savedHouseholds = householdStore.getSavedHouseholds()
+                    initialScreen = if (savedHouseholds.isNotEmpty()) {
+                        HouseholdListScreen(savedHouseholds)
+                    } else {
+                        WelcomeScreen()
+                    }
+                }
+
+                // Surface paints the background behind system bars (edge-to-edge)
+                // Inner Box applies system bar padding so content doesn't overlap
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .statusBarsPadding()
+                            .navigationBarsPadding()
+                    ) {
+                        when (val screen = initialScreen) {
+                            null -> {
+                                // Still loading
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(color = Teal600)
+                                }
+                            }
+                            else -> {
+                                Navigator(screen = screen) { navigator ->
+                                    SlideTransition(navigator)
+                                }
                             }
                         }
                     }

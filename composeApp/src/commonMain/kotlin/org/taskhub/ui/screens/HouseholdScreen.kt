@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -18,6 +20,9 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.storage.HouseholdStore
+import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.SettingsCallbacks
+import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
@@ -44,6 +49,10 @@ data class HouseholdScreen(val householdId: String) : Screen {
 
         // QR / Share dialog state
         var showQrDialog by remember { mutableStateOf(false) }
+
+        // Settings dialog state
+        var showSettings by remember { mutableStateOf(false) }
+        val appSettings = LocalAppSettings.current
 
         LaunchedEffect(householdId) {
             householdModel.loadHousehold(householdId)
@@ -187,6 +196,29 @@ data class HouseholdScreen(val householdId: String) : Screen {
             )
         }
 
+        // ── Settings dialog ──
+        if (showSettings) {
+            Dialog(
+                onDismissRequest = { showSettings = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .fillMaxHeight(0.85f),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    SettingsSheet(
+                        callbacks = SettingsCallbacks(
+                            onExportCsv = { /* CSV export available from task list */ },
+                            onDismiss = { showSettings = false }
+                        )
+                    )
+                }
+            }
+        }
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -226,6 +258,16 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         )
 
                         Spacer(Modifier.weight(1f))
+
+                        // Settings icon
+                        TextButton(
+                            onClick = { showSettings = true },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("⚙️", style = MaterialTheme.typography.titleLarge)
+                        }
 
                         // Delete button
                         if (isDeleting) {

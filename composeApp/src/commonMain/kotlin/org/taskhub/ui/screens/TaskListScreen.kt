@@ -17,6 +17,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -26,6 +28,9 @@ import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
+import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.SettingsCallbacks
+import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.theme.*
 import org.taskhub.platform.shareText
 
@@ -60,6 +65,42 @@ data class TaskListScreen(
             if (actionState is TaskActionState.Success) {
                 model.loadTasks(householdId)
                 model.resetActionState()
+            }
+        }
+
+        // Settings dialog state
+        var showSettings by remember { mutableStateOf(false) }
+        val appSettings = LocalAppSettings.current
+
+        // Pre-compute CSV export callback — needs access to list state
+        val exportCsv: () -> Unit = {
+            val state = listState
+            if (state is TaskListUiState.Success) {
+                val csv = model.generateCsv(state.tasks)
+                shareText(csv, "Tareas Task Hub")
+            }
+        }
+
+        // Settings dialog
+        if (showSettings) {
+            Dialog(
+                onDismissRequest = { showSettings = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .fillMaxHeight(0.85f),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    SettingsSheet(
+                        callbacks = SettingsCallbacks(
+                            onExportCsv = exportCsv,
+                            onDismiss = { showSettings = false }
+                        )
+                    )
+                }
             }
         }
 
@@ -100,6 +141,16 @@ data class TaskListScreen(
 
                         Spacer(Modifier.weight(1f))
 
+                        // Settings icon
+                        TextButton(
+                            onClick = { showSettings = true },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("⚙️", style = MaterialTheme.typography.titleLarge)
+                        }
+
                         TextButton(
                             onClick = { navigator.push(CreateTaskScreen(householdId, currentMemberId ?: "")) },
                             colors = ButtonDefaults.textButtonColors(
@@ -133,10 +184,6 @@ data class TaskListScreen(
                             onFilterChange = { model.setFilter(it) },
                             onSortChange = { model.setSort(it) },
                             onTagFilterChange = { model.setTagFilter(it) },
-                            onExportCsv = {
-                                val csv = model.generateCsv(state.tasks)
-                                shareText(csv, "Tareas Task Hub")
-                            },
                             onTaskClick = { task ->
                                 navigator.push(TaskDetailScreen(householdId, task.id))
                             },
@@ -359,7 +406,6 @@ private fun TaskListContent(
     onFilterChange: (TaskFilter) -> Unit,
     onSortChange: (TaskSort) -> Unit,
     onTagFilterChange: (String?) -> Unit,
-    onExportCsv: () -> Unit,
     onTaskClick: (TaskResponse) -> Unit,
     onCompleteTask: (TaskResponse) -> Unit,
     onRefresh: () -> Unit
@@ -436,20 +482,6 @@ private fun TaskListContent(
                 onSortChange = onSortChange,
                 onTagFilterChange = onTagFilterChange
             )
-        }
-
-        // CSV Export button
-        item {
-            Spacer(Modifier.height(4.dp))
-            OutlinedButton(
-                onClick = onExportCsv,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Teal600
-                )
-            ) {
-                Text("📊 Exportar CSV")
-            }
         }
 
         if (tasksWithStatus.isEmpty() || groups.isEmpty()) {

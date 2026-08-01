@@ -2,16 +2,22 @@ package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.storage.HouseholdStore
+import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.SettingsCallbacks
+import org.taskhub.ui.components.SettingsSheet
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.Coral500
 import org.taskhub.ui.theme.Teal600
 import org.taskhub.ui.theme.Teal50
@@ -23,104 +29,166 @@ class WelcomeScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val householdStore = koinInject<HouseholdStore>()
         val savedHouseholds = householdStore.getSavedHouseholds()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
+        var showSettings by remember { mutableStateOf(false) }
+
+        // Settings dialog
+        if (showSettings) {
+            Dialog(
+                onDismissRequest = { showSettings = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .fillMaxHeight(0.85f),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    SettingsSheet(
+                        callbacks = SettingsCallbacks(
+                            onExportCsv = { /* No tasks to export on welcome screen */ },
+                            onDismiss = { showSettings = false }
+                        )
+                    )
+                }
+            }
+        }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "🏠",
-                    style = MaterialTheme.typography.displayLarge
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = "Task Hub",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = Teal600
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Organiza las tareas del hogar,\ncomparte responsabilidades y gana puntos",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(48.dp))
-
-                Button(
-                    onClick = { navigator.push(CreateHouseholdScreen()) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Teal600
-                    ),
-                    shape = MaterialTheme.shapes.large
+            Column(modifier = Modifier.fillMaxSize()) {
+                // ═══ Top bar with settings ═══
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Teal600,
+                    shadowElevation = 4.dp
                 ) {
-                    Text(
-                        text = "Crear hogar",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🏠 Task Hub",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+
+                        Spacer(Modifier.weight(1f))
+
+                        // Settings icon
+                        TextButton(
+                            onClick = { showSettings = true },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("⚙️", style = MaterialTheme.typography.titleLarge)
+                        }
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedButton(
-                    onClick = { navigator.push(JoinHouseholdScreen()) },
+                // Main content
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = Coral500
-                    ),
-                    shape = MaterialTheme.shapes.large
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "Unirse a un hogar",
-                        style = MaterialTheme.typography.titleMedium
+                        text = "🏠",
+                        style = MaterialTheme.typography.displayLarge
                     )
-                }
 
-                if (savedHouseholds.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    Text(
+                        text = s("welcome_title"),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = Teal600
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = s("welcome_subtitle"),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(48.dp))
+
                     Button(
-                        onClick = { navigator.push(HouseholdListScreen(savedHouseholds)) },
+                        onClick = { navigator.push(CreateHouseholdScreen()) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Teal50,
-                            contentColor = Teal600
+                            containerColor = Teal600
                         ),
                         shape = MaterialTheme.shapes.large
                     ) {
                         Text(
-                            text = "Mis hogares",
+                            text = s("welcome_create"),
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedButton(
+                        onClick = { navigator.push(JoinHouseholdScreen()) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = Coral500
+                        ),
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Text(
+                            text = s("welcome_join"),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    if (savedHouseholds.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = { navigator.push(HouseholdListScreen(savedHouseholds)) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Teal50,
+                                contentColor = Teal600
+                            ),
+                            shape = MaterialTheme.shapes.large
+                        ) {
+                            Text(
+                                text = s("welcome_my_households"),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Text(
+                        text = "v0.1.0",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Text(
-                    text = "v0.1.0",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
