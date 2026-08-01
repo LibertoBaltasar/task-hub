@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
@@ -128,6 +129,10 @@ data class TaskListScreen(
                             },
                             onCompleteInstance = { task, instance ->
                                 model.completeInstance(householdId, task, instance)
+                                model.loadTasks(householdId)
+                            },
+                            onSkipInstance = { task, instance ->
+                                model.skipInstance(householdId, task, instance)
                                 model.loadTasks(householdId)
                             },
                             onRefresh = { model.loadTasks(householdId) }
@@ -347,6 +352,7 @@ private fun TaskListContent(
     onTagFilterChange: (String?) -> Unit,
     onTaskClick: (TaskResponse) -> Unit,
     onCompleteInstance: (TaskResponse, TaskInstanceResponse) -> Unit,
+    onSkipInstance: (TaskResponse, TaskInstanceResponse) -> Unit,
     onRefresh: () -> Unit
 ) {
     val taskMap = state.tasks.associateBy { it.id }
@@ -359,10 +365,13 @@ private fun TaskListContent(
     val todayStartEpoch = now.toLocalDateTime(tz).date
         .atStartOfDayIn(tz).toEpochMilliseconds()
 
-    // Build InstanceWithTask for each instance (only for non-completed)
+    // Build InstanceWithTask for each instance (only for non-completed, non-skipped)
     val instancesWithTasks = state.instances
         .filter { inst ->
             val task = taskMap[inst.taskId] ?: return@filter false
+
+            // Exclude skipped instances from the normal view
+            if (inst.skipped) return@filter false
 
             // Tag filter
             if (tagFilter != null && tagFilter !in task.tags) return@filter false
@@ -388,6 +397,24 @@ private fun TaskListContent(
                 isOverdue = isOverdue
             )
         }
+
+    // Build skipped instances list
+    val skippedInstances = state.instances
+        .filter { inst ->
+            if (!inst.skipped) return@filter false
+            val task = taskMap[inst.taskId] ?: return@filter false
+            if (tagFilter != null && tagFilter !in task.tags) return@filter false
+            true
+        }
+        .map { inst ->
+            val task = taskMap[inst.taskId]!!
+            InstanceWithTask(
+                instance = inst,
+                task = task,
+                isOverdue = false
+            )
+        }
+        .sortedByDescending { it.instance.dueDate }
 
     // Group by day
     val groups = remember(instancesWithTasks, filter, sort, tagFilter) {
@@ -473,10 +500,51 @@ private fun TaskListContent(
                             onComplete = {
                                 loadingInstanceIds[item.instance.id] = true
                                 onCompleteInstance(item.task, item.instance)
+                            },
+                            onSkip = {
+                                loadingInstanceIds[item.instance.id] = true
+                                onSkipInstance(item.task, item.instance)
                             }
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
+                }
+            }
+        }
+
+        // ── Skipped instances ──
+        if (skippedInstances.isNotEmpty()) {
+            item(key = "skipped_header") {
+                Spacer(Modifier.height(8.dp))
+                GroupHeader(
+                    label = "⏭️ Saltadas",
+                    count = skippedInstances.size,
+                    isOverdue = false,
+                    isNoDate = false,
+                    isCollapsed = collapsedGroups["skipped"] ?: false,
+                    onToggle = { collapsedGroups["skipped"] = !(collapsedGroups["skipped"] ?: false) }
+                )
+            }
+
+            item(key = "skipped_spacer") {
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            if (!(collapsedGroups["skipped"] ?: false)) {
+                items(
+                    items = skippedInstances,
+                    key = { "skipped_${it.instance.id}" }
+                ) { item ->
+                    InstanceCard(
+                        item = item,
+                        assignments = assignmentsByTask[item.task.id] ?: emptyList(),
+                        memberMap = memberMap,
+                        isLoading = false,
+                        onClick = { onTaskClick(item.task) },
+                        onComplete = null,
+                        onSkip = null
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
@@ -497,22 +565,25 @@ private fun InstanceCard(
     memberMap: Map<String, MemberResponse>,
     isLoading: Boolean,
     onClick: () -> Unit,
-    onComplete: () -> Unit
+    onComplete: (() -> Unit)?,
+    onSkip: (() -> Unit)?
 ) {
     val task = item.task
     val instance = item.instance
     val pendingCount = assignments.count { it.status == "assigned" }
     val completedCount = assignments.count { it.status == "completed" }
     val totalAssigned = assignments.size
+    val isSkipped = instance.skipped
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isSkipped) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSkipped) 0.dp else 1.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -529,35 +600,65 @@ private fun InstanceCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    textDecoration = if (isSkipped) TextDecoration.LineThrough else TextDecoration.None,
+                    color = if (isSkipped) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        else MaterialTheme.colorScheme.onSurface
                 )
 
-                if (!instance.completed) {
-                    Button(
-                        onClick = onComplete,
-                        enabled = !isLoading,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Teal600
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text("✅ Hecho", style = MaterialTheme.typography.labelMedium)
+                if (!instance.completed && !isSkipped && onComplete != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // Skip button
+                        if (onSkip != null) {
+                            TextButton(
+                                onClick = onSkip,
+                                enabled = !isLoading,
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = Coral500
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text("⏭️", style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                        // Complete button
+                        Button(
+                            onClick = onComplete,
+                            enabled = !isLoading,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Teal600
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("✅ Hecho", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
-                } else {
+                } else if (instance.completed) {
                     Surface(
                         shape = MaterialTheme.shapes.small,
                         color = Teal100
                     ) {
                         Text(
                             text = "✅",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                } else if (isSkipped) {
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = Coral50
+                    ) {
+                        Text(
+                            text = "⏭️",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelMedium
                         )
@@ -645,9 +746,14 @@ private fun InstanceCard(
                 if (instance.dueDate > 0) {
                     val deadlineText = formatDeadline(instance.dueDate)
                     Text(
-                        text = if (instance.completed) "✅ $deadlineText" else "⏰ $deadlineText",
+                        text = when {
+                            isSkipped -> "⏭️ $deadlineText"
+                            instance.completed -> "✅ $deadlineText"
+                            else -> "⏰ $deadlineText"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = when {
+                            isSkipped -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             instance.completed -> Teal600
                             item.isOverdue -> MaterialTheme.colorScheme.error
                             else -> MaterialTheme.colorScheme.onSurfaceVariant

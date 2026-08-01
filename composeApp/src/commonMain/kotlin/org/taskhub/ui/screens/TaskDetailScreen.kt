@@ -9,6 +9,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
@@ -39,9 +40,46 @@ data class TaskDetailScreen(
         val detailState by model.detailState.collectAsState()
         val actionState by model.actionState.collectAsState()
 
+        var showDeleteDialog by remember { mutableStateOf(false) }
+
         LaunchedEffect(taskId) {
             model.resetActionState()
             model.loadTaskDetail(householdId, taskId)
+        }
+
+        // Delete confirmation dialog
+        if (showDeleteDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                title = { Text("🗑️ Eliminar tarea") },
+                text = { Text("¿Eliminar esta tarea y todas sus instancias?") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDeleteDialog = false
+                            model.deleteTask(householdId, taskId)
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("Eliminar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        // Watch for delete success and navigate back
+        LaunchedEffect(actionState) {
+            if (actionState is TaskActionState.Success && !showDeleteDialog) {
+                // Refresh list state before going back
+                navigator.pop()
+            }
         }
 
         Surface(
@@ -81,6 +119,15 @@ data class TaskDetailScreen(
 
                         Spacer(Modifier.weight(1f))
 
+                        TextButton(
+                            onClick = { showDeleteDialog = true },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("🗑️", style = MaterialTheme.typography.titleMedium)
+                        }
+
                         Spacer(Modifier.width(64.dp))
                     }
                 }
@@ -109,6 +156,14 @@ data class TaskDetailScreen(
                                     task = state.task,
                                     instance = instance
                                 )
+                            },
+                            onSkipInstance = { instance ->
+                                model.skipInstance(
+                                    householdId = householdId,
+                                    task = state.task,
+                                    instance = instance
+                                )
+                                model.loadTaskDetail(householdId, taskId)
                             },
                             onComplete = { assignmentId, assignment ->
                                 model.completeAssignment(
@@ -160,15 +215,17 @@ private fun TaskDetailContent(
     memberMap: Map<String, MemberResponse>,
     actionState: TaskActionState,
     onCompleteInstance: (TaskInstanceResponse) -> Unit,
+    onSkipInstance: (TaskInstanceResponse) -> Unit,
     onComplete: (String, TaskAssignmentResponse) -> Unit
 ) {
     val now = Clock.System.now().toEpochMilliseconds()
     val pendingAssignments = assignments.filter { it.status == "assigned" }
     val completedAssignments = assignments.filter { it.status == "completed" }
 
-    // Instance stats
-    val pendingInstances = instances.filter { !it.completed }
+    // Instance stats — exclude skipped from pending
+    val pendingInstances = instances.filter { !it.completed && !it.skipped }
     val completedInstances = instances.filter { it.completed }
+    val skippedInstances = instances.filter { it.skipped }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -318,7 +375,7 @@ private fun TaskDetailContent(
         // ── Instance status ──
         item {
             Text(
-                text = "📆 Instancias (${pendingInstances.size} pendientes, ${completedInstances.size} completadas)",
+                text = "📆 Instancias (${pendingInstances.size} pendientes, ${completedInstances.size} completadas${if (skippedInstances.isNotEmpty()) ", ${skippedInstances.size} saltadas" else ""})",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = Teal700
@@ -359,7 +416,8 @@ private fun TaskDetailContent(
                         instance = instance,
                         now = now,
                         isLoading = actionState is TaskActionState.Loading,
-                        onComplete = { onCompleteInstance(instance) }
+                        onComplete = { onCompleteInstance(instance) },
+                        onSkip = { onSkipInstance(instance) }
                     )
                 }
             }
@@ -378,7 +436,8 @@ private fun TaskDetailContent(
                         instance = instance,
                         now = now,
                         isLoading = false,
-                        onComplete = null
+                        onComplete = null,
+                        onSkip = null
                     )
                 }
                 if (completedInstances.size > 5) {
@@ -389,6 +448,36 @@ private fun TaskDetailContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+            }
+        }
+
+        // ── Skipped instances ──
+        if (skippedInstances.isNotEmpty()) {
+            item {
+                Text(
+                    text = "⏭️ Saltadas:",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Coral400
+                )
+            }
+            items(skippedInstances.sortedByDescending { it.dueDate }.take(10)) { instance ->
+                InstanceRow(
+                    instance = instance,
+                    now = now,
+                    isLoading = false,
+                    onComplete = null,
+                    onSkip = null
+                )
+            }
+            if (skippedInstances.size > 10) {
+                item {
+                    Text(
+                        text = "... y ${skippedInstances.size - 10} más",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -596,16 +685,19 @@ private fun InstanceRow(
     instance: TaskInstanceResponse,
     now: Long,
     isLoading: Boolean,
-    onComplete: (() -> Unit)?
+    onComplete: (() -> Unit)?,
+    onSkip: (() -> Unit)?
 ) {
-    val isOverdue = !instance.completed && instance.dueDate > 0 && instance.dueDate < now
+    val isOverdue = !instance.completed && !instance.skipped && instance.dueDate > 0 && instance.dueDate < now
+    val isSkipped = instance.skipped
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isSkipped) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSkipped) 0.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -618,12 +710,22 @@ private fun InstanceRow(
                     text = "📅 ${formatDateTime(instance.dueDate)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = when {
+                        isSkipped -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         instance.completed -> Teal600
                         isOverdue -> MaterialTheme.colorScheme.error
                         else -> MaterialTheme.colorScheme.onSurface
                     },
-                    fontWeight = if (!instance.completed) FontWeight.SemiBold else FontWeight.Normal
+                    fontWeight = if (!instance.completed && !isSkipped) FontWeight.SemiBold else FontWeight.Normal,
+                    textDecoration = if (isSkipped) TextDecoration.LineThrough else TextDecoration.None
                 )
+
+                if (isSkipped) {
+                    Text(
+                        text = "⏭️ Saltada",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Coral400
+                    )
+                }
 
                 if (instance.completed && instance.completedAt != null) {
                     Text(
@@ -642,7 +744,19 @@ private fun InstanceRow(
                 }
             }
 
-            if (onComplete != null && !instance.completed) {
+            if (onSkip != null && !instance.completed && !isSkipped) {
+                TextButton(
+                    onClick = onSkip,
+                    enabled = !isLoading,
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = Coral500
+                    )
+                ) {
+                    Text("⏭️ Saltar", style = MaterialTheme.typography.labelMedium)
+                }
+            }
+
+            if (onComplete != null && !instance.completed && !isSkipped) {
                 Button(
                     onClick = onComplete,
                     enabled = !isLoading,
@@ -661,13 +775,13 @@ private fun InstanceRow(
                         Text("✅", style = MaterialTheme.typography.labelMedium)
                     }
                 }
-            } else if (instance.completed) {
+            } else if (instance.completed || isSkipped) {
                 Surface(
                     shape = MaterialTheme.shapes.small,
-                    color = Teal100
+                    color = if (isSkipped) Coral50 else Teal100
                 ) {
                     Text(
-                        text = "✅",
+                        text = if (isSkipped) "⏭️" else "✅",
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelMedium
                     )

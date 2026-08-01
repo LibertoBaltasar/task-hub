@@ -681,6 +681,7 @@ class FirestoreRepository(
             "taskId" to FirestoreValue(stringValue = taskId),
             "dueDate" to FirestoreValue(integerValue = dueDate.toString()),
             "completed" to FirestoreValue(booleanValue = false),
+            "skipped" to FirestoreValue(booleanValue = false),
             "pointsAwarded" to FirestoreValue(nullValue = "NULL_VALUE"),
             "completedAt" to FirestoreValue(nullValue = "NULL_VALUE"),
             "createdAt" to FirestoreValue(integerValue = now.toString())
@@ -755,6 +756,66 @@ class FirestoreRepository(
         } else null
 
         return Pair(completed, nextInstance)
+    }
+
+    /**
+     * Delete a task and all its associated taskInstances.
+     * Does NOT delete assignments (orphaned subcollections are harmless).
+     */
+    suspend fun deleteTask(householdId: String, taskId: String) {
+        // 1. Delete all taskInstances for this task
+        val allInstances = getTaskInstances(householdId)
+        val taskInstances = allInstances.filter { it.taskId == taskId }
+        for (instance in taskInstances) {
+            client.delete(
+                "$baseUrl/households/$householdId/taskInstances/${instance.id}"
+            ) {
+                withAuth()
+            }
+        }
+
+        // 2. Delete the task document
+        client.delete("$baseUrl/households/$householdId/tasks/$taskId") {
+            withAuth()
+        }
+    }
+
+    /**
+     * Skip a task instance. Marks it as skipped and generates the next instance
+     * for recurring tasks. Skipped instances do NOT award or deduct points.
+     */
+    suspend fun skipTaskInstance(
+        householdId: String,
+        task: TaskResponse,
+        instance: TaskInstanceResponse
+    ): Pair<TaskInstanceResponse, TaskInstanceResponse?> {
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        // Mark instance as skipped
+        val fields = mapOf(
+            "skipped" to FirestoreValue(booleanValue = true)
+        )
+
+        client.patch(
+            "$baseUrl/households/$householdId/taskInstances/${instance.id}"
+        ) {
+            withAuth()
+            parameter("updateMask.fieldPaths", "skipped")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+
+        val skippedInstance = instance.copy(skipped = true)
+
+        // Generate next instance for recurring tasks
+        val nextInstance = if (task.frequency != "once") {
+            val nextDueDate = calculateNextInstanceDueDate(task, instance.dueDate)
+            if (nextDueDate != null) {
+                createInstance(householdId, task.id, nextDueDate, task.points)
+            } else null
+        } else null
+
+        return Pair(skippedInstance, nextInstance)
     }
 
     /**
@@ -861,6 +922,7 @@ class FirestoreRepository(
             completed = f["completed"]?.booleanValue ?: false,
             completedAt = f["completedAt"]?.integerValue?.toLongOrNull(),
             pointsAwarded = f["pointsAwarded"]?.integerValue?.toIntOrNull(),
+            skipped = f["skipped"]?.booleanValue ?: false,
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
         )
     }

@@ -86,5 +86,6 @@ data class TaskInstanceResponse(
     val completed: Boolean = false,
     val completedAt: Long? = null,
     val pointsAwarded: Int? = null,
+    val skipped: Boolean = false,
     val createdAt: Long = 0
 )

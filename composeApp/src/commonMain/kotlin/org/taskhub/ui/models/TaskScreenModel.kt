@@ -321,6 +321,46 @@ class TaskScreenModel(
         }
     }
 
+    // ── Delete task ──────────────────────────────────────────
+
+    fun deleteTask(householdId: String, taskId: String) {
+        screenModelScope.launch {
+            _actionState.value = TaskActionState.Loading
+            try {
+                repo.deleteTask(householdId, taskId)
+                _actionState.value = TaskActionState.Success
+            } catch (e: Exception) {
+                _actionState.value = TaskActionState.Error(
+                    e.message ?: "Error al eliminar tarea"
+                )
+            }
+        }
+    }
+
+    // ── Skip instance ───────────────────────────────────────
+
+    fun skipInstance(
+        householdId: String,
+        task: TaskResponse,
+        instance: TaskInstanceResponse
+    ) {
+        screenModelScope.launch {
+            _actionState.value = TaskActionState.Loading
+            try {
+                repo.skipTaskInstance(
+                    householdId = householdId,
+                    task = task,
+                    instance = instance
+                )
+                _actionState.value = TaskActionState.Success
+            } catch (e: Exception) {
+                _actionState.value = TaskActionState.Error(
+                    e.message ?: "Error al saltar tarea"
+                )
+            }
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────
 
     fun resetActionState() {
