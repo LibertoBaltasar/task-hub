@@ -60,6 +60,8 @@ data class TaskResponse(
     val penaltyValue: Int = 0,
     val penaltyInterval: String = "day", // day | week | month
     val penaltyMax: Int = 0,
+    val dueDate: Long = 0, // epoch millis — for "once" tasks; 0 = no specific date
+    val lastCompletedDate: Long? = null, // epoch millis — last time this task was completed
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 )
@@ -78,14 +80,4 @@ data class TaskAssignmentResponse(
     val assignedAt: Long = 0
 )
 
-@Serializable
-data class TaskInstanceResponse(
-    val id: String,
-    val taskId: String,
-    val dueDate: Long = 0, // epoch millis — the specific day this instance is for
-    val completed: Boolean = false,
-    val completedAt: Long? = null,
-    val pointsAwarded: Int? = null,
-    val skipped: Boolean = false,
-    val createdAt: Long = 0
-)
+

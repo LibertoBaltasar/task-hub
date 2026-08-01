@@ -23,7 +23,6 @@ import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
-import org.taskhub.network.models.TaskInstanceResponse
 import kotlin.random.Random
 
 /**
@@ -290,7 +289,8 @@ class FirestoreRepository(
         penaltyMode: String?,
         penaltyValue: Int,
         penaltyInterval: String,
-        penaltyMax: Int
+        penaltyMax: Int,
+        dueDate: Long = 0
     ): TaskResponse {
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -301,6 +301,7 @@ class FirestoreRepository(
             "description" to FirestoreValue(stringValue = description),
             "points" to FirestoreValue(integerValue = points.toString()),
             "frequency" to FirestoreValue(stringValue = frequency),
+            "dueDate" to FirestoreValue(integerValue = dueDate.toString()),
             "createdAt" to FirestoreValue(integerValue = now.toString()),
             "updatedAt" to FirestoreValue(integerValue = now.toString())
         )
@@ -348,6 +349,7 @@ class FirestoreRepository(
             frequency = frequency, recurrenceDays = recurrenceDays, tags = tags,
             penaltyMode = penaltyMode, penaltyValue = penaltyValue,
             penaltyInterval = penaltyInterval, penaltyMax = penaltyMax,
+            dueDate = dueDate, lastCompletedDate = null,
             createdAt = now, updatedAt = now
         )
     }
@@ -359,6 +361,22 @@ class FirestoreRepository(
         }.body()
 
         return response.documents.map { toTaskResponse(it, householdId) }
+    }
+
+    /** Mark a task as completed today. Sets lastCompletedDate to now. */
+    suspend fun completeTask(householdId: String, taskId: String) {
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        val fields = mapOf(
+            "lastCompletedDate" to FirestoreValue(integerValue = now.toString())
+        )
+
+        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "lastCompletedDate")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
     }
 
     /** Assign a task to one or more members with a due date. */
@@ -595,180 +613,9 @@ class FirestoreRepository(
     }
 
     // ────────────────────────────────────────────────────────
-    //  Task Instances (subcollection under households/{id})
+    //  Task helpers
     // ────────────────────────────────────────────────────────
 
-    /**
-     * Generate task instances for a recurring task.
-     * - daily: 7 instances starting today
-     * - weekly + recurrenceDays: instances on matching days for next 28 days
-     * - monthly: 3 instances (current month + 2 following)
-     * Returns the list of created instances.
-     */
-    suspend fun generateTaskInstances(
-        householdId: String,
-        taskId: String,
-        frequency: String,
-        recurrenceDays: List<Int>,
-        points: Int
-    ): List<TaskInstanceResponse> {
-        val now = Clock.System.now()
-        val tz = TimeZone.currentSystemDefault()
-        val today = now.toLocalDateTime(tz).date
-        val results = mutableListOf<TaskInstanceResponse>()
-
-        when (frequency) {
-            "daily" -> {
-                for (i in 0 until 7) {
-                    val date = today.plus(i, DateTimeUnit.DAY)
-                    val dueDate = dateToEpoch(date.year, date.monthNumber, date.dayOfMonth, tz)
-                    results.add(createInstance(householdId, taskId, dueDate, points))
-                }
-            }
-            "weekly" -> {
-                if (recurrenceDays.isNotEmpty()) {
-                    // Generate for next 28 days
-                    for (i in 0 until 28) {
-                        val date = today.plus(i, DateTimeUnit.DAY)
-                        val dayOfWeek = date.dayOfWeek.ordinal + 1 // 1=Monday
-                        if (dayOfWeek in recurrenceDays) {
-                            val dueDate = dateToEpoch(date.year, date.monthNumber, date.dayOfMonth, tz)
-                            results.add(createInstance(householdId, taskId, dueDate, points))
-                        }
-                    }
-                } else {
-                    // Weekly with no specific days — generate 4 instances, one per week
-                    for (i in 0 until 4) {
-                        val date = today.plus(i * 7, DateTimeUnit.DAY)
-                        val dueDate = dateToEpoch(date.year, date.monthNumber, date.dayOfMonth, tz)
-                        results.add(createInstance(householdId, taskId, dueDate, points))
-                    }
-                }
-            }
-            "monthly" -> {
-                // Current month + 2 more
-                for (m in 0 until 3) {
-                    val targetMonth = today.monthNumber + m
-                    val year = today.year + (targetMonth - 1) / 12
-                    val month = ((targetMonth - 1) % 12) + 1
-                    val maxDay = daysInMonth(year, month)
-                    val dayOfMonth = minOf(today.dayOfMonth, maxDay)
-                    val date = LocalDate(year, month, dayOfMonth)
-                    val dueDate = dateToEpoch(date.year, date.monthNumber, date.dayOfMonth, tz)
-                    results.add(createInstance(householdId, taskId, dueDate, points))
-                }
-            }
-            else -> {
-                // "once" — single instance today
-                val dueDate = dateToEpoch(today.year, today.monthNumber, today.dayOfMonth, tz)
-                results.add(createInstance(householdId, taskId, dueDate, points))
-            }
-        }
-
-        return results
-    }
-
-    /** Create a single task instance document. */
-    private suspend fun createInstance(
-        householdId: String,
-        taskId: String,
-        dueDate: Long,
-        points: Int
-    ): TaskInstanceResponse {
-        val now = Clock.System.now().toEpochMilliseconds()
-
-        val fields = mapOf<String, FirestoreValue>(
-            "taskId" to FirestoreValue(stringValue = taskId),
-            "dueDate" to FirestoreValue(integerValue = dueDate.toString()),
-            "completed" to FirestoreValue(booleanValue = false),
-            "skipped" to FirestoreValue(booleanValue = false),
-            "pointsAwarded" to FirestoreValue(nullValue = "NULL_VALUE"),
-            "completedAt" to FirestoreValue(nullValue = "NULL_VALUE"),
-            "createdAt" to FirestoreValue(integerValue = now.toString())
-        )
-
-        val response: FirestoreDocumentResponse = client.post(
-            "$baseUrl/households/$householdId/taskInstances"
-        ) {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
-
-        val id = extractDocId(response.name)
-        return TaskInstanceResponse(
-            id = id, taskId = taskId, dueDate = dueDate,
-            completed = false, createdAt = now
-        )
-    }
-
-    /** List all task instances for a household. */
-    suspend fun getTaskInstances(householdId: String): List<TaskInstanceResponse> {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/taskInstances"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        return response.documents.map { toTaskInstanceResponse(it) }
-    }
-
-    /**
-     * Complete a task instance. Awards points and generates the next instance
-     * for recurring tasks. Returns (completedInstance, nextInstance?) pair.
-     */
-    suspend fun completeTaskInstance(
-        householdId: String,
-        task: TaskResponse,
-        instance: TaskInstanceResponse
-    ): Pair<TaskInstanceResponse, TaskInstanceResponse?> {
-        val now = Clock.System.now().toEpochMilliseconds()
-        val pointsAwarded = task.points
-
-        // Mark instance as completed
-        val fields = mapOf(
-            "completed" to FirestoreValue(booleanValue = true),
-            "completedAt" to FirestoreValue(integerValue = now.toString()),
-            "pointsAwarded" to FirestoreValue(integerValue = pointsAwarded.toString())
-        )
-
-        client.patch(
-            "$baseUrl/households/$householdId/taskInstances/${instance.id}"
-        ) {
-            withAuth()
-            parameter("updateMask.fieldPaths", "completed,completedAt,pointsAwarded")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-
-        val completed = instance.copy(
-            completed = true,
-            completedAt = now,
-            pointsAwarded = pointsAwarded
-        )
-
-        // Generate next instance for recurring tasks
-        // Only create if no instance already exists for this task + dueDate
-        val nextInstance = if (task.frequency != "once") {
-            val nextDueDate = calculateNextInstanceDueDate(task, instance.dueDate)
-            if (nextDueDate != null) {
-                val existingInstances = getTaskInstances(householdId)
-                val alreadyExists = existingInstances.any {
-                    it.taskId == task.id && it.dueDate == nextDueDate
-                }
-                if (!alreadyExists) {
-                    createInstance(householdId, task.id, nextDueDate, task.points)
-                } else null
-            } else null
-        } else null
-
-        return Pair(completed, nextInstance)
-    }
-
-    /**
-     * Update a task template. Only updates the task document — does NOT regenerate
-     * instances or affect existing assignments. Uses Firestore PATCH with updateMask.
-     */
     suspend fun updateTask(
         householdId: String,
         taskId: String,
@@ -831,124 +678,13 @@ class FirestoreRepository(
     }
 
     /**
-     * Delete a task and all its associated taskInstances.
-     * Does NOT delete assignments (orphaned subcollections are harmless).
+     * Delete a task document.
      */
     suspend fun deleteTask(householdId: String, taskId: String) {
-        // 1. Delete all taskInstances for this task
-        val allInstances = getTaskInstances(householdId)
-        val taskInstances = allInstances.filter { it.taskId == taskId }
-        for (instance in taskInstances) {
-            client.delete(
-                "$baseUrl/households/$householdId/taskInstances/${instance.id}"
-            ) {
-                withAuth()
-            }
-        }
-
-        // 2. Delete the task document
         client.delete("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
         }
     }
-
-    /**
-     * Skip a task instance. Marks it as skipped and generates the next instance
-     * for recurring tasks. Skipped instances do NOT award or deduct points.
-     */
-    suspend fun skipTaskInstance(
-        householdId: String,
-        task: TaskResponse,
-        instance: TaskInstanceResponse
-    ): Pair<TaskInstanceResponse, TaskInstanceResponse?> {
-        val now = Clock.System.now().toEpochMilliseconds()
-
-        // Mark instance as skipped
-        val fields = mapOf(
-            "skipped" to FirestoreValue(booleanValue = true)
-        )
-
-        client.patch(
-            "$baseUrl/households/$householdId/taskInstances/${instance.id}"
-        ) {
-            withAuth()
-            parameter("updateMask.fieldPaths", "skipped")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-
-        val skippedInstance = instance.copy(skipped = true)
-
-        // Generate next instance for recurring tasks
-        // Only create if no instance already exists for this task + dueDate
-        val nextInstance = if (task.frequency != "once") {
-            val nextDueDate = calculateNextInstanceDueDate(task, instance.dueDate)
-            if (nextDueDate != null) {
-                val existingInstances = getTaskInstances(householdId)
-                val alreadyExists = existingInstances.any {
-                    it.taskId == task.id && it.dueDate == nextDueDate
-                }
-                if (!alreadyExists) {
-                    createInstance(householdId, task.id, nextDueDate, task.points)
-                } else null
-            } else null
-        } else null
-
-        return Pair(skippedInstance, nextInstance)
-    }
-
-    /**
-     * Calculate the next instance due date based on the task's frequency and
-     * the current instance's due date. Returns the epoch millis for the next date.
-     */
-    private fun calculateNextInstanceDueDate(task: TaskResponse, currentDueDate: Long): Long? {
-        val tz = TimeZone.currentSystemDefault()
-        val currentInstant = Instant.fromEpochMilliseconds(currentDueDate)
-        val currentDate = currentInstant.toLocalDateTime(tz).date
-
-        val nextDate = when (task.frequency) {
-            "daily" -> currentDate.plus(1, DateTimeUnit.DAY)
-            "weekly" -> {
-                if (task.recurrenceDays.isNotEmpty()) {
-                    // Find the next matching day of the week from recurrenceDays
-                    var candidate = currentDate.plus(1, DateTimeUnit.DAY)
-                    var safety = 0
-                    while (safety < 14) {
-                        val dayOfWeek = candidate.dayOfWeek.ordinal + 1 // 1=Monday
-                        if (dayOfWeek in task.recurrenceDays) {
-                            return dateToEpoch(candidate.year, candidate.monthNumber, candidate.dayOfMonth, tz)
-                        }
-                        candidate = candidate.plus(1, DateTimeUnit.DAY)
-                        safety++
-                    }
-                    null
-                } else {
-                    currentDate.plus(7, DateTimeUnit.DAY)
-                }
-            }
-            "monthly" -> {
-                val nextMonth = currentDate.monthNumber + 1
-                val nextYear = if (nextMonth > 12) currentDate.year + 1 else currentDate.year
-                val nextMonthNum = if (nextMonth > 12) nextMonth - 12 else nextMonth
-                val maxDay = daysInMonth(nextYear, nextMonthNum)
-                val dayOfMonth = minOf(currentDate.dayOfMonth, maxDay)
-                LocalDate(nextYear, nextMonthNum, dayOfMonth)
-            }
-            else -> null
-        }
-
-        return nextDate?.let { dateToEpoch(it.year, it.monthNumber, it.dayOfMonth, tz) }
-    }
-
-    /** Helper: convert a date to epoch millis (noon local time). */
-    private fun dateToEpoch(year: Int, month: Int, day: Int, tz: TimeZone): Long {
-        val ldt = LocalDateTime(year, month, day, 12, 0, 0)
-        return ldt.toInstant(tz).toEpochMilliseconds()
-    }
-
-    // ────────────────────────────────────────────────────────
-    //  Task helpers
-    // ────────────────────────────────────────────────────────
 
     private fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse {
         val f = doc.fields
@@ -968,6 +704,8 @@ class FirestoreRepository(
             penaltyValue = f["penaltyValue"]?.integerValue?.toIntOrNull() ?: 0,
             penaltyInterval = f["penaltyInterval"]?.stringValue ?: "day",
             penaltyMax = f["penaltyMax"]?.integerValue?.toIntOrNull() ?: 0,
+            dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
+            lastCompletedDate = f["lastCompletedDate"]?.integerValue?.toLongOrNull(),
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
             updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
         )
@@ -989,20 +727,6 @@ class FirestoreRepository(
             pointsAwarded = f["pointsAwarded"]?.integerValue?.toIntOrNull(),
             onTime = f["onTime"]?.booleanValue,
             assignedAt = f["assignedAt"]?.integerValue?.toLongOrNull() ?: 0L
-        )
-    }
-
-    private fun toTaskInstanceResponse(doc: FirestoreDocumentResponse): TaskInstanceResponse {
-        val f = doc.fields
-        return TaskInstanceResponse(
-            id = extractDocId(doc.name),
-            taskId = f["taskId"]?.stringValue ?: "",
-            dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
-            completed = f["completed"]?.booleanValue ?: false,
-            completedAt = f["completedAt"]?.integerValue?.toLongOrNull(),
-            pointsAwarded = f["pointsAwarded"]?.integerValue?.toIntOrNull(),
-            skipped = f["skipped"]?.booleanValue ?: false,
-            createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
         )
     }
 

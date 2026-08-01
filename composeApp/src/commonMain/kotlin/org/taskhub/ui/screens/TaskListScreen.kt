@@ -24,7 +24,6 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
-import org.taskhub.network.models.TaskInstanceResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
@@ -43,6 +42,7 @@ data class TaskListScreen(
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
         val listState by model.listState.collectAsState()
+        val actionState by model.actionState.collectAsState()
         val filter by model.filter.collectAsState()
         val sort by model.sort.collectAsState()
         val tagFilter by model.selectedTagFilter.collectAsState()
@@ -52,6 +52,14 @@ data class TaskListScreen(
         LaunchedEffect(householdId) {
             model.setCurrentMemberId(memberId)
             model.loadTasks(householdId)
+        }
+
+        // Reload when action completes
+        LaunchedEffect(actionState) {
+            if (actionState is TaskActionState.Success) {
+                model.loadTasks(householdId)
+                model.resetActionState()
+            }
         }
 
         Surface(
@@ -127,13 +135,8 @@ data class TaskListScreen(
                             onTaskClick = { task ->
                                 navigator.push(TaskDetailScreen(householdId, task.id))
                             },
-                            onCompleteInstance = { task, instance ->
-                                model.completeInstance(householdId, task, instance)
-                                model.loadTasks(householdId)
-                            },
-                            onSkipInstance = { task, instance ->
-                                model.skipInstance(householdId, task, instance)
-                                model.loadTasks(householdId)
+                            onCompleteTask = { task ->
+                                model.completeTask(householdId, task.id)
                             },
                             onRefresh = { model.loadTasks(householdId) }
                         )
@@ -166,12 +169,13 @@ data class TaskListScreen(
 }
 
 // ────────────────────────────────────────────────────────────
-//  Day grouping models (instance-based)
+//  Task is-due-today logic (local calculation, no instances)
 // ────────────────────────────────────────────────────────────
 
-private data class InstanceWithTask(
-    val instance: TaskInstanceResponse,
+private data class TaskWithStatus(
     val task: TaskResponse,
+    val isDueToday: Boolean,
+    val isCompletedToday: Boolean,
     val isOverdue: Boolean
 )
 
@@ -181,8 +185,63 @@ private data class TaskGroup(
     val dateKey: String,
     val isOverdue: Boolean,
     val isNoDate: Boolean,
-    val items: List<InstanceWithTask>
+    val items: List<TaskWithStatus>
 )
+
+/**
+ * Determines if a task is due today based on frequency + lastCompletedDate.
+ *
+ * - daily: always due (if not completed today)
+ * - weekly: due if today matches recurrenceDays and not completed today
+ * - monthly: due if not completed this month
+ * - once: due if has dueDate and not completed yet
+ */
+private fun isTaskDueToday(task: TaskResponse, todayStartEpoch: Long): Boolean {
+    val tz = TimeZone.currentSystemDefault()
+    val todayInstant = Instant.fromEpochMilliseconds(todayStartEpoch)
+    val today = todayInstant.toLocalDateTime(tz).date
+
+    when (task.frequency) {
+        "daily" -> {
+            // Daily tasks are always due. Check if completed today.
+            val lcd = task.lastCompletedDate
+            if (lcd == null) return true
+            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
+            return lcdDate != today
+        }
+        "weekly" -> {
+            val todayDow = today.dayOfWeek.ordinal + 1 // 1=Monday
+            if (task.recurrenceDays.isNotEmpty() && todayDow !in task.recurrenceDays) {
+                return false // Not a matching day
+            }
+            // Check if completed today
+            val lcd = task.lastCompletedDate
+            if (lcd == null) return true
+            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
+            return lcdDate != today
+        }
+        "monthly" -> {
+            val lcd = task.lastCompletedDate
+            if (lcd == null) return true
+            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
+            return lcdDate.month != today.month || lcdDate.year != today.year
+        }
+        "once" -> {
+            // Due if it has a dueDate and hasn't been completed yet
+            if (task.dueDate <= 0) return false // No due date set
+            return task.lastCompletedDate == null
+        }
+        else -> return false
+    }
+}
+
+/**
+ * Determines if a task was completed today.
+ */
+private fun isTaskCompletedToday(task: TaskResponse, todayStartEpoch: Long): Boolean {
+    val lcd = task.lastCompletedDate ?: return false
+    return lcd >= todayStartEpoch
+}
 
 // ────────────────────────────────────────────────────────────
 //  Spanish day-of-week helper
@@ -214,128 +273,73 @@ private fun spanishMonthName(month: Month): String = when (month) {
 }
 
 // ────────────────────────────────────────────────────────────
-//  Group instances by day
+//  Group tasks by status (not instances — calculated locally)
 // ────────────────────────────────────────────────────────────
 
-private fun groupInstancesByDay(
-    items: List<InstanceWithTask>,
-    todayStartEpoch: Long
+private fun groupTasksByStatus(
+    items: List<TaskWithStatus>
 ): List<TaskGroup> {
-    val tz = TimeZone.currentSystemDefault()
-    val todayInstant = Instant.fromEpochMilliseconds(todayStartEpoch)
-    val today = todayInstant.toLocalDateTime(tz).date
+    val dueItems = items.filter { it.isDueToday && !it.isCompletedToday }
+    val overdueItems = dueItems.filter { it.isOverdue }
+    val pendingToday = dueItems.filter { !it.isOverdue }
+    val completedToday = items.filter { it.isCompletedToday }
 
-    // Group key per instance
-    val grouped = items.groupBy { item ->
-        when {
-            item.isOverdue -> "overdue"
-            item.instance.dueDate <= 0 -> "nodate"
-            else -> {
-                val dueInstant = Instant.fromEpochMilliseconds(item.instance.dueDate)
-                val dueDate = dueInstant.toLocalDateTime(tz).date
-                val daysDiff = dueDate.toEpochDays() - today.toEpochDays()
-                when {
-                    daysDiff == 0 -> "today"
-                    daysDiff == 1 -> "tomorrow"
-                    daysDiff in 2..6 -> "week_${dueDate.toEpochDays()}"
-                    else -> "later_${dueDate.toEpochDays()}"
-                }
-            }
-        }
-    }
+    val groups = mutableListOf<TaskGroup>()
 
-    return grouped.entries.map { (key, groupItems) ->
-        buildGroup(key, groupItems, today, tz)
-    }.sortedBy { it.sortKey }
-}
-
-private fun buildGroup(
-    key: String,
-    groupItems: List<InstanceWithTask>,
-    today: LocalDate,
-    tz: TimeZone
-): TaskGroup {
-    val sorted = groupItems.sortedWith(
-        compareBy<InstanceWithTask> { it.instance.dueDate }
-            .thenByDescending { it.task.points }
-    )
-
-    return when {
-        key == "overdue" -> TaskGroup(
+    // Overdue
+    if (overdueItems.isNotEmpty()) {
+        val sorted = overdueItems.sortedWith(
+            compareBy<TaskWithStatus> { it.task.dueDate }
+                .thenByDescending { it.task.points }
+        )
+        groups.add(TaskGroup(
             label = "Vencidas",
             sortKey = 0,
             dateKey = "overdue",
             isOverdue = true,
             isNoDate = false,
             items = sorted
-        )
-        key == "today" -> {
-            val dow = today.dayOfWeek
-            val dayStr = spanishDayName(dow)
-            TaskGroup(
-                label = "Hoy · $dayStr ${today.dayOfMonth}",
-                sortKey = 1,
-                dateKey = "today",
-                isOverdue = false,
-                isNoDate = false,
-                items = sorted
-            )
-        }
-        key == "tomorrow" -> {
-            val tomorrow = today.plus(1, DateTimeUnit.DAY)
-            val dow = tomorrow.dayOfWeek
-            val dayStr = spanishDayName(dow)
-            TaskGroup(
-                label = "Mañana · $dayStr ${tomorrow.dayOfMonth}",
-                sortKey = 2,
-                dateKey = "tomorrow",
-                isOverdue = false,
-                isNoDate = false,
-                items = sorted
-            )
-        }
-        key.startsWith("week_") -> {
-            val epochDays = key.removePrefix("week_").toInt()
-            val date = LocalDate.fromEpochDays(epochDays)
-            val dow = date.dayOfWeek
-            val dayStr = spanishDayName(dow)
-            TaskGroup(
-                label = "$dayStr ${date.dayOfMonth}",
-                sortKey = 3 + (epochDays - today.toEpochDays()),
-                dateKey = key,
-                isOverdue = false,
-                isNoDate = false,
-                items = sorted
-            )
-        }
-        key.startsWith("later_") -> {
-            val epochDays = key.removePrefix("later_").toInt()
-            val date = LocalDate.fromEpochDays(epochDays)
-            val dow = date.dayOfWeek
-            val dayStr = spanishDayName(dow)
-            val monthStr = spanishMonthName(date.month)
-            TaskGroup(
-                label = "$dayStr ${date.dayOfMonth} $monthStr",
-                sortKey = 100 + (epochDays - today.toEpochDays()),
-                dateKey = key,
-                isOverdue = false,
-                isNoDate = false,
-                items = sorted
-            )
-        }
-        else -> TaskGroup(
-            label = "Sin fecha",
-            sortKey = Int.MAX_VALUE,
-            dateKey = "nodate",
-            isOverdue = false,
-            isNoDate = true,
-            items = sorted
-        )
+        ))
     }
+
+    // Due today
+    if (pendingToday.isNotEmpty()) {
+        val tz = TimeZone.currentSystemDefault()
+        val today = Clock.System.now().toLocalDateTime(tz).date
+        val dow = today.dayOfWeek
+        val dayStr = spanishDayName(dow)
+        val sorted = pendingToday.sortedWith(
+            compareBy<TaskWithStatus> { it.task.dueDate }
+                .thenByDescending { it.task.points }
+        )
+        groups.add(TaskGroup(
+            label = "Hoy · $dayStr ${today.dayOfMonth}",
+            sortKey = 1,
+            dateKey = "today",
+            isOverdue = false,
+            isNoDate = false,
+            items = sorted
+        ))
+    }
+
+    // Completed today
+    if (completedToday.isNotEmpty()) {
+        val sorted = completedToday.sortedByDescending { it.task.lastCompletedDate ?: 0 }
+        groups.add(TaskGroup(
+            label = "✅ Completadas hoy",
+            sortKey = 99,
+            dateKey = "completed_today",
+            isOverdue = false,
+            isNoDate = false,
+            items = sorted
+        ))
+    }
+
+    return groups
 }
 
 // ────────────────────────────────────────────────────────────
-//  TaskListContent (instance-based)
+//  TaskListContent (task-based — no instances)
 // ────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -351,101 +355,65 @@ private fun TaskListContent(
     onSortChange: (TaskSort) -> Unit,
     onTagFilterChange: (String?) -> Unit,
     onTaskClick: (TaskResponse) -> Unit,
-    onCompleteInstance: (TaskResponse, TaskInstanceResponse) -> Unit,
-    onSkipInstance: (TaskResponse, TaskInstanceResponse) -> Unit,
+    onCompleteTask: (TaskResponse) -> Unit,
     onRefresh: () -> Unit
 ) {
     val taskMap = state.tasks.associateBy { it.id }
     val memberMap = state.members.associateBy { it.id }
     val assignmentsByTask = state.assignments.groupBy { it.taskId }
 
-    // Compute today start for overdue detection
+    // Compute today start for overdue detection and due-today calculation
     val now = Clock.System.now()
     val tz = TimeZone.currentSystemDefault()
     val todayStartEpoch = now.toLocalDateTime(tz).date
         .atStartOfDayIn(tz).toEpochMilliseconds()
 
-    // Build InstanceWithTask for each instance (only for non-completed, non-skipped)
-    val instancesWithTasks = state.instances
-        .filter { inst ->
-            // Always exclude completed and skipped from the pending list
-            if (inst.completed || inst.skipped) return@filter false
+    // Filter tasks based on filter + tag
+    val filteredTasks = state.tasks.filter { task ->
+        // Tag filter
+        if (tagFilter != null && tagFilter !in task.tags) return@filter false
 
-            val task = taskMap[inst.taskId] ?: return@filter false
-
-            // Tag filter
-            if (tagFilter != null && tagFilter !in task.tags) return@filter false
-
-            // Status filter (completed go to "Completadas hoy" section, not here)
-            when (filter) {
-                TaskFilter.ALL -> true
-                TaskFilter.PENDING -> true
-                TaskFilter.COMPLETED -> false
-                TaskFilter.MINE -> {
-                    val mid = currentMemberId ?: return@filter false
-                    val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
-                    taskAssignments.any { it.memberId == mid && it.status == "assigned" }
-                }
+        // Status filter
+        when (filter) {
+            TaskFilter.ALL -> true
+            TaskFilter.PENDING -> {
+                // Pending = due today AND not completed today
+                val due = isTaskDueToday(task, todayStartEpoch)
+                val done = isTaskCompletedToday(task, todayStartEpoch)
+                due && !done
+            }
+            TaskFilter.COMPLETED -> isTaskCompletedToday(task, todayStartEpoch)
+            TaskFilter.MINE -> {
+                val mid = currentMemberId ?: return@filter false
+                val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
+                taskAssignments.any { it.memberId == mid && it.status == "assigned" }
             }
         }
-        .map { inst ->
-            val task = taskMap[inst.taskId]!!
-            val isOverdue = inst.dueDate > 0 && inst.dueDate < todayStartEpoch
-            InstanceWithTask(
-                instance = inst,
-                task = task,
-                isOverdue = isOverdue
-            )
-        }
+    }
 
-    // Build skipped instances list
-    val skippedInstances = state.instances
-        .filter { inst ->
-            if (!inst.skipped) return@filter false
-            val task = taskMap[inst.taskId] ?: return@filter false
-            if (tagFilter != null && tagFilter !in task.tags) return@filter false
-            true
-        }
-        .map { inst ->
-            val task = taskMap[inst.taskId]!!
-            InstanceWithTask(
-                instance = inst,
-                task = task,
-                isOverdue = false
-            )
-        }
-        .sortedByDescending { it.instance.dueDate }
+    // Build TaskWithStatus list
+    val tasksWithStatus = filteredTasks.map { task ->
+        val due = isTaskDueToday(task, todayStartEpoch)
+        val done = isTaskCompletedToday(task, todayStartEpoch)
+        val isOverdue = task.dueDate > 0 && task.dueDate < todayStartEpoch && task.lastCompletedDate == null
+        TaskWithStatus(
+            task = task,
+            isDueToday = due,
+            isCompletedToday = done,
+            isOverdue = isOverdue
+        )
+    }
 
-    // Build completed today instances list
-    val completedTodayInstances = state.instances
-        .filter { inst ->
-            if (!inst.completed) return@filter false
-            val task = taskMap[inst.taskId] ?: return@filter false
-            if (tagFilter != null && tagFilter !in task.tags) return@filter false
-            // Only show if completed today
-            val completedAt = inst.completedAt ?: return@filter false
-            completedAt >= todayStartEpoch
-        }
-        .map { inst ->
-            val task = taskMap[inst.taskId]!!
-            InstanceWithTask(
-                instance = inst,
-                task = task,
-                isOverdue = false
-            )
-        }
-        .sortedByDescending { it.instance.completedAt ?: 0 }
-
-    // Group by day
-    val groups = remember(instancesWithTasks, filter, sort, tagFilter) {
-        groupInstancesByDay(instancesWithTasks, todayStartEpoch)
+    // Group by status
+    val groups = remember(tasksWithStatus, filter, sort, tagFilter) {
+        groupTasksByStatus(tasksWithStatus)
     }
 
     // Collapse state per group
     val collapsedGroups = remember { mutableStateMapOf<String, Boolean>() }
 
-    // Track which instances are being completed (loading state)
-    val loadingInstanceIds = remember { mutableStateMapOf<String, Boolean>() }
+    // Track which tasks are being completed (loading state)
+    val loadingTaskIds = remember { mutableStateMapOf<String, Boolean>() }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -464,7 +432,7 @@ private fun TaskListContent(
             )
         }
 
-        if (instancesWithTasks.isEmpty()) {
+        if (tasksWithStatus.isEmpty() || groups.isEmpty()) {
             item {
                 Spacer(Modifier.height(8.dp))
                 Card(
@@ -476,7 +444,7 @@ private fun TaskListContent(
                     Text(
                         text = when (filter) {
                             TaskFilter.PENDING -> "🎉 ¡No hay tareas pendientes!"
-                            TaskFilter.COMPLETED -> "📋 Revisa '✅ Completadas hoy' abajo"
+                            TaskFilter.COMPLETED -> "📋 No hay tareas completadas hoy"
                             TaskFilter.MINE -> "👤 No tienes tareas asignadas"
                             TaskFilter.ALL -> "📋 No hay tareas aún. ¡Crea la primera!"
                         },
@@ -489,7 +457,7 @@ private fun TaskListContent(
             }
         } else {
             groups.forEach { group ->
-                val isCollapsed = collapsedGroups[group.dateKey] ?: false
+                val isCollapsed = collapsedGroups[group.dateKey] ?: (group.dateKey == "completed_today")
 
                 stickyHeader(key = "header_${group.dateKey}") {
                     GroupHeader(
@@ -509,99 +477,23 @@ private fun TaskListContent(
                 if (!isCollapsed) {
                     items(
                         items = group.items,
-                        key = { "inst_${it.instance.id}" }
+                        key = { "task_${it.task.id}_${group.dateKey}" }
                     ) { item ->
-                        InstanceCard(
+                        TaskCard(
                             item = item,
                             assignments = assignmentsByTask[item.task.id] ?: emptyList(),
                             memberMap = memberMap,
-                            isLoading = loadingInstanceIds[item.instance.id] == true,
+                            isLoading = loadingTaskIds[item.task.id] == true,
                             onClick = { onTaskClick(item.task) },
-                            onComplete = {
-                                loadingInstanceIds[item.instance.id] = true
-                                onCompleteInstance(item.task, item.instance)
-                            },
-                            onSkip = {
-                                loadingInstanceIds[item.instance.id] = true
-                                onSkipInstance(item.task, item.instance)
-                            }
+                            onComplete = if (item.isDueToday && !item.isCompletedToday) {
+                                {
+                                    loadingTaskIds[item.task.id] = true
+                                    onCompleteTask(item.task)
+                                }
+                            } else null
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
-                }
-            }
-        }
-
-        // ── Completed today instances ──
-        if (completedTodayInstances.isNotEmpty()) {
-            item(key = "completed_today_header") {
-                Spacer(Modifier.height(8.dp))
-                GroupHeader(
-                    label = "✅ Completadas hoy",
-                    count = completedTodayInstances.size,
-                    isOverdue = false,
-                    isNoDate = false,
-                    isCollapsed = collapsedGroups["completed_today"] ?: true,
-                    onToggle = { collapsedGroups["completed_today"] = !(collapsedGroups["completed_today"] ?: true) }
-                )
-            }
-
-            item(key = "completed_today_spacer") {
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-
-            if (!(collapsedGroups["completed_today"] ?: true)) {
-                items(
-                    items = completedTodayInstances,
-                    key = { "completed_${it.instance.id}" }
-                ) { item ->
-                    InstanceCard(
-                        item = item,
-                        assignments = assignmentsByTask[item.task.id] ?: emptyList(),
-                        memberMap = memberMap,
-                        isLoading = false,
-                        onClick = { onTaskClick(item.task) },
-                        onComplete = null,
-                        onSkip = null
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-        }
-
-        // ── Skipped instances ──
-        if (skippedInstances.isNotEmpty()) {
-            item(key = "skipped_header") {
-                Spacer(Modifier.height(8.dp))
-                GroupHeader(
-                    label = "⏭️ Saltadas",
-                    count = skippedInstances.size,
-                    isOverdue = false,
-                    isNoDate = false,
-                    isCollapsed = collapsedGroups["skipped"] ?: true,
-                    onToggle = { collapsedGroups["skipped"] = !(collapsedGroups["skipped"] ?: true) }
-                )
-            }
-
-            item(key = "skipped_spacer") {
-                Spacer(modifier = Modifier.height(6.dp))
-            }
-
-            if (!(collapsedGroups["skipped"] ?: true)) {
-                items(
-                    items = skippedInstances,
-                    key = { "skipped_${it.instance.id}" }
-                ) { item ->
-                    InstanceCard(
-                        item = item,
-                        assignments = assignmentsByTask[item.task.id] ?: emptyList(),
-                        memberMap = memberMap,
-                        isLoading = false,
-                        onClick = { onTaskClick(item.task) },
-                        onComplete = null,
-                        onSkip = null
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                 }
             }
         }
@@ -612,35 +504,33 @@ private fun TaskListContent(
 }
 
 // ────────────────────────────────────────────────────────────
-//  InstanceCard – shows a task instance with quick-complete
+//  TaskCard – shows a task with quick-complete
 // ────────────────────────────────────────────────────────────
 
 @Composable
-private fun InstanceCard(
-    item: InstanceWithTask,
+private fun TaskCard(
+    item: TaskWithStatus,
     assignments: List<TaskAssignmentResponse>,
     memberMap: Map<String, MemberResponse>,
     isLoading: Boolean,
     onClick: () -> Unit,
-    onComplete: (() -> Unit)?,
-    onSkip: (() -> Unit)?
+    onComplete: (() -> Unit)?
 ) {
     val task = item.task
-    val instance = item.instance
     val pendingCount = assignments.count { it.status == "assigned" }
     val completedCount = assignments.count { it.status == "completed" }
     val totalAssigned = assignments.size
-    val isSkipped = instance.skipped
+    val isDone = item.isCompletedToday
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSkipped) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = if (isDone) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSkipped) 0.dp else 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDone) 0.dp else 1.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
@@ -658,64 +548,37 @@ private fun InstanceCard(
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    textDecoration = if (isSkipped) TextDecoration.LineThrough else TextDecoration.None,
-                    color = if (isSkipped) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    textDecoration = if (isDone) TextDecoration.LineThrough else TextDecoration.None,
+                    color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         else MaterialTheme.colorScheme.onSurface
                 )
 
-                if (!instance.completed && !isSkipped && onComplete != null) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        // Skip button
-                        if (onSkip != null) {
-                            TextButton(
-                                onClick = onSkip,
-                                enabled = !isLoading,
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = Coral500
-                                ),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text("⏭️", style = MaterialTheme.typography.labelMedium)
-                            }
-                        }
-                        // Complete button
-                        Button(
-                            onClick = onComplete,
-                            enabled = !isLoading,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Teal600
-                            ),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Text("✅ Hecho", style = MaterialTheme.typography.labelMedium)
-                            }
+                if (!isDone && onComplete != null) {
+                    Button(
+                        onClick = onComplete,
+                        enabled = !isLoading,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Teal600
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("✅ Hecho", style = MaterialTheme.typography.labelMedium)
                         }
                     }
-                } else if (instance.completed) {
+                } else if (isDone) {
                     Surface(
                         shape = MaterialTheme.shapes.small,
                         color = Teal100
                     ) {
                         Text(
                             text = "✅",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                } else if (isSkipped) {
-                    Surface(
-                        shape = MaterialTheme.shapes.small,
-                        color = Coral50
-                    ) {
-                        Text(
-                            text = "⏭️",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelMedium
                         )
@@ -794,27 +657,26 @@ private fun InstanceCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Due date display
+            // Due date / completion status
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (instance.dueDate > 0) {
-                    val deadlineText = formatDeadline(instance.dueDate)
+                // Due date or completion info
+                if (isDone && task.lastCompletedDate != null) {
                     Text(
-                        text = when {
-                            isSkipped -> "⏭️ $deadlineText"
-                            instance.completed -> "✅ $deadlineText"
-                            else -> "⏰ $deadlineText"
-                        },
+                        text = "✅ ${formatDeadline(task.lastCompletedDate!!)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = when {
-                            isSkipped -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            instance.completed -> Teal600
-                            item.isOverdue -> MaterialTheme.colorScheme.error
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        }
+                        color = Teal600
+                    )
+                } else if (task.dueDate > 0) {
+                    val deadlineText = formatDeadline(task.dueDate)
+                    Text(
+                        text = "⏰ $deadlineText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (item.isOverdue) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     Text(
