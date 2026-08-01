@@ -98,5 +98,23 @@ class HouseholdScreenModel(
         }
     }
 
+    fun deleteMultipleHouseholds(
+        householdIds: List<String>,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        screenModelScope.launch {
+            try {
+                for (id in householdIds) {
+                    repo.deleteHousehold(id)
+                    householdStore.removeHousehold(id)
+                }
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Error al eliminar los hogares")
+            }
+        }
+    }
+
     fun getLocalId(): String? = repo.getLocalId()
 }
