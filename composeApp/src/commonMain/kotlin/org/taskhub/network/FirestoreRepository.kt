@@ -759,6 +759,71 @@ class FirestoreRepository(
     }
 
     /**
+     * Update a task template. Only updates the task document — does NOT regenerate
+     * instances or affect existing assignments. Uses Firestore PATCH with updateMask.
+     */
+    suspend fun updateTask(
+        householdId: String,
+        taskId: String,
+        title: String,
+        description: String,
+        points: Int,
+        frequency: String,
+        recurrenceDays: List<Int>,
+        tags: List<String>,
+        penaltyMode: String?,
+        penaltyValue: Int,
+        penaltyInterval: String,
+        penaltyMax: Int
+    ) {
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        val fields = mutableMapOf<String, FirestoreValue>(
+            "title" to FirestoreValue(stringValue = title),
+            "description" to FirestoreValue(stringValue = description),
+            "points" to FirestoreValue(integerValue = points.toString()),
+            "frequency" to FirestoreValue(stringValue = frequency),
+            "updatedAt" to FirestoreValue(integerValue = now.toString())
+        )
+
+        // Tags as array
+        fields["tags"] = FirestoreValue(
+            arrayValue = FirestoreArrayValue(
+                values = tags.map { FirestoreValue(stringValue = it) }
+            )
+        )
+
+        // Recurrence days as array
+        fields["recurrenceDays"] = FirestoreValue(
+            arrayValue = FirestoreArrayValue(
+                values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }
+            )
+        )
+
+        // Penalty configuration
+        if (penaltyMode != null) {
+            fields["penaltyMode"] = FirestoreValue(stringValue = penaltyMode)
+            fields["penaltyValue"] = FirestoreValue(integerValue = penaltyValue.toString())
+            fields["penaltyInterval"] = FirestoreValue(stringValue = penaltyInterval)
+            fields["penaltyMax"] = FirestoreValue(integerValue = penaltyMax.toString())
+        } else {
+            fields["penaltyMode"] = FirestoreValue(nullValue = "NULL_VALUE")
+            fields["penaltyValue"] = FirestoreValue(nullValue = "NULL_VALUE")
+            fields["penaltyInterval"] = FirestoreValue(nullValue = "NULL_VALUE")
+            fields["penaltyMax"] = FirestoreValue(nullValue = "NULL_VALUE")
+        }
+
+        val updateMask = fields.keys.joinToString(",")
+
+        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", updateMask)
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /**
      * Delete a task and all its associated taskInstances.
      * Does NOT delete assignments (orphaned subcollections are harmless).
      */

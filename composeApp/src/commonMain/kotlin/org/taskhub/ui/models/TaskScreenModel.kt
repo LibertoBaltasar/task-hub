@@ -321,6 +321,50 @@ class TaskScreenModel(
         }
     }
 
+    // ── Update task ─────────────────────────────────────────
+
+    fun updateTask(
+        householdId: String,
+        taskId: String,
+        title: String,
+        description: String,
+        points: Int,
+        frequency: String,
+        recurrenceDays: List<Int>,
+        tags: List<String>,
+        penaltyMode: String?,
+        penaltyValue: Int,
+        penaltyInterval: String,
+        penaltyMax: Int
+    ) {
+        screenModelScope.launch {
+            _actionState.value = TaskActionState.Loading
+            try {
+                repo.updateTask(
+                    householdId = householdId,
+                    taskId = taskId,
+                    title = title,
+                    description = description,
+                    points = points,
+                    frequency = frequency,
+                    recurrenceDays = recurrenceDays,
+                    tags = tags,
+                    penaltyMode = penaltyMode,
+                    penaltyValue = penaltyValue,
+                    penaltyInterval = penaltyInterval,
+                    penaltyMax = penaltyMax
+                )
+                _actionState.value = TaskActionState.Success
+                // Refresh detail
+                loadTaskDetail(householdId, taskId)
+            } catch (e: Exception) {
+                _actionState.value = TaskActionState.Error(
+                    e.message ?: "Error al actualizar tarea"
+                )
+            }
+        }
+    }
+
     // ── Delete task ──────────────────────────────────────────
 
     fun deleteTask(householdId: String, taskId: String) {

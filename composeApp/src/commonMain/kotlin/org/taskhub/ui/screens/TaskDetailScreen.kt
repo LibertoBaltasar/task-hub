@@ -120,6 +120,20 @@ data class TaskDetailScreen(
                         Spacer(Modifier.weight(1f))
 
                         TextButton(
+                            onClick = {
+                                val state = detailState
+                                if (state is TaskDetailUiState.Success) {
+                                    navigator.push(EditTaskScreen(householdId, state.task))
+                                }
+                            },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("✏️", style = MaterialTheme.typography.titleMedium)
+                        }
+
+                        TextButton(
                             onClick = { showDeleteDialog = true },
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = MaterialTheme.colorScheme.onPrimary
@@ -128,7 +142,7 @@ data class TaskDetailScreen(
                             Text("🗑️", style = MaterialTheme.typography.titleMedium)
                         }
 
-                        Spacer(Modifier.width(64.dp))
+                        Spacer(Modifier.width(16.dp))
                     }
                 }
 
