@@ -748,10 +748,17 @@ class FirestoreRepository(
         )
 
         // Generate next instance for recurring tasks
+        // Only create if no instance already exists for this task + dueDate
         val nextInstance = if (task.frequency != "once") {
             val nextDueDate = calculateNextInstanceDueDate(task, instance.dueDate)
             if (nextDueDate != null) {
-                createInstance(householdId, task.id, nextDueDate, task.points)
+                val existingInstances = getTaskInstances(householdId)
+                val alreadyExists = existingInstances.any {
+                    it.taskId == task.id && it.dueDate == nextDueDate
+                }
+                if (!alreadyExists) {
+                    createInstance(householdId, task.id, nextDueDate, task.points)
+                } else null
             } else null
         } else null
 
@@ -873,10 +880,17 @@ class FirestoreRepository(
         val skippedInstance = instance.copy(skipped = true)
 
         // Generate next instance for recurring tasks
+        // Only create if no instance already exists for this task + dueDate
         val nextInstance = if (task.frequency != "once") {
             val nextDueDate = calculateNextInstanceDueDate(task, instance.dueDate)
             if (nextDueDate != null) {
-                createInstance(householdId, task.id, nextDueDate, task.points)
+                val existingInstances = getTaskInstances(householdId)
+                val alreadyExists = existingInstances.any {
+                    it.taskId == task.id && it.dueDate == nextDueDate
+                }
+                if (!alreadyExists) {
+                    createInstance(householdId, task.id, nextDueDate, task.points)
+                } else null
             } else null
         } else null
 

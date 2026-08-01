@@ -74,10 +74,12 @@ data class TaskDetailScreen(
             )
         }
 
-        // Watch for delete success and navigate back
+        // Watch for complete/delete success and navigate back
         LaunchedEffect(actionState) {
             if (actionState is TaskActionState.Success && !showDeleteDialog) {
-                // Refresh list state before going back
+                // Refresh list state before going back so the
+                // completed instance disappears from the pending list
+                model.loadTasks(householdId)
                 navigator.pop()
             }
         }
