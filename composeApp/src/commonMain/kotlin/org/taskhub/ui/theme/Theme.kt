@@ -8,6 +8,16 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+// ── Theme enum ────────────────────────────────────────────
+
+enum class TaskHubThemeType {
+    DEFAULT,
+    NATURALEZA,
+    MINIMAL
+}
+
+// ── Colores base ──────────────────────────────────────────
+
 // === Marca Task Hub: paleta verde menta / teal con acentos cálidos ===
 
 // Colores primarios: teal (verde azulado, fresco y moderno)
@@ -38,8 +48,48 @@ val Coral900 = Color(0xFF4D1A0E)
 val Sand50 = Color(0xFFFEFCF8)
 val Sand100 = Color(0xFFFDF6EE)
 
-// Esquemas
-private val LightColorScheme = lightColorScheme(
+// ── Naturaleza colors ─────────────────────────────────────
+
+val Green50 = Color(0xFFE8F5E9)
+val Green100 = Color(0xFFC8E6C9)
+val Green200 = Color(0xFFA5D6A7)
+val Green300 = Color(0xFF81C784)
+val Green400 = Color(0xFF66BB6A)
+val Green500 = Color(0xFF4CAF50)
+val Green600 = Color(0xFF43A047)
+val Green700 = Color(0xFF388E3C)
+val Green800 = Color(0xFF2E7D32)
+val Green900 = Color(0xFF1B5E20)
+
+val Brown50 = Color(0xFFEFEBE9)
+val Brown100 = Color(0xFFD7CCC8)
+val Brown200 = Color(0xFFBCAAA4)
+val Brown300 = Color(0xFFA1887F)
+val Brown400 = Color(0xFF8D6E63)
+val Brown500 = Color(0xFF795548)
+val Brown600 = Color(0xFF6D4C41)
+val Brown700 = Color(0xFF5D4037)
+val Brown800 = Color(0xFF4E342E)
+val Brown900 = Color(0xFF3E2723)
+
+val Earth50 = Color(0xFFF9F5F0)
+val Earth100 = Color(0xFFF0E6D8)
+
+// ── Minimal colors ────────────────────────────────────────
+
+val MonoWhite = Color(0xFFFFFFFF)
+val MonoGray50 = Color(0xFFF5F5F5)
+val MonoGray100 = Color(0xFFE0E0E0)
+val MonoGray200 = Color(0xFFBDBDBD)
+val MonoGray400 = Color(0xFF757575)
+val MonoGray600 = Color(0xFF424242)
+val MonoGray800 = Color(0xFF212121)
+val MonoGray900 = Color(0xFF121212)
+val MonoBlack = Color(0xFF000000)
+
+// ── Default schemes ───────────────────────────────────────
+
+private val DefaultLightColorScheme = lightColorScheme(
     primary = Teal600,
     onPrimary = Color.White,
     primaryContainer = Teal100,
@@ -71,7 +121,7 @@ private val LightColorScheme = lightColorScheme(
     outlineVariant = Color(0xFFCAC4D0),
 )
 
-private val DarkColorScheme = darkColorScheme(
+private val DefaultDarkColorScheme = darkColorScheme(
     primary = Teal300,
     onPrimary = Teal900,
     primaryContainer = Teal800,
@@ -103,12 +153,151 @@ private val DarkColorScheme = darkColorScheme(
     outlineVariant = Color(0xFF49454F),
 )
 
+// ── Naturaleza schemes (verdes, marrones) ─────────────────
+
+private val NaturalezaLightColorScheme = lightColorScheme(
+    primary = Green700,
+    onPrimary = Color.White,
+    primaryContainer = Green100,
+    onPrimaryContainer = Green900,
+
+    secondary = Brown500,
+    onSecondary = Color.White,
+    secondaryContainer = Brown100,
+    onSecondaryContainer = Brown900,
+
+    tertiary = Green400,
+    onTertiary = Color.White,
+    tertiaryContainer = Green50,
+    onTertiaryContainer = Green800,
+
+    error = Color(0xFFBA1A1A),
+    onError = Color.White,
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+
+    background = Earth50,
+    onBackground = Brown900,
+    surface = Earth50,
+    onSurface = Brown900,
+    surfaceVariant = Earth100,
+    onSurfaceVariant = Brown700,
+
+    outline = Color(0xFF8D6E63),
+    outlineVariant = Color(0xFFBCAAA4),
+)
+
+private val NaturalezaDarkColorScheme = darkColorScheme(
+    primary = Green300,
+    onPrimary = Green900,
+    primaryContainer = Green800,
+    onPrimaryContainer = Green100,
+
+    secondary = Brown300,
+    onSecondary = Brown900,
+    secondaryContainer = Brown700,
+    onSecondaryContainer = Brown100,
+
+    tertiary = Green200,
+    onTertiary = Green900,
+    tertiaryContainer = Green700,
+    onTertiaryContainer = Green50,
+
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+
+    background = Color(0xFF1B1A18),
+    onBackground = Color(0xFFE6E2DD),
+    surface = Color(0xFF1B1A18),
+    onSurface = Color(0xFFE6E2DD),
+    surfaceVariant = Color(0xFF2D2A25),
+    onSurfaceVariant = Color(0xFFCBC5BA),
+
+    outline = Color(0xFF958F86),
+    outlineVariant = Color(0xFF4A453D),
+)
+
+// ── Minimal schemes (blanco y negro) ──────────────────────
+
+private val MinimalLightColorScheme = lightColorScheme(
+    primary = MonoGray800,
+    onPrimary = MonoWhite,
+    primaryContainer = MonoGray100,
+    onPrimaryContainer = MonoGray900,
+
+    secondary = MonoGray600,
+    onSecondary = MonoWhite,
+    secondaryContainer = MonoGray50,
+    onSecondaryContainer = MonoGray800,
+
+    tertiary = MonoGray400,
+    onTertiary = MonoWhite,
+    tertiaryContainer = MonoGray50,
+    onTertiaryContainer = MonoGray600,
+
+    error = Color(0xFFBA1A1A),
+    onError = Color.White,
+    errorContainer = Color(0xFFFFDAD6),
+    onErrorContainer = Color(0xFF410002),
+
+    background = MonoWhite,
+    onBackground = MonoGray900,
+    surface = MonoWhite,
+    onSurface = MonoGray900,
+    surfaceVariant = MonoGray50,
+    onSurfaceVariant = MonoGray600,
+
+    outline = MonoGray400,
+    outlineVariant = MonoGray200,
+)
+
+private val MinimalDarkColorScheme = darkColorScheme(
+    primary = MonoGray100,
+    onPrimary = MonoGray900,
+    primaryContainer = MonoGray600,
+    onPrimaryContainer = MonoGray50,
+
+    secondary = MonoGray200,
+    onSecondary = MonoGray800,
+    secondaryContainer = MonoGray600,
+    onSecondaryContainer = MonoGray50,
+
+    tertiary = MonoGray400,
+    onTertiary = MonoWhite,
+    tertiaryContainer = MonoGray600,
+    onTertiaryContainer = MonoGray50,
+
+    error = Color(0xFFFFB4AB),
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF93000A),
+    onErrorContainer = Color(0xFFFFDAD6),
+
+    background = MonoBlack,
+    onBackground = MonoGray100,
+    surface = MonoBlack,
+    onSurface = MonoGray100,
+    surfaceVariant = MonoGray800,
+    onSurfaceVariant = MonoGray400,
+
+    outline = MonoGray400,
+    outlineVariant = MonoGray600,
+)
+
+// ── Theme composable ──────────────────────────────────────
+
 @Composable
 fun TaskHubTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    themeType: TaskHubThemeType = TaskHubThemeType.DEFAULT,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val colorScheme = when (themeType) {
+        TaskHubThemeType.DEFAULT -> if (darkTheme) DefaultDarkColorScheme else DefaultLightColorScheme
+        TaskHubThemeType.NATURALEZA -> if (darkTheme) NaturalezaDarkColorScheme else NaturalezaLightColorScheme
+        TaskHubThemeType.MINIMAL -> if (darkTheme) MinimalDarkColorScheme else MinimalLightColorScheme
+    }
 
     MaterialTheme(
         colorScheme = colorScheme,

@@ -37,7 +37,10 @@ data class MemberResponse(
     val role: String,
     val totalPoints: Int = 0,
     val joinedAt: Long = 0,
-    val userId: String? = null
+    val userId: String? = null,
+    val currentStreak: Int = 0,
+    val bestStreak: Int = 0,
+    val lastStreakDate: Long = 0
 )
 
 @Serializable
@@ -85,6 +88,16 @@ data class TaskAssignmentResponse(
     val pointsAwarded: Int? = null,
     val onTime: Boolean? = null,
     val assignedAt: Long = 0
+)
+
+// ── Comments DTO ─────────────────────────────────────────
+
+@Serializable
+data class CommentResponse(
+    val id: String,
+    val authorName: String,
+    val text: String,
+    val createdAt: Long = 0
 )
 
 

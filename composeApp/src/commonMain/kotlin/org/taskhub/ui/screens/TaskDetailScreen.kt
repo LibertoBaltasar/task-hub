@@ -38,12 +38,15 @@ data class TaskDetailScreen(
         val model = koinScreenModel<TaskScreenModel>()
         val detailState by model.detailState.collectAsState()
         val actionState by model.actionState.collectAsState()
+        val commentsState by model.commentsState.collectAsState()
+        val newCommentText by model.newCommentText.collectAsState()
 
         var showDeleteDialog by remember { mutableStateOf(false) }
 
         LaunchedEffect(taskId) {
             model.resetActionState()
             model.loadTaskDetail(householdId, taskId)
+            model.loadComments(householdId, taskId)
         }
 
         // Delete confirmation dialog
@@ -164,6 +167,12 @@ data class TaskDetailScreen(
                             assignments = state.assignments,
                             memberMap = memberMap,
                             actionState = actionState,
+                            commentsState = commentsState,
+                            newCommentText = newCommentText,
+                            onCommentTextChange = { model.setNewCommentText(it) },
+                            onAddComment = { authorName ->
+                                model.addComment(householdId, taskId, authorName)
+                            },
                             onCompleteTask = {
                                 model.completeTask(
                                     householdId = householdId,
@@ -218,6 +227,10 @@ private fun TaskDetailContent(
     assignments: List<TaskAssignmentResponse>,
     memberMap: Map<String, MemberResponse>,
     actionState: TaskActionState,
+    commentsState: CommentsUiState,
+    newCommentText: String,
+    onCommentTextChange: (String) -> Unit,
+    onAddComment: (String) -> Unit,
     onCompleteTask: () -> Unit,
     onComplete: (String, TaskAssignmentResponse) -> Unit
 ) {
@@ -481,6 +494,153 @@ private fun TaskDetailContent(
                     showComplete = false
                 )
             }
+        }
+
+        item { Spacer(modifier = Modifier.height(32.dp)) }
+
+        // ── Comments section ──
+        item {
+            HorizontalDivider(color = Teal200)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "💬 Comentarios",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Teal700
+            )
+        }
+
+        // Comment input
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = newCommentText,
+                    onValueChange = onCommentTextChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Añade un comentario...") },
+                    maxLines = 2,
+                    singleLine = false,
+                    supportingText = {
+                        Text("${newCommentText.length}/200")
+                    },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Teal600,
+                        cursorColor = Teal600
+                    )
+                )
+                Spacer(Modifier.width(8.dp))
+                IconButton(
+                    onClick = {
+                        // Use a default author name since we don't track login state
+                        onAddComment("Usuario")
+                    },
+                    enabled = newCommentText.isNotBlank()
+                ) {
+                    Text(
+                        "📤",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+
+        // Comments list
+        when (commentsState) {
+            is CommentsUiState.Loading -> {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            color = Teal600,
+                            strokeWidth = 2.dp
+                        )
+                    }
+                }
+            }
+
+            is CommentsUiState.Success -> {
+                if (commentsState.comments.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Text(
+                                text = "No hay comentarios aún",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    items(commentsState.comments) { comment ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Teal50.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = comment.authorName,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Teal700
+                                    )
+                                    if (comment.createdAt > 0) {
+                                        Text(
+                                            text = formatDateTime(comment.createdAt),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = comment.text,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            is CommentsUiState.Error -> {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = "⚠️ ${commentsState.message}",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+
+            is CommentsUiState.Idle -> {}
         }
 
         item { Spacer(modifier = Modifier.height(32.dp)) }

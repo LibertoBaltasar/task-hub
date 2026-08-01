@@ -231,7 +231,10 @@ class FirestoreRepository(
             "displayName" to FirestoreValue(stringValue = displayName),
             "role" to FirestoreValue(stringValue = role),
             "totalPoints" to FirestoreValue(integerValue = "0"),
-            "joinedAt" to FirestoreValue(integerValue = now.toString())
+            "joinedAt" to FirestoreValue(integerValue = now.toString()),
+            "currentStreak" to FirestoreValue(integerValue = "0"),
+            "bestStreak" to FirestoreValue(integerValue = "0"),
+            "lastStreakDate" to FirestoreValue(integerValue = "0")
         )
         if (avatarUrl != null) {
             fields["avatarUrl"] = FirestoreValue(stringValue = avatarUrl)
@@ -251,7 +254,8 @@ class FirestoreRepository(
         }.body()
 
         val id = extractDocId(response.name)
-        return MemberResponse(id, householdId, displayName, avatarUrl, role, 0, now)
+        return MemberResponse(id, householdId, displayName, avatarUrl, role, 0, now,
+            currentStreak = 0, bestStreak = 0, lastStreakDate = 0)
     }
 
     /** Remove (leave) a member — soft-delete by setting leftAt. Requires auth (write). */
@@ -270,6 +274,100 @@ class FirestoreRepository(
         }
 
         return true
+    }
+
+    /** Update member streak fields. Requires auth (write). */
+    suspend fun updateMemberStreak(
+        householdId: String,
+        memberId: String,
+        currentStreak: Int,
+        bestStreak: Int,
+        lastStreakDate: Long
+    ) {
+        val fields = mapOf(
+            "currentStreak" to FirestoreValue(integerValue = currentStreak.toString()),
+            "bestStreak" to FirestoreValue(integerValue = bestStreak.toString()),
+            "lastStreakDate" to FirestoreValue(integerValue = lastStreakDate.toString())
+        )
+        client.patch("$baseUrl/households/$householdId/members/$memberId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "currentStreak,bestStreak,lastStreakDate")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /** Update member total points (add delta). Requires auth (write). */
+    suspend fun addMemberPoints(
+        householdId: String,
+        memberId: String,
+        delta: Int
+    ) {
+        // We need to read current points first, then update
+        val members = getMembers(householdId)
+        val member = members.find { it.id == memberId } ?: return
+        val newTotal = member.totalPoints + delta
+
+        val fields = mapOf(
+            "totalPoints" to FirestoreValue(integerValue = newTotal.toString())
+        )
+        client.patch("$baseUrl/households/$householdId/members/$memberId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "totalPoints")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /** Get member's unlocked achievement IDs. */
+    suspend fun getMemberAchievements(householdId: String, memberId: String): Set<String> {
+        return try {
+            val response: FirestoreDocumentResponse = client.get(
+                "$baseUrl/households/$householdId/members/$memberId/achievements/_meta"
+            ) {
+                tryAuthOrApiKey()
+            }.body()
+            val ids = response.fields["unlocked"]?.arrayValue?.values
+                ?.mapNotNull { it.stringValue }
+                ?: emptyList()
+            ids.toSet()
+        } catch (_: Exception) {
+            emptySet() // No achievements doc yet
+        }
+    }
+
+    /** Add an achievement ID to member's unlocked achievements. */
+    suspend fun addMemberAchievement(householdId: String, memberId: String, achievementId: String) {
+        // Use PATCH to create or update the meta document
+        val now = Clock.System.now().toEpochMilliseconds()
+        val fields = mapOf(
+            "unlocked" to FirestoreValue(
+                arrayValue = FirestoreArrayValue(
+                    values = listOf(FirestoreValue(stringValue = achievementId))
+                )
+            ),
+            "updatedAt" to FirestoreValue(integerValue = now.toString())
+        )
+        // We need arrayUnion — use a different approach: read + write
+        val existing = getMemberAchievements(householdId, memberId)
+        val allUnlocked = existing + achievementId
+        val updatedFields = mapOf(
+            "unlocked" to FirestoreValue(
+                arrayValue = FirestoreArrayValue(
+                    values = allUnlocked.map { FirestoreValue(stringValue = it) }
+                )
+            ),
+            "updatedAt" to FirestoreValue(integerValue = now.toString())
+        )
+        client.patch(
+            "$baseUrl/households/$householdId/members/$memberId/achievements/_meta"
+        ) {
+            withAuth()
+            // Create if not exists
+            parameter("updateMask.fieldPaths", "unlocked,updatedAt")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(updatedFields))
+        }
     }
 
     // ────────────────────────────────────────────────────────
@@ -775,6 +873,58 @@ class FirestoreRepository(
     }
 
     // ────────────────────────────────────────────────────────
+    //  Comments (subcollection under households/{id}/tasks/{taskId})
+    // ────────────────────────────────────────────────────────
+
+    /** Add a comment to a task. */
+    suspend fun addComment(
+        householdId: String,
+        taskId: String,
+        authorName: String,
+        text: String
+    ): org.taskhub.network.models.CommentResponse {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val fields = mapOf(
+            "authorName" to FirestoreValue(stringValue = authorName),
+            "text" to FirestoreValue(stringValue = text),
+            "createdAt" to FirestoreValue(integerValue = now.toString())
+        )
+
+        val response: FirestoreDocumentResponse = client.post(
+            "$baseUrl/households/$householdId/tasks/$taskId/comments"
+        ) {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }.body()
+
+        val id = extractDocId(response.name)
+        return org.taskhub.network.models.CommentResponse(id, authorName, text, now)
+    }
+
+    /** List comments for a task. */
+    suspend fun getComments(
+        householdId: String,
+        taskId: String
+    ): List<org.taskhub.network.models.CommentResponse> {
+        val response: FirestoreListResponse = client.get(
+            "$baseUrl/households/$householdId/tasks/$taskId/comments"
+        ) {
+            tryAuthOrApiKey()
+        }.body()
+
+        return response.documents.map { doc ->
+            val f = doc.fields
+            org.taskhub.network.models.CommentResponse(
+                id = extractDocId(doc.name),
+                authorName = f["authorName"]?.stringValue ?: "",
+                text = f["text"]?.stringValue ?: "",
+                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
+            )
+        }
+    }
+
+    // ────────────────────────────────────────────────────────
     //  Request helpers
     // ────────────────────────────────────────────────────────
 
@@ -821,7 +971,10 @@ class FirestoreRepository(
             role = f["role"]?.stringValue ?: "child",
             totalPoints = f["totalPoints"]?.integerValue?.toIntOrNull() ?: 0,
             joinedAt = f["joinedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            userId = f["userId"]?.stringValue
+            userId = f["userId"]?.stringValue,
+            currentStreak = f["currentStreak"]?.integerValue?.toIntOrNull() ?: 0,
+            bestStreak = f["bestStreak"]?.integerValue?.toIntOrNull() ?: 0,
+            lastStreakDate = f["lastStreakDate"]?.integerValue?.toLongOrNull() ?: 0L
         )
     }
 

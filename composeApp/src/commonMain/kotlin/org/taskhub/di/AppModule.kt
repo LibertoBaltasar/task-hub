@@ -4,6 +4,8 @@ import com.russhwolf.settings.Settings
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.platform.NotificationScheduler
+import org.taskhub.platform.createNotificationScheduler
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.MemberScreenModel
@@ -19,8 +21,11 @@ val appModule: Module = module {
     // Network — talks directly to Firestore REST API
     single { FirestoreRepository() }
 
+    // Platform notification scheduler
+    single { createNotificationScheduler() }
+
     // ScreenModels (Voyager — each screen gets its own instance via factory)
     factory { HouseholdScreenModel(repo = get(), householdStore = get()) }
     factory { MemberScreenModel(repo = get()) }
-    factory { TaskScreenModel(repo = get()) }
+    factory { TaskScreenModel(repo = get(), notificationScheduler = get()) }
 }

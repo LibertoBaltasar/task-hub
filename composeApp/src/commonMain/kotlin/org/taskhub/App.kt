@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.SlideTransition
+import com.russhwolf.settings.Settings
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.taskhub.di.appModule
@@ -20,14 +21,28 @@ import org.taskhub.storage.HouseholdStore
 import org.taskhub.ui.screens.HouseholdListScreen
 import org.taskhub.ui.screens.WelcomeScreen
 import org.taskhub.ui.theme.TaskHubTheme
+import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.ui.theme.Teal600
+
+private const val KEY_THEME = "taskhub_theme"
 
 @Composable
 fun App() {
     KoinApplication(application = {
         modules(appModule)
     }) {
-        TaskHubTheme {
+        val settings = remember { Settings() }
+        var themeType by remember {
+            mutableStateOf(
+                when (settings.getString(KEY_THEME, "DEFAULT")) {
+                    "NATURALEZA" -> TaskHubThemeType.NATURALEZA
+                    "MINIMAL" -> TaskHubThemeType.MINIMAL
+                    else -> TaskHubThemeType.DEFAULT
+                }
+            )
+        }
+
+        TaskHubTheme(themeType = themeType) {
             val householdStore = koinInject<HouseholdStore>()
 
             var initialScreen by remember { mutableStateOf<Screen?>(null) }

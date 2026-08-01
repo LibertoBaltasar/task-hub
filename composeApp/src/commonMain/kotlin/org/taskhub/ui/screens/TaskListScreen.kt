@@ -27,6 +27,7 @@ import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
+import org.taskhub.platform.shareText
 
 // ────────────────────────────────────────────────────────────
 //  TaskListScreen
@@ -132,6 +133,10 @@ data class TaskListScreen(
                             onFilterChange = { model.setFilter(it) },
                             onSortChange = { model.setSort(it) },
                             onTagFilterChange = { model.setTagFilter(it) },
+                            onExportCsv = {
+                                val csv = model.generateCsv(state.tasks)
+                                shareText(csv, "Tareas Task Hub")
+                            },
                             onTaskClick = { task ->
                                 navigator.push(TaskDetailScreen(householdId, task.id))
                             },
@@ -354,6 +359,7 @@ private fun TaskListContent(
     onFilterChange: (TaskFilter) -> Unit,
     onSortChange: (TaskSort) -> Unit,
     onTagFilterChange: (String?) -> Unit,
+    onExportCsv: () -> Unit,
     onTaskClick: (TaskResponse) -> Unit,
     onCompleteTask: (TaskResponse) -> Unit,
     onRefresh: () -> Unit
@@ -430,6 +436,20 @@ private fun TaskListContent(
                 onSortChange = onSortChange,
                 onTagFilterChange = onTagFilterChange
             )
+        }
+
+        // CSV Export button
+        item {
+            Spacer(Modifier.height(4.dp))
+            OutlinedButton(
+                onClick = onExportCsv,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Teal600
+                )
+            ) {
+                Text("📊 Exportar CSV")
+            }
         }
 
         if (tasksWithStatus.isEmpty() || groups.isEmpty()) {

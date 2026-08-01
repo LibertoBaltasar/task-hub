@@ -63,6 +63,16 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
             implementation(compose.preview)
+            implementation("io.github.g0dkar:qrcode-kotlin:4.3.0")
+
+            // Firebase Cloud Messaging
+            implementation("com.google.firebase:firebase-messaging-ktx:24.1.0")
+
+            // WorkManager para notificaciones programadas
+            implementation("androidx.work:work-runtime-ktx:2.9.1")
+
+            // Google Play Services (FCM requiere la task de los servicios de Play)
+            implementation("com.google.android.gms:play-services-base:18.5.0")
         }
 
         iosMain.dependencies {

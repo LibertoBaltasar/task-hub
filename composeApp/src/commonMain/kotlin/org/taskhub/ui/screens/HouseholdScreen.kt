@@ -1,5 +1,6 @@
 package org.taskhub.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,8 @@ import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.theme.*
+import org.taskhub.platform.QrCodeImage
+import org.taskhub.platform.shareText
 
 data class HouseholdScreen(val householdId: String) : Screen {
 
@@ -39,6 +42,9 @@ data class HouseholdScreen(val householdId: String) : Screen {
         var showConfirmDialog2 by remember { mutableStateOf(false) }
         var isDeleting by remember { mutableStateOf(false) }
 
+        // QR / Share dialog state
+        var showQrDialog by remember { mutableStateOf(false) }
+
         LaunchedEffect(householdId) {
             householdModel.loadHousehold(householdId)
             memberModel.loadMembers(householdId)
@@ -48,6 +54,76 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val householdName = when (val hState = householdState) {
             is HouseholdUiState.Success -> hState.household.name
             else -> ""
+        }
+
+        val inviteCode = when (val hState = householdState) {
+            is HouseholdUiState.Success -> hState.household.inviteCode
+            else -> ""
+        }
+
+        // QR / Share dialog
+        if (showQrDialog && inviteCode.isNotEmpty()) {
+            AlertDialog(
+                onDismissRequest = { showQrDialog = false },
+                title = {
+                    Text(
+                        "Código de invitación",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // QR Code
+                        QrCodeImage(
+                            text = inviteCode,
+                            modifier = Modifier.size(220.dp)
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        // Code text
+                        Text(
+                            text = inviteCode,
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Teal600,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Text(
+                            text = "Comparte este código para invitar miembros",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            shareText(
+                                "Únete a mi hogar en Task Hub: $inviteCode. " +
+                                    "Descárgala en: https://play.google.com/store/apps/details?id=org.taskhub",
+                                "Invitación a Task Hub"
+                            )
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                    ) {
+                        Text("📤 Compartir")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showQrDialog = false }) {
+                        Text("Cerrar")
+                    }
+                }
+            )
         }
 
         if (showConfirmDialog1) {
@@ -197,7 +273,9 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                 // Household info card
                                 item {
                                     Card(
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showQrDialog = true },
                                         colors = CardDefaults.cardColors(
                                             containerColor = Teal50
                                         )
@@ -256,24 +334,45 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
 
-                                // Navigation to tasks
+                                // Navigation to tasks + stats
                                 item {
-                                    Button(
-                                        onClick = {
-                                            // Use first member as current user (simplified)
-                                            val mState = memberState
-                                            val memberId = if (mState is MemberUiState.Success) mState.members.firstOrNull()?.id else null
-                                            navigator.push(TaskListScreen(householdId, memberId))
-                                        },
+                                    Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Coral500),
-                                        shape = MaterialTheme.shapes.large
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        Text(
-                                            text = "📋 Ver Tareas",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                        Button(
+                                            onClick = {
+                                                val mState = memberState
+                                                val memberId = if (mState is MemberUiState.Success) mState.members.firstOrNull()?.id else null
+                                                navigator.push(TaskListScreen(householdId, memberId))
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Coral500),
+                                            shape = MaterialTheme.shapes.large
+                                        ) {
+                                            Text(
+                                                text = "📋 Ver Tareas",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+
+                                        Button(
+                                            onClick = {
+                                                val mState = memberState
+                                                val memberId = (mState as? MemberUiState.Success)?.members?.firstOrNull()?.id ?: return@Button
+                                                navigator.push(StatsScreen(householdId, memberId))
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                                            shape = MaterialTheme.shapes.large
+                                        ) {
+                                            Text(
+                                                text = "📊 Estadísticas",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
 
