@@ -151,6 +151,14 @@ class FirestoreRepository(
         }
     }
 
+    /** Delete a household document. Does NOT cascade-delete subcollections (members, tasks)
+     *  — those become orphaned but harmless. Requires auth (write). */
+    suspend fun deleteHousehold(householdId: String) {
+        client.delete("$baseUrl/households/$householdId") {
+            withAuth()
+        }
+    }
+
     /** Find a household by invite code (query). Falls back to API key for reads. */
     suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
         val query = RunQueryRequest(

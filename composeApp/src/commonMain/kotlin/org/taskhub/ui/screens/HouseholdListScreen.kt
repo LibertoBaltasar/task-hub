@@ -1,6 +1,7 @@
 package org.taskhub.ui.screens
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,19 +19,30 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
+import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
+import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.theme.*
 
 class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
 
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val repo = koinInject<FirestoreRepository>()
+        val householdStore = koinInject<HouseholdStore>()
+        val householdModel = koinScreenModel<HouseholdScreenModel>()
 
         var households by remember { mutableStateOf<List<HouseholdResponse>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
         var error by remember { mutableStateOf<String?>(null) }
+        var selectedHouseholdId by remember { mutableStateOf<String?>(null) }
+
+        // Double-confirmation dialog state
+        var showConfirmDialog1 by remember { mutableStateOf(false) }
+        var showConfirmDialog2 by remember { mutableStateOf(false) }
+        var householdToDelete by remember { mutableStateOf<HouseholdResponse?>(null) }
 
         LaunchedEffect(savedHouseholds) {
             isLoading = true
@@ -42,6 +54,83 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
                 error = e.message ?: "Error al cargar hogares"
             }
             isLoading = false
+        }
+
+        // ── Deletion dialogs ──
+        if (showConfirmDialog1 && householdToDelete != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showConfirmDialog1 = false
+                    householdToDelete = null
+                },
+                title = { Text("Eliminar hogar") },
+                text = {
+                    Text("¿Eliminar '${householdToDelete!!.name}'? Esta acción no se puede deshacer.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showConfirmDialog1 = false
+                        showConfirmDialog2 = true
+                    }) {
+                        Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showConfirmDialog1 = false
+                        householdToDelete = null
+                    }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        if (showConfirmDialog2 && householdToDelete != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showConfirmDialog2 = false
+                    householdToDelete = null
+                },
+                title = { Text("¿Estás completamente seguro?") },
+                text = {
+                    Text("Se perderán todas las tareas y miembros de '${householdToDelete!!.name}'.")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showConfirmDialog2 = false
+                        val h = householdToDelete!!
+                        householdToDelete = null
+                        selectedHouseholdId = null
+
+                        householdModel.deleteHousehold(
+                            householdId = h.id,
+                            onSuccess = {
+                                // Refresh saved households and reload the list
+                                val updated = householdStore.getSavedHouseholds()
+                                if (updated.isEmpty()) {
+                                    navigator.replaceAll(WelcomeScreen())
+                                } else {
+                                    navigator.replaceAll(HouseholdListScreen(updated))
+                                }
+                            },
+                            onError = { msg ->
+                                error = msg
+                            }
+                        )
+                    }) {
+                        Text("Sí, eliminar", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showConfirmDialog2 = false
+                        householdToDelete = null
+                    }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
         }
 
         Surface(
@@ -61,22 +150,47 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "🏠 Task Hub",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // Back or deselect
+                        if (selectedHouseholdId != null) {
+                            TextButton(
+                                onClick = { selectedHouseholdId = null },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Text("✕ Cancelar")
+                            }
+                        } else {
+                            Text(
+                                text = "🏠 Task Hub",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
 
                         Spacer(Modifier.weight(1f))
 
-                        TextButton(
-                            onClick = { navigator.replaceAll(WelcomeScreen()) },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("Crear/Unirse")
+                        if (selectedHouseholdId != null) {
+                            // Delete button when a household is selected
+                            IconButton(onClick = {
+                                val h = households.find { it.id == selectedHouseholdId }
+                                if (h != null) {
+                                    householdToDelete = h
+                                    showConfirmDialog1 = true
+                                }
+                            }) {
+                                Text("🗑️", style = MaterialTheme.typography.titleLarge)
+                            }
+                        } else {
+                            TextButton(
+                                onClick = { navigator.replaceAll(WelcomeScreen()) },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                )
+                            ) {
+                                Text("Crear/Unirse")
+                            }
                         }
                     }
                 }
@@ -108,7 +222,7 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(onClick = {
-                                    navigator.replaceAll(HouseholdListScreen(savedHouseholds))
+                                    navigator.replaceAll(HouseholdListScreen(householdStore.getSavedHouseholds()))
                                 }) {
                                     Text("Reintentar")
                                 }
@@ -163,7 +277,7 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
                         ) {
                             item {
                                 Text(
-                                    text = "Tus hogares",
+                                    text = if (selectedHouseholdId != null) "Selecciona el hogar a eliminar" else "Tus hogares",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.onBackground,
                                     fontWeight = FontWeight.Bold
@@ -173,8 +287,17 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
                             items(households) { household ->
                                 HouseholdCard(
                                     household = household,
+                                    isSelected = household.id == selectedHouseholdId,
                                     onClick = {
-                                        navigator.replaceAll(HouseholdScreen(household.id))
+                                        if (selectedHouseholdId != null) {
+                                            // In selection mode, toggle selection
+                                            selectedHouseholdId = if (selectedHouseholdId == household.id) null else household.id
+                                        } else {
+                                            navigator.replaceAll(HouseholdScreen(household.id))
+                                        }
+                                    },
+                                    onLongClick = {
+                                        selectedHouseholdId = household.id
                                     }
                                 )
                             }
@@ -198,19 +321,32 @@ class HouseholdListScreen(val savedHouseholds: List<SavedHousehold>) : Screen {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HouseholdCard(
     household: HouseholdResponse,
-    onClick: () -> Unit
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
+    val containerColor = if (isSelected)
+        MaterialTheme.colorScheme.errorContainer
+    else
+        MaterialTheme.colorScheme.surface
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = containerColor
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isSelected) 4.dp else 2.dp
+        )
     ) {
         Row(
             modifier = Modifier
@@ -218,17 +354,32 @@ private fun HouseholdCard(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // House icon
-            Surface(
-                modifier = Modifier.size(48.dp),
-                shape = MaterialTheme.shapes.medium,
-                color = Teal100
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "🏠",
-                        style = MaterialTheme.typography.titleLarge
-                    )
+            // Selection indicator or house icon
+            if (isSelected) {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.error
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "🗑️",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = MaterialTheme.shapes.medium,
+                    color = Teal100
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "🏠",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                    }
                 }
             }
 
@@ -249,11 +400,13 @@ private fun HouseholdCard(
                 )
             }
 
-            Text(
-                text = "→",
-                style = MaterialTheme.typography.titleLarge,
-                color = Teal500
-            )
+            if (!isSelected) {
+                Text(
+                    text = "→",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Teal500
+                )
+            }
         }
     }
 }

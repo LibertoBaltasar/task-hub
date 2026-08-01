@@ -57,6 +57,15 @@ class HouseholdStore(private val settings: Settings) {
         }
     }
 
+    /**
+     * Remove a household from local storage by its ID.
+     */
+    fun removeHousehold(householdId: String) {
+        val current = getSavedHouseholds().toMutableList()
+        current.removeAll { it.id == householdId }
+        settings.putString(KEY_SAVED_HOUSEHOLDS, json.encodeToString(current))
+    }
+
     companion object {
         private const val KEY_SAVED_HOUSEHOLDS = "taskhub_saved_households"
     }

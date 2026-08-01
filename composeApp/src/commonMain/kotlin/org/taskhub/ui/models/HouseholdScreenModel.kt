@@ -82,5 +82,21 @@ class HouseholdScreenModel(
         _uiState.value = HouseholdUiState.Idle
     }
 
+    fun deleteHousehold(
+        householdId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        screenModelScope.launch {
+            try {
+                repo.deleteHousehold(householdId)
+                householdStore.removeHousehold(householdId)
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Error al eliminar el hogar")
+            }
+        }
+    }
+
     fun getLocalId(): String? = repo.getLocalId()
 }
