@@ -279,8 +279,7 @@ private fun isTaskDueToday(task: TaskResponse, todayStartEpoch: Long): Boolean {
             return lcdDate.month != today.month || lcdDate.year != today.year
         }
         "once" -> {
-            // Due if it has a dueDate and hasn't been completed yet
-            if (task.dueDate <= 0) return false // No due date set
+            // Due if not completed yet (with or without dueDate)
             return task.lastCompletedDate == null
         }
         else -> return false
