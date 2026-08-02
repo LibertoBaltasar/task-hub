@@ -13,7 +13,64 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.CommentResponse
 import org.taskhub.network.models.AssignmentSlot
 import org.taskhub.platform.NotificationScheduler
+import org.taskhub.platform.updateWidgetPendingTasks
 import kotlinx.datetime.*
+
+/**
+ * Arquitectura de la app Task Hub (para devs nuevos):
+ *
+ * ┌──────────────────────────────────────────────────────────┐
+ * │  UI (Voyager Screens)                                   │
+ * │  TaskListScreen, HouseholdScreen, CreateTaskScreen...    │
+ * │  → Observan StateFlows del ScreenModel                  │
+ * │  → Toda la lógica de filtro/agrupación/vencimiento      │
+ * │    está en TaskListScreen.kt (funciones privadas)       │
+ * └────────────┬─────────────────────────────────────────────┘
+ *              │
+ * ┌────────────▼─────────────────────────────────────────────┐
+ * │  ScreenModels (ViewModels de Voyager)                   │
+ * │  TaskScreenModel ← este archivo                         │
+ * │  → loadTasks(): dispara fetch a Firestore + actualiza   │
+ * │    widget y estado                                      │
+ * │  → createTask()/completeTask(): escritura + refresh     │
+ * └────────────┬─────────────────────────────────────────────┘
+ *              │
+ * ┌────────────▼─────────────────────────────────────────────┐
+ * │  FirestoreRepository (REST API directa, sin servidor)   │
+ * │  → Auth anónima (signUp → idToken → Bearer)             │
+ * │  → CRUD: households, tasks, members, assignments        │
+ * │  → Los tasks son documentos planos (no instancias por   │
+ * │    día). La recurrencia se calcula en cliente.          │
+ * └────────────┬─────────────────────────────────────────────┘
+ *              │
+ * ┌────────────▼─────────────────────────────────────────────┐
+ * │  Firestore (NoSQL)                                      │
+ * │  Estructura:                                            │
+ * │  households/{id}/                                       │
+ * │    ├── fields: name, inviteCode, createdAt              │
+ * │    ├── tasks/{id}/                                      │
+ * │    │   ├── fields: title, frequency, lastCompletedDate, │
+ * │    │   │          dueDate, points, tags, penalty...      │
+ * │    │   └── assignments/{id}/                            │
+ * │    │       └── fields: memberId, dueDate, status        │
+ * │    ├── members/{id}/                                    │
+ * │    │   └── fields: displayName, role, totalPoints       │
+ * │    └── taskHistory/{id}/                                │
+ * │        └── fields: taskId, memberId, points, completedAt│
+ * └──────────────────────────────────────────────────────────┘
+ *
+ * Modelo de datos simplificado (sin instancias):
+ *   - Las tareas NO generan documentos por cada ocurrencia.
+ *   - Una tarea "daily" es UN solo documento con lastCompletedDate.
+ *   - isTaskDueToday() calcula en cliente si toca hoy.
+ *   - Esto evita el problema de las instancias huérfanas/duplicadas.
+ *
+ * Flujo de la app:
+ *   1. App.kt → ¿hay households guardados? → HouseholdListScreen o WelcomeScreen
+ *   2. HouseholdScreen → botón "Ver Tareas" → TaskListScreen
+ *   3. TaskListScreen → carga tareas → filtra por PENDING (default) → agrupa por día
+ *   4. Al crear/completar tarea → loadTasks() refresca + actualiza widget Android
+ */
 
 // ── UI State ──────────────────────────────────────────────
 
@@ -129,6 +186,9 @@ class TaskScreenModel(
                 _allTags.value = tagSet.toList().sorted()
 
                 _listState.value = TaskListUiState.Success(tasks, assignments, members)
+
+                // ── Update widget with pending tasks ──
+                updateWidgetWithPendingTasks(tasks)
             } catch (e: Exception) {
                 _listState.value = TaskListUiState.Error(
                     e.message ?: "Error al cargar tareas"
@@ -589,5 +649,73 @@ class TaskScreenModel(
         _listState.value = TaskListUiState.Idle
         _detailState.value = TaskDetailUiState.Idle
         _actionState.value = TaskActionState.Idle
+    }
+
+    // ── Widget helper ────────────────────────────────────────
+
+    /**
+     * Compute pending task titles and push them to the platform widget.
+     * Mirrors the isTaskDueToday / isTaskCompletedToday logic from TaskListScreen.
+     */
+    private fun updateWidgetWithPendingTasks(tasks: List<TaskResponse>) {
+        val now = Clock.System.now()
+        val tz = TimeZone.currentSystemDefault()
+        val today = now.toLocalDateTime(tz).date
+        val todayStartEpoch = today.atStartOfDayIn(tz).toEpochMilliseconds()
+
+        val pending = tasks.filter { task ->
+            val due = when (task.frequency) {
+                "daily" -> {
+                    val lcd = task.lastCompletedDate
+                    if (lcd == null) true
+                    else {
+                        val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
+                        lcdDate != today
+                    }
+                }
+                "weekly" -> {
+                    val todayDow = today.dayOfWeek.ordinal + 1
+                    if (task.recurrenceDays.isNotEmpty() && todayDow !in task.recurrenceDays) false
+                    else {
+                        val lcd = task.lastCompletedDate
+                        if (lcd == null) true
+                        else {
+                            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
+                            lcdDate != today
+                        }
+                    }
+                }
+                "monthly" -> {
+                    val lcd = task.lastCompletedDate
+                    if (lcd == null) true
+                    else {
+                        val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
+                        lcdDate.month != today.month || lcdDate.year != today.year
+                    }
+                }
+                "once" -> task.lastCompletedDate == null
+                else -> false
+            }
+            val done = task.lastCompletedDate != null && task.lastCompletedDate >= todayStartEpoch
+            due && !done
+        }
+
+        val text = if (pending.isEmpty()) {
+            "🎉 ¡No hay tareas pendientes!"
+        } else {
+            pending.joinToString("\n") { t ->
+                val freqIcon = when (t.frequency) {
+                    "daily" -> "🔄"
+                    "weekly" -> "📅"
+                    "monthly" -> "📆"
+                    else -> "•"
+                }
+                val overdue = t.dueDate > 0 && t.dueDate < todayStartEpoch
+                val marker = if (overdue) "⚠️ " else ""
+                "$marker$freqIcon ${t.title}"
+            }
+        }
+
+        updateWidgetPendingTasks(text)
     }
 }

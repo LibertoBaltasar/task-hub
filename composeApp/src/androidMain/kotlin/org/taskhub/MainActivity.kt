@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import org.taskhub.platform.AndroidNotificationScheduler
 import org.taskhub.platform.AndroidSchedulerHolder
+import org.taskhub.platform.AndroidContextHolder
 
 class MainActivity : ComponentActivity() {
 
@@ -21,6 +22,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Hold a static reference to the app context for platform helpers
+        AndroidContextHolder.context = applicationContext
 
         // Initialize the notification scheduler
         AndroidSchedulerHolder.scheduler = AndroidNotificationScheduler(applicationContext)

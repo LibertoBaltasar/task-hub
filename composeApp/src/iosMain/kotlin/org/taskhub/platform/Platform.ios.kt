@@ -8,3 +8,7 @@ actual fun shareText(text: String, title: String) {
 actual fun saveWidgetThemeToCache(theme: String) {
     // iOS: no widget cache yet — no-op for now
 }
+
+actual fun updateWidgetPendingTasks(taskList: String) {
+    // iOS: no widget yet — no-op
+}

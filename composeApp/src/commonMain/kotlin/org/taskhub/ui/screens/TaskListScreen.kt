@@ -232,6 +232,13 @@ data class TaskListScreen(
 //  Task is-due-today logic (local calculation, no instances)
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Modelo de datos simplificado para la UI: une la tarea con su estado calculado.
+ * 
+ * El estado (isDueToday, isCompletedToday, isOverdue) se calcula en cliente
+ * a partir de task.frequency + task.lastCompletedDate + task.dueDate.
+ * No hay "instancias" en Firestore — una tarea recurrente es UN solo documento.
+ */
 private data class TaskWithStatus(
     val task: TaskResponse,
     val isDueToday: Boolean,
