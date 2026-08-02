@@ -60,6 +60,13 @@ data class TaskListScreen(
             model.loadTasks(householdId)
         }
 
+        // Reload when returning to screen (lifecycle resume)  
+        // or when action completes
+        LaunchedEffect(householdId) {
+            model.setCurrentMemberId(memberId)
+            model.loadTasks(householdId)
+        }
+
         // Reload when action completes
         LaunchedEffect(actionState) {
             if (actionState is TaskActionState.Success) {

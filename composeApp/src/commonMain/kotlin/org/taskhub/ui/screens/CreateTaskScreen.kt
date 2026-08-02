@@ -68,6 +68,7 @@ data class CreateTaskScreen(
         // Handle success
         LaunchedEffect(actionState) {
             if (actionState is TaskActionState.Success) {
+                taskModel.loadTasks(householdId)
                 navigator.pop()
             }
         }
