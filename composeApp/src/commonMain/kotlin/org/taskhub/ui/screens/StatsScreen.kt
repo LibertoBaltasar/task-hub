@@ -33,6 +33,7 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
+import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.ui.models.Achievement
 import org.taskhub.ui.models.AchievementChecker
 import org.taskhub.ui.models.TaskScreenModel
@@ -58,14 +59,15 @@ data class StatsScreen(
         LaunchedEffect(householdId, memberId) {
             isLoading = true
             try {
-                // Load all data
+                // Load all data — including taskHistory for accurate stats
                 val tasks = repo.getTasks(householdId)
                 val assignments = repo.getAllAssignments(householdId)
+                val history = repo.getTaskHistory(householdId)
                 val members = repo.getMembers(householdId)
                 val member = members.find { it.id == memberId }
 
                 if (member != null) {
-                    statsData = computeStats(tasks, assignments, member)
+                    statsData = computeStats(tasks, assignments, history, member)
                     val unlocked = repo.getMemberAchievements(householdId, memberId)
                     achievements = AchievementChecker.getAchievementsWithStatus(unlocked)
                 }
@@ -232,15 +234,32 @@ data class TagCount(val tag: String, val count: Int)
 private fun computeStats(
     tasks: List<TaskResponse>,
     assignments: List<TaskAssignmentResponse>,
+    history: List<TaskHistoryResponse>,
     member: MemberResponse
 ): MemberStatsData {
     val tz = TimeZone.currentSystemDefault()
     val now = Clock.System.now()
     val today = now.toLocalDateTime(tz).date
 
-    // Tasks completed by member
+    // Merge completions from assignments AND taskHistory
+    // taskHistory captures direct completeTask() calls
+    // assignments capture completeAssignment() calls
+    val memberHistory = history.filter { it.memberId == member.id }
+
+    // Tasks completed by member (from assignments)
     val memberAssignments = assignments.filter { it.memberId == member.id }
     val completedAssignments = memberAssignments.filter { it.status == "completed" && it.completedAt != null }
+
+    // Combine both sources for per-day counts
+    data class CompletionRecord(val completedAt: Long, val points: Int, val onTime: Boolean)
+
+    val fromAssignments = completedAssignments.map { a ->
+        CompletionRecord(a.completedAt ?: 0L, a.pointsAwarded ?: 0, a.onTime ?: true)
+    }
+    val fromHistory = memberHistory.map { h ->
+        CompletionRecord(h.completedAt, h.points, h.onTime)
+    }
+    val allCompletions = fromAssignments + fromHistory
 
     // Tasks per day (last 7 days)
     val days = (0..6).map { offset ->
@@ -251,9 +270,8 @@ private fun computeStats(
     val tasksPerDay = days.map { date ->
         val dayStart = date.atStartOfDayIn(tz).toEpochMilliseconds()
         val dayEnd = date.plus(1, DateTimeUnit.DAY).atStartOfDayIn(tz).toEpochMilliseconds()
-        val count = completedAssignments.count { a ->
-            val at = a.completedAt ?: 0L
-            at >= dayStart && at < dayEnd
+        val count = allCompletions.count { c ->
+            c.completedAt >= dayStart && c.completedAt < dayEnd
         }
         val dayLabel = "${date.dayOfMonth}/${date.monthNumber}"
         DayCount(dayLabel, count)
@@ -263,13 +281,13 @@ private fun computeStats(
     val dailyPoints = days.map { date ->
         val dayStart = date.atStartOfDayIn(tz).toEpochMilliseconds()
         val dayEnd = date.plus(1, DateTimeUnit.DAY).atStartOfDayIn(tz).toEpochMilliseconds()
-        val points = completedAssignments.sumOf { a ->
-            if ((a.completedAt ?: 0L) in dayStart until dayEnd) (a.pointsAwarded ?: 0) else 0
+        val points = allCompletions.sumOf { c ->
+            if (c.completedAt in dayStart until dayEnd) c.points else 0
         }
         DayPoints("${date.dayOfMonth}/${date.monthNumber}", points)
     }
 
-    // Tag distribution
+    // Tag distribution — from completed assignments (which have taskId)
     val taskMap = tasks.associateBy { it.id }
     val completedTaskIds = completedAssignments.map { it.taskId }.distinct()
     val completedTasks = completedTaskIds.mapNotNull { taskMap[it] }
@@ -284,8 +302,11 @@ private fun computeStats(
         .take(6)
         .map { TagCount(it.key, it.value) }
 
-    // On-time rate
-    val onTimeCount = completedAssignments.count { it.onTime == true }
+    // On-time rate — from all completions
+    val onTimeCount = allCompletions.count { it.onTime }
+
+    // Total completions = allCompletions (from both sources)
+    val totalCompletions = allCompletions.size
 
     return MemberStatsData(
         currentStreak = member.currentStreak,
@@ -293,10 +314,10 @@ private fun computeStats(
         tasksPerDay = tasksPerDay,
         dailyPoints = dailyPoints,
         tasksByTag = tasksByTag,
-        totalTasksCompleted = completedAssignments.size,
+        totalTasksCompleted = totalCompletions,
         totalPoints = member.totalPoints,
-        onTimeRate = if (completedAssignments.isNotEmpty()) onTimeCount.toFloat() / completedAssignments.size else 0f,
-        overdueCount = completedAssignments.count { it.onTime == false }
+        onTimeRate = if (totalCompletions > 0) onTimeCount.toFloat() / totalCompletions else 0f,
+        overdueCount = allCompletions.count { !it.onTime }
     )
 }
 

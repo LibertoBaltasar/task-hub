@@ -100,4 +100,16 @@ data class CommentResponse(
     val createdAt: Long = 0
 )
 
+// ── Task History DTO ──────────────────────────────────────
+
+@Serializable
+data class TaskHistoryResponse(
+    val id: String,
+    val taskId: String,
+    val memberId: String,
+    val points: Int = 0,
+    val completedAt: Long = 0,
+    val onTime: Boolean = true
+)
+
 

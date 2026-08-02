@@ -223,20 +223,30 @@ class TaskScreenModel(
             screenModelScope.launch {
                 _actionState.value = TaskActionState.Loading
                 try {
-                    repo.completeTask(householdId, taskId)
+                    val memberId = _currentMemberId.value
+                        ?: throw IllegalStateException("No se ha identificado al miembro actual")
+
+                    // Fetch the task to get its points
+                    val tasks = repo.getTasks(householdId)
+                    val task = tasks.find { it.id == taskId }
+                        ?: throw IllegalStateException("Tarea no encontrada")
+
+                    repo.completeTask(
+                        householdId = householdId,
+                        taskId = taskId,
+                        memberId = memberId,
+                        taskPoints = task.points
+                    )
 
                     // Cancel any scheduled reminder for this task
                     notificationScheduler.cancelReminder(taskId)
 
                     // Update streak for the current member
-                    val memberId = _currentMemberId.value
-                    if (memberId != null) {
-                        try {
-                            updateMemberStreak(householdId, memberId)
-                            checkAndAwardAchievements(householdId, memberId)
-                        } catch (_: Exception) {
-                            // Streak update failure shouldn't block task completion
-                        }
+                    try {
+                        updateMemberStreak(householdId, memberId)
+                        checkAndAwardAchievements(householdId, memberId)
+                    } catch (_: Exception) {
+                        // Streak update failure shouldn't block task completion
                     }
 
                     _actionState.value = TaskActionState.Success

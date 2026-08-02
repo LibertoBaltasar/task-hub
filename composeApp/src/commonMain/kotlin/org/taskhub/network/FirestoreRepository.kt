@@ -21,6 +21,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import kotlin.random.Random
@@ -481,10 +482,16 @@ class FirestoreRepository(
         return response.documents.map { toTaskResponse(it, householdId) }
     }
 
-    /** Mark a task as completed today. Sets lastCompletedDate to now. */
-    suspend fun completeTask(householdId: String, taskId: String) {
+    /** Mark a task as completed today. Sets lastCompletedDate, awards points, and records history. */
+    suspend fun completeTask(
+        householdId: String,
+        taskId: String,
+        memberId: String,
+        taskPoints: Int
+    ) {
         val now = Clock.System.now().toEpochMilliseconds()
 
+        // 1. Update lastCompletedDate on the task
         val fields = mapOf(
             "lastCompletedDate" to FirestoreValue(integerValue = now.toString())
         )
@@ -494,6 +501,68 @@ class FirestoreRepository(
             parameter("updateMask.fieldPaths", "lastCompletedDate")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
+        }
+
+        // 2. Add points to the member
+        addMemberPoints(householdId, memberId, taskPoints)
+
+        // 3. Save task history record
+        saveTaskHistory(
+            householdId = householdId,
+            taskId = taskId,
+            memberId = memberId,
+            points = taskPoints,
+            completedAt = now,
+            onTime = true
+        )
+    }
+
+    /** Save a task completion record to Firestore taskHistory subcollection. */
+    suspend fun saveTaskHistory(
+        householdId: String,
+        taskId: String,
+        memberId: String,
+        points: Int,
+        completedAt: Long,
+        onTime: Boolean
+    ) {
+        val fields = mapOf(
+            "taskId" to FirestoreValue(stringValue = taskId),
+            "memberId" to FirestoreValue(stringValue = memberId),
+            "points" to FirestoreValue(integerValue = points.toString()),
+            "completedAt" to FirestoreValue(integerValue = completedAt.toString()),
+            "onTime" to FirestoreValue(booleanValue = onTime)
+        )
+
+        client.post("$baseUrl/households/$householdId/taskHistory") {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /** Get all task history records for a household. */
+    suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> {
+        return try {
+            val response: FirestoreListResponse = client.get(
+                "$baseUrl/households/$householdId/taskHistory"
+            ) {
+                tryAuthOrApiKey()
+            }.body()
+
+            response.documents.map { doc ->
+                val f = doc.fields
+                TaskHistoryResponse(
+                    id = extractDocId(doc.name),
+                    taskId = f["taskId"]?.stringValue ?: "",
+                    memberId = f["memberId"]?.stringValue ?: "",
+                    points = f["points"]?.integerValue?.toIntOrNull() ?: 0,
+                    completedAt = f["completedAt"]?.integerValue?.toLongOrNull() ?: 0L,
+                    onTime = f["onTime"]?.booleanValue ?: true
+                )
+            }
+        } catch (_: Exception) {
+            emptyList() // No taskHistory subcollection yet
         }
     }
 

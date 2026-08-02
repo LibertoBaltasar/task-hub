@@ -376,7 +376,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
 
-                                // Navigation to tasks + stats
+                                // Navigation to tasks + stats + ranking
                                 item {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -415,6 +415,22 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
+                                    }
+                                }
+
+                                // Ranking button
+                                item {
+                                    Button(
+                                        onClick = { navigator.push(RankingScreen(householdId)) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Coral500),
+                                        shape = MaterialTheme.shapes.large
+                                    ) {
+                                        Text(
+                                            text = "🏆 Ranking",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
 
