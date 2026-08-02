@@ -12,6 +12,8 @@ import androidx.core.content.ContextCompat
 import org.taskhub.platform.AndroidNotificationScheduler
 import org.taskhub.platform.AndroidSchedulerHolder
 import org.taskhub.platform.AndroidContextHolder
+import org.taskhub.platform.DebugFlags
+import org.taskhub.BuildConfig
 
 class MainActivity : ComponentActivity() {
 
@@ -25,6 +27,9 @@ class MainActivity : ComponentActivity() {
 
         // Hold a static reference to the app context for platform helpers
         AndroidContextHolder.context = applicationContext
+
+        // Set debug mode from BuildConfig (false in release builds)
+        DebugFlags.isEnabled = BuildConfig.DEBUG
 
         // Initialize the notification scheduler
         AndroidSchedulerHolder.scheduler = AndroidNotificationScheduler(applicationContext)

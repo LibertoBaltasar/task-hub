@@ -498,14 +498,16 @@ private fun TaskListContent(
             )
         }
 
-        // ── DEBUG: always show task count ──
-        item {
-            Text(
-                text = "DEBUG: ${state.tasks.size} tasks, filter=$filter, groups=${groups.size}, tagFilter=$tagFilter",
-                fontSize = 10.sp,
-                color = androidx.compose.ui.graphics.Color.Red,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
+        // ── DEBUG: always show task count (only in debug builds) ──
+        if (org.taskhub.platform.DebugFlags.isEnabled) {
+            item {
+                Text(
+                    text = "DEBUG: ${state.tasks.size} tasks, filter=$filter, groups=${groups.size}, tagFilter=$tagFilter",
+                    fontSize = 10.sp,
+                    color = androidx.compose.ui.graphics.Color.Red,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
         }
 
         if (tasksWithStatus.isEmpty() || groups.isEmpty()) {

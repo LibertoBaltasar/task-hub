@@ -14,6 +14,7 @@ import org.taskhub.network.models.CommentResponse
 import org.taskhub.network.models.AssignmentSlot
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.updateWidgetPendingTasks
+import org.taskhub.platform.DebugFlags
 import kotlinx.datetime.*
 
 /**
@@ -173,9 +174,11 @@ class TaskScreenModel(
                 val members = repo.getMembers(householdId)
 
                 // ── DEBUG LOG ──
-                println("[TaskScreenModel] loadTasks: ${tasks.size} tasks, ${assignments.size} assignments, ${members.size} members for household=$householdId")
-                for (t in tasks) {
-                    println("[TaskScreenModel]   task: id=${t.id}, title=${t.title}, freq=${t.frequency}, lastCompleted=${t.lastCompletedDate}, dueDate=${t.dueDate}")
+                if (DebugFlags.isEnabled) {
+                    println("[TaskScreenModel] loadTasks: ${tasks.size} tasks, ${assignments.size} assignments, ${members.size} members for household=$householdId")
+                    for (t in tasks) {
+                        println("[TaskScreenModel]   task: id=${t.id}, title=${t.title}, freq=${t.frequency}, lastCompleted=${t.lastCompletedDate}, dueDate=${t.dueDate}")
+                    }
                 }
 
                 // Collect all unique tags
