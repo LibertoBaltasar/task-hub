@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
@@ -487,6 +488,16 @@ private fun TaskListContent(
                 onFilterChange = onFilterChange,
                 onSortChange = onSortChange,
                 onTagFilterChange = onTagFilterChange
+            )
+        }
+
+        // ── DEBUG: always show task count ──
+        item {
+            Text(
+                text = "DEBUG: ${state.tasks.size} tasks, filter=$filter, groups=${groups.size}, tagFilter=$tagFilter",
+                fontSize = 10.sp,
+                color = androidx.compose.ui.graphics.Color.Red,
+                modifier = Modifier.padding(bottom = 4.dp)
             )
         }
 

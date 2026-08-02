@@ -15,6 +15,7 @@ import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.ui.theme.Teal600
+import org.taskhub.platform.saveWidgetThemeToCache
 
 /**
  * Callbacks that the settings sheet needs from its host screen.
@@ -40,6 +41,10 @@ fun SettingsSheet(
 
     var notificationsEnabled by remember {
         mutableStateOf(settingsStore.isNotificationsEnabled())
+    }
+
+    var widgetTheme by remember {
+        mutableStateOf(settingsStore.getWidgetTheme())
     }
 
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -132,6 +137,39 @@ fun SettingsSheet(
 
         Spacer(Modifier.height(24.dp))
 
+        // ── Widget Theme ────────────────────────────────
+        SettingsSection(title = "Tema del widget") {
+            WidgetThemeOption(
+                label = "Claro",
+                selected = widgetTheme == "light",
+                onClick = {
+                    widgetTheme = "light"
+                    settingsStore.setWidgetTheme("light")
+                    saveWidgetThemeToCache("light")
+                }
+            )
+            WidgetThemeOption(
+                label = "Oscuro",
+                selected = widgetTheme == "dark",
+                onClick = {
+                    widgetTheme = "dark"
+                    settingsStore.setWidgetTheme("dark")
+                    saveWidgetThemeToCache("dark")
+                }
+            )
+            WidgetThemeOption(
+                label = "Sistema",
+                selected = widgetTheme == "system",
+                onClick = {
+                    widgetTheme = "system"
+                    settingsStore.setWidgetTheme("system")
+                    saveWidgetThemeToCache("system")
+                }
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
+
         // ── Export CSV ───────────────────────────────────
         Button(
             onClick = {
@@ -210,6 +248,34 @@ private fun ThemeOption(
 
 @Composable
 private fun LanguageOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = selected,
+            onClick = onClick,
+            colors = RadioButtonDefaults.colors(
+                selectedColor = Teal600
+            )
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+@Composable
+private fun WidgetThemeOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit

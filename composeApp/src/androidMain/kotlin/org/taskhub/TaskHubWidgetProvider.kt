@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.widget.RemoteViews
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
@@ -41,10 +42,24 @@ private fun updateAppWidget(
     appWidgetManager: AppWidgetManager,
     appWidgetId: Int
 ) {
-    val views = RemoteViews(context.packageName, R.layout.task_hub_widget)
+    // Read widget theme preference: "light", "dark", or "system"
+    val prefs = context.getSharedPreferences("widget_cache", Context.MODE_PRIVATE)
+    val widgetTheme = prefs.getString("widget_theme", "system") ?: "system"
+
+    val isDark = when (widgetTheme) {
+        "dark" -> true
+        "light" -> false
+        else -> {
+            // "system" — follow system night mode
+            val nightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+            nightMode == Configuration.UI_MODE_NIGHT_YES
+        }
+    }
+
+    val layoutId = if (isDark) R.layout.task_hub_widget_dark else R.layout.task_hub_widget
+    val views = RemoteViews(context.packageName, layoutId)
 
     // Build task list text — use persisted data from SharedPreferences
-    val prefs = context.getSharedPreferences("widget_cache", Context.MODE_PRIVATE)
     val taskListText = prefs.getString("pending_tasks", "No hay tareas pendientes") ?: "Sin tareas"
 
     views.setTextViewText(R.id.widget_title, "📋 Tareas pendientes")

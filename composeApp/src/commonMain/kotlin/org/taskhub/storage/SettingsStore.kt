@@ -31,9 +31,18 @@ class SettingsStore(private val settings: Settings) {
     fun setTheme(theme: String) =
         settings.putString(KEY_THEME, theme)
 
+    // ── Widget Theme ──────────────────────────────────────
+
+    fun getWidgetTheme(): String =
+        settings.getString(KEY_WIDGET_THEME, "system")
+
+    fun setWidgetTheme(theme: String) =
+        settings.putString(KEY_WIDGET_THEME, theme)
+
     companion object {
         private const val KEY_NOTIFICATIONS = "taskhub_notifications"
         private const val KEY_LANGUAGE = "taskhub_language"
         private const val KEY_THEME = "taskhub_theme"
+        private const val KEY_WIDGET_THEME = "taskhub_widget_theme"
     }
 }

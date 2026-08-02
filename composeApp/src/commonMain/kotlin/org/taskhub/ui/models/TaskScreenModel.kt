@@ -115,6 +115,12 @@ class TaskScreenModel(
                 val assignments = repo.getAllAssignments(householdId)
                 val members = repo.getMembers(householdId)
 
+                // ── DEBUG LOG ──
+                println("[TaskScreenModel] loadTasks: ${tasks.size} tasks, ${assignments.size} assignments, ${members.size} members for household=$householdId")
+                for (t in tasks) {
+                    println("[TaskScreenModel]   task: id=${t.id}, title=${t.title}, freq=${t.frequency}, lastCompleted=${t.lastCompletedDate}, dueDate=${t.dueDate}")
+                }
+
                 // Collect all unique tags
                 val tagSet = mutableSetOf<String>()
                 for (t in tasks) {

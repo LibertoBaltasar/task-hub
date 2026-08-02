@@ -13,6 +13,14 @@ actual fun shareText(text: String, title: String) {
     context.startActivity(Intent.createChooser(intent, title))
 }
 
+actual fun saveWidgetThemeToCache(theme: String) {
+    val context = AndroidContextHolder.context ?: return
+    context.getSharedPreferences("widget_cache", Context.MODE_PRIVATE)
+        .edit()
+        .putString("widget_theme", theme)
+        .apply()
+}
+
 /** Simple static context holder set from MainActivity. */
 object AndroidContextHolder {
     @Volatile
