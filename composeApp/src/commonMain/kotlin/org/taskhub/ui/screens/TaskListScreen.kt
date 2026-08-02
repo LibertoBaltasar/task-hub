@@ -501,7 +501,7 @@ private fun TaskListContent(
                 ) {
                     Text(
                         text = when (filter) {
-                            TaskFilter.PENDING -> "🎉 ¡No hay tareas pendientes!"
+                            TaskFilter.PENDING -> "🎉 ¡No hay tareas pendientes! (${state.tasks.size} cargadas)"
                             TaskFilter.COMPLETED -> "📋 No hay tareas completadas hoy"
                             TaskFilter.MINE -> "👤 No tienes tareas asignadas"
                             TaskFilter.ALL -> "📋 No hay tareas aún. ¡Crea la primera!"
