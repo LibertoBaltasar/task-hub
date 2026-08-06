@@ -58,6 +58,26 @@ data class TaskListScreen(
         val allTags by model.allTags.collectAsState()
         val currentMemberId by model.currentMemberId.collectAsState()
         val searchQuery by model.searchQuery.collectAsState()
+        val undoState by model.undoState.collectAsState()
+
+        val snackbarHostState = remember { SnackbarHostState() }
+
+        // ── Undo snackbar ────────────────────────────────────
+        LaunchedEffect(undoState) {
+            if (undoState != null) {
+                val result = snackbarHostState.showSnackbar(
+                    message = "✅ Tarea completada",
+                    actionLabel = "Deshacer",
+                    duration = SnackbarDuration.Short
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    model.undoCompleteTask()
+                    model.loadTasks(householdId)
+                } else {
+                    model.clearUndoState()
+                }
+            }
+        }
 
         LaunchedEffect(householdId) {
             model.setCurrentMemberId(memberId)
@@ -119,7 +139,8 @@ data class TaskListScreen(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -151,6 +172,16 @@ data class TaskListScreen(
                         )
 
                         Spacer(Modifier.weight(1f))
+
+                        // Refresh button
+                        TextButton(
+                            onClick = { model.loadTasks(householdId) },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Text("🔄", style = MaterialTheme.typography.titleLarge)
+                        }
 
                         // Settings icon
                         TextButton(
@@ -228,6 +259,12 @@ data class TaskListScreen(
 
                     is TaskListUiState.Idle -> {}
                 }
+            }
+                // ── Snackbar for undo ──────────────────────────
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
             }
         }
     }

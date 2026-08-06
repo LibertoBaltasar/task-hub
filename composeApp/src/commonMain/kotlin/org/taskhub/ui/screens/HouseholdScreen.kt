@@ -27,6 +27,7 @@ import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
+import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.theme.*
 import org.taskhub.platform.QrCodeImage
 import org.taskhub.platform.shareText
@@ -39,8 +40,10 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val householdStore = koinInject<HouseholdStore>()
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val memberModel = koinScreenModel<MemberScreenModel>()
+        val notificationModel = koinScreenModel<NotificationScreenModel>()
         val householdState by householdModel.uiState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
+        val notificationUnreadCount by notificationModel.unreadCount.collectAsState()
 
         // Double-confirmation dialog state
         var showConfirmDialog1 by remember { mutableStateOf(false) }
@@ -57,6 +60,23 @@ data class HouseholdScreen(val householdId: String) : Screen {
         LaunchedEffect(householdId) {
             householdModel.loadHousehold(householdId)
             memberModel.loadMembers(householdId)
+        }
+
+        // Poll for notification unread count every 30 seconds
+        var memberId by remember { mutableStateOf("") }
+        LaunchedEffect(memberState) {
+            if (memberState is MemberUiState.Success) {
+                memberId = (memberState as MemberUiState.Success).members.firstOrNull()?.id ?: ""
+            }
+        }
+        LaunchedEffect(householdId, memberId) {
+            if (memberId.isNotEmpty()) {
+                notificationModel.refreshUnreadCount(householdId, memberId)
+                while (true) {
+                    kotlinx.coroutines.delay(30_000L)
+                    notificationModel.refreshUnreadCount(householdId, memberId)
+                }
+            }
         }
 
         // ── Deletion dialogs ──
@@ -258,6 +278,38 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         )
 
                         Spacer(Modifier.weight(1f))
+
+                        // Notification bell with badge
+                        Box {
+                            IconButton(
+                                onClick = {
+                                    val mid = memberId
+                                    if (mid.isNotEmpty()) {
+                                        navigator.push(NotificationListScreen(householdId, mid))
+                                    }
+                                }
+                            ) {
+                                Text(
+                                    text = "🔔",
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                            }
+                            // Badge for unread count
+                            if (notificationUnreadCount > 0) {
+                                Badge(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .offset(x = 4.dp, y = (-4).dp),
+                                    containerColor = Coral500,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                ) {
+                                    Text(
+                                        text = if (notificationUnreadCount > 99) "99+" else notificationUnreadCount.toString(),
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
 
                         // Settings icon
                         TextButton(

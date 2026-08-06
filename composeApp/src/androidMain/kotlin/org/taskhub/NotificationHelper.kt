@@ -64,7 +64,7 @@ object NotificationHelper {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("⏰ Recordatorio de tarea")
+            .setContentTitle("\u23F0 Recordatorio de tarea")
             .setContentText("\"$taskTitle\" vence en $minutesBefore minuto(s)")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
@@ -74,6 +74,54 @@ object NotificationHelper {
 
         try {
             NotificationManagerCompat.from(context).notify(taskId.hashCode(), notification)
+        } catch (_: SecurityException) {
+            // Permission not granted
+        }
+    }
+
+    /**
+     * Show a system notification for a new task assignment.
+     * Called when the polling worker detects a new unread notification.
+     */
+    fun showAssignmentNotification(
+        context: Context,
+        title: String,
+        message: String,
+        notificationId: Int
+    ) {
+        createNotificationChannel(context)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {
             // Permission not granted
         }

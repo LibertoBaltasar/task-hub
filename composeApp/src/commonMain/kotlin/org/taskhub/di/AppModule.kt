@@ -11,6 +11,7 @@ import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.ThemeStore
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.MemberScreenModel
+import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.models.TaskScreenModel
 
 val appModule: Module = module {
@@ -35,5 +36,6 @@ val appModule: Module = module {
     // ScreenModels (Voyager — each screen gets its own instance via factory)
     factory { HouseholdScreenModel(repo = get(), householdStore = get()) }
     factory { MemberScreenModel(repo = get()) }
+    factory { NotificationScreenModel(repo = get()) }
     factory { TaskScreenModel(repo = get(), notificationScheduler = get()) }
 }

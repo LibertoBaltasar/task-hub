@@ -597,7 +597,8 @@ class FirestoreRepository(
         taskId: String,
         memberIds: List<String>,
         mandatory: Boolean,
-        dueDate: Long
+        dueDate: Long,
+        taskTitle: String = ""
     ): List<TaskAssignmentResponse> {
         val now = Clock.System.now().toEpochMilliseconds()
         val results = mutableListOf<TaskAssignmentResponse>()
@@ -626,6 +627,15 @@ class FirestoreRepository(
                 mandatory = mandatory, dueDate = dueDate, status = "assigned",
                 assignedAt = now
             ))
+
+            // Create notification for the assigned member
+            createNotification(
+                householdId = householdId,
+                memberId = memberId,
+                taskId = taskId,
+                title = "\uD83D\uDCCB Tarea asignada",
+                message = if (taskTitle.isNotEmpty()) "Se te ha asignado: $taskTitle" else "Se te ha asignado una nueva tarea"
+            )
         }
 
         return results
@@ -1019,6 +1029,81 @@ class FirestoreRepository(
     }
 
     // ────────────────────────────────────────────────────────
+    //  Notifications (subcollection under households/{id})
+    // ────────────────────────────────────────────────────────
+
+    /** Create a notification document for a member. */
+    suspend fun createNotification(
+        householdId: String,
+        memberId: String,
+        taskId: String,
+        title: String,
+        message: String
+    ): NotificationResponse {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val fields = mapOf(
+            "memberId" to FirestoreValue(stringValue = memberId),
+            "taskId" to FirestoreValue(stringValue = taskId),
+            "title" to FirestoreValue(stringValue = title),
+            "message" to FirestoreValue(stringValue = message),
+            "createdAt" to FirestoreValue(integerValue = now.toString()),
+            "read" to FirestoreValue(booleanValue = false)
+        )
+
+        val response: FirestoreDocumentResponse = client.post(
+            "$baseUrl/households/$householdId/notifications"
+        ) {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }.body()
+
+        val id = extractDocId(response.name)
+        return NotificationResponse(id, memberId, taskId, title, message, now, read = false)
+    }
+
+    /** Get all notifications for a household. */
+    suspend fun getNotifications(householdId: String): List<NotificationResponse> {
+        return try {
+            val response: FirestoreListResponse = client.get(
+                "$baseUrl/households/$householdId/notifications"
+            ) {
+                tryAuthOrApiKey()
+            }.body()
+
+            response.documents.map { doc ->
+                val f = doc.fields
+                NotificationResponse(
+                    id = extractDocId(doc.name),
+                    memberId = f["memberId"]?.stringValue ?: "",
+                    taskId = f["taskId"]?.stringValue ?: "",
+                    title = f["title"]?.stringValue ?: "",
+                    message = f["message"]?.stringValue ?: "",
+                    createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
+                    read = f["read"]?.booleanValue ?: false
+                )
+            }
+        } catch (_: Exception) {
+            emptyList() // No notifications subcollection yet
+        }
+    }
+
+    /** Mark a notification as read. */
+    suspend fun markNotificationRead(householdId: String, notificationId: String) {
+        val fields = mapOf(
+            "read" to FirestoreValue(booleanValue = true)
+        )
+        client.patch(
+            "$baseUrl/households/$householdId/notifications/$notificationId"
+        ) {
+            withAuth()
+            parameter("updateMask.fieldPaths", "read")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    // ────────────────────────────────────────────────────────
     //  Request helpers
     // ────────────────────────────────────────────────────────
 
@@ -1085,6 +1170,6 @@ class FirestoreRepository(
          * TODO: Replace with the real key from your Firebase project,
          *       or inject it via build config / environment.
          */
-        const val DEFAULT_API_KEY = "AIzaSyCOSray4XhnZGdgT91U14KlByk6ySuyhW0"
+        const val DEFAULT_API_KEY = "\u00ABredacted:AIza\u2026\u00BB"
     }
 }
