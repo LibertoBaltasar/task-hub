@@ -16,6 +16,11 @@ object AppStrings {
             "settings_language" to "🌐 Idioma",
             "settings_export_csv" to "📥 Exportar tareas como CSV",
             "settings_close" to "Cerrar",
+            "settings_sound_vibration" to "🔊 Sonido y vibración",
+            "settings_sound" to "Sonido",
+            "settings_sound_desc" to "Reproducir sonido al completar una tarea",
+            "settings_vibration" to "Vibración",
+            "settings_vibration_desc" to "Vibrar al completar una tarea",
 
             // Themes
             "theme_default" to "Clásico",
@@ -98,6 +103,11 @@ object AppStrings {
             "settings_language" to "🌐 Language",
             "settings_export_csv" to "📥 Export tasks as CSV",
             "settings_close" to "Close",
+            "settings_sound_vibration" to "🔊 Sound & Vibration",
+            "settings_sound" to "Sound",
+            "settings_sound_desc" to "Play sound when completing a task",
+            "settings_vibration" to "Vibration",
+            "settings_vibration_desc" to "Vibrate when completing a task",
 
             // Themes
             "theme_default" to "Classic",

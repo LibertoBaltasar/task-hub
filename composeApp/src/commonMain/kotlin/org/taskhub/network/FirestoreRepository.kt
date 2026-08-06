@@ -24,6 +24,7 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
+import org.taskhub.network.models.NotificationResponse
 import kotlin.random.Random
 
 /**
@@ -515,6 +516,30 @@ class FirestoreRepository(
             completedAt = now,
             onTime = true
         )
+    }
+
+    /**
+     * Revert a task completion — used by the undo feature.
+     * Restores the previous lastCompletedDate on the task document.
+     * Does NOT revert points/history (keeping it simple).
+     */
+    suspend fun revertTaskCompletion(
+        householdId: String,
+        taskId: String,
+        previousLastCompletedDate: Long?
+    ) {
+        val value = if (previousLastCompletedDate != null) {
+            FirestoreValue(integerValue = previousLastCompletedDate.toString())
+        } else {
+            FirestoreValue(nullValue = "NULL_VALUE")
+        }
+        val fields = mapOf("lastCompletedDate" to value)
+        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "lastCompletedDate")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
     }
 
     /** Save a task completion record to Firestore taskHistory subcollection. */

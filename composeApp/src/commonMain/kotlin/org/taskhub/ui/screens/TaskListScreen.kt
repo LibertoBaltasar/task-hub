@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,6 +57,7 @@ data class TaskListScreen(
         val tagFilter by model.selectedTagFilter.collectAsState()
         val allTags by model.allTags.collectAsState()
         val currentMemberId by model.currentMemberId.collectAsState()
+        val searchQuery by model.searchQuery.collectAsState()
 
         LaunchedEffect(householdId) {
             model.setCurrentMemberId(memberId)
@@ -188,10 +191,12 @@ data class TaskListScreen(
                             sort = sort,
                             tagFilter = tagFilter,
                             allTags = allTags,
+                            searchQuery = searchQuery,
                             currentMemberId = currentMemberId,
                             onFilterChange = { model.setFilter(it) },
                             onSortChange = { model.setSort(it) },
                             onTagFilterChange = { model.setTagFilter(it) },
+                            onSearchQueryChange = { model.setSearchQuery(it) },
                             onTaskClick = { task ->
                                 navigator.push(TaskDetailScreen(householdId, task.id))
                             },
@@ -416,10 +421,12 @@ private fun TaskListContent(
     sort: TaskSort,
     tagFilter: String?,
     allTags: List<String>,
+    searchQuery: String,
     currentMemberId: String?,
     onFilterChange: (TaskFilter) -> Unit,
     onSortChange: (TaskSort) -> Unit,
     onTagFilterChange: (String?) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
     onTaskClick: (TaskResponse) -> Unit,
     onCompleteTask: (TaskResponse) -> Unit,
     onRefresh: () -> Unit
@@ -457,8 +464,19 @@ private fun TaskListContent(
         }
     }
 
+    // Text search filter (client-side, after status filter, before groupByStatus)
+    val searchFilteredTasks = if (searchQuery.isBlank()) {
+        filteredTasks
+    } else {
+        val q = searchQuery.trim().lowercase()
+        filteredTasks.filter { task ->
+            task.title.lowercase().contains(q) ||
+            task.description.lowercase().contains(q)
+        }
+    }
+
     // Build TaskWithStatus list
-    val tasksWithStatus = filteredTasks.map { task ->
+    val tasksWithStatus = searchFilteredTasks.map { task ->
         val due = isTaskDueToday(task, todayStartEpoch)
         val done = isTaskCompletedToday(task, todayStartEpoch)
         val isOverdue = task.dueDate > 0 && task.dueDate < todayStartEpoch && task.lastCompletedDate == null
@@ -495,6 +513,14 @@ private fun TaskListContent(
                 onFilterChange = onFilterChange,
                 onSortChange = onSortChange,
                 onTagFilterChange = onTagFilterChange
+            )
+        }
+
+        // Search bar
+        item {
+            SearchBar(
+                query = searchQuery,
+                onQueryChange = onSearchQueryChange
             )
         }
 
@@ -889,6 +915,50 @@ private fun GroupHeader(
             )
         }
     }
+}
+
+// ────────────────────────────────────────────────────────────
+//  SearchBar
+// ────────────────────────────────────────────────────────────
+
+@Composable
+private fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        placeholder = { Text("Buscar tareas...") },
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Default.Search,
+                contentDescription = "Buscar",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Limpiar búsqueda",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        singleLine = true,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Teal600,
+            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+            cursorColor = Teal600
+        ),
+        shape = MaterialTheme.shapes.medium
+    )
 }
 
 // ────────────────────────────────────────────────────────────

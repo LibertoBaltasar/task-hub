@@ -155,6 +155,9 @@ class TaskScreenModel(
     private val _selectedTagFilter = MutableStateFlow<String?>(null)
     val selectedTagFilter: StateFlow<String?> = _selectedTagFilter.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
     // Current member ID (for "mine" filter). Set externally.
     private val _currentMemberId = MutableStateFlow<String?>(null)
     val currentMemberId: StateFlow<String?> = _currentMemberId.asStateFlow()
@@ -210,6 +213,10 @@ class TaskScreenModel(
 
     fun setTagFilter(tag: String?) {
         _selectedTagFilter.value = tag
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     fun setCurrentMemberId(memberId: String?) {
@@ -288,44 +295,75 @@ class TaskScreenModel(
 
     // ── Complete task (sets lastCompletedDate) ───────────────
 
-        fun completeTask(householdId: String, taskId: String) {
-            screenModelScope.launch {
-                _actionState.value = TaskActionState.Loading
+    /** Info for undo: saved before completing so we can revert. */
+    data class UndoState(
+        val householdId: String,
+        val taskId: String,
+        val previousLastCompletedDate: Long?
+    )
+
+    private val _undoState = MutableStateFlow<UndoState?>(null)
+    val undoState: StateFlow<UndoState?> = _undoState.asStateFlow()
+
+    fun completeTask(householdId: String, taskId: String) {
+        screenModelScope.launch {
+            _actionState.value = TaskActionState.Loading
+            try {
+                val memberId = _currentMemberId.value
+                    ?: throw IllegalStateException("No se ha identificado al miembro actual")
+
+                // Fetch the task to get its points + save previous state for undo
+                val tasks = repo.getTasks(householdId)
+                val task = tasks.find { it.id == taskId }
+                    ?: throw IllegalStateException("Tarea no encontrada")
+
+                // Save undo info BEFORE completing
+                val previousLcd = task.lastCompletedDate
+                _undoState.value = UndoState(householdId, taskId, previousLcd)
+
+                repo.completeTask(
+                    householdId = householdId,
+                    taskId = taskId,
+                    memberId = memberId,
+                    taskPoints = task.points
+                )
+
+                // Cancel any scheduled reminder for this task
+                notificationScheduler.cancelReminder(taskId)
+
+                // Update streak for the current member
                 try {
-                    val memberId = _currentMemberId.value
-                        ?: throw IllegalStateException("No se ha identificado al miembro actual")
+                    updateMemberStreak(householdId, memberId)
+                    checkAndAwardAchievements(householdId, memberId)
+                } catch (_: Exception) { }
 
-                    // Fetch the task to get its points
-                    val tasks = repo.getTasks(householdId)
-                    val task = tasks.find { it.id == taskId }
-                        ?: throw IllegalStateException("Tarea no encontrada")
-
-                    repo.completeTask(
-                        householdId = householdId,
-                        taskId = taskId,
-                        memberId = memberId,
-                        taskPoints = task.points
-                    )
-
-                    // Cancel any scheduled reminder for this task
-                    notificationScheduler.cancelReminder(taskId)
-
-                    // Update streak for the current member
-                    try {
-                        updateMemberStreak(householdId, memberId)
-                        checkAndAwardAchievements(householdId, memberId)
-                    } catch (_: Exception) {
-                        // Streak update failure shouldn't block task completion
-                    }
-
-                    _actionState.value = TaskActionState.Success
-                } catch (e: Exception) {
-                    _actionState.value = TaskActionState.Error(
-                        e.message ?: "Error al completar tarea"
-                    )
-                }
+                _actionState.value = TaskActionState.Success
+            } catch (e: Exception) {
+                _undoState.value = null
+                _actionState.value = TaskActionState.Error(
+                    e.message ?: "Error al completar tarea"
+                )
             }
         }
+    }
+
+    /** Undo a task completion: restore previous lastCompletedDate. */
+    fun undoCompleteTask() {
+        val state = _undoState.value ?: return
+        _undoState.value = null
+        screenModelScope.launch {
+            try {
+                // Revert lastCompletedDate on the task
+                repo.revertTaskCompletion(state.householdId, state.taskId, state.previousLastCompletedDate)
+            } catch (_: Exception) {
+                // Non-critical — task stays completed
+            }
+        }
+    }
+
+    fun clearUndoState() {
+        _undoState.value = null
+    }
 
     // ── Complete assignment (existing, keeps working) ────────
 

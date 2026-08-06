@@ -23,6 +23,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Switch from splash theme to normal app theme before rendering
+        setTheme(R.style.Theme_TaskHub)
+
         enableEdgeToEdge()
 
         // Hold a static reference to the app context for platform helpers

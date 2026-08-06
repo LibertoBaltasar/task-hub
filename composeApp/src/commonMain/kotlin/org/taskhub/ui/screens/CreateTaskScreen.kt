@@ -1,5 +1,8 @@
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +25,9 @@ import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.TaskActionState
 import org.taskhub.ui.models.TaskScreenModel
+import org.taskhub.ui.models.TaskTemplate
+import org.taskhub.ui.models.TaskTemplates
+import org.taskhub.ui.models.TemplateCategory
 import org.taskhub.ui.theme.*
 
 // ────────────────────────────────────────────────────────────
@@ -64,6 +70,7 @@ data class CreateTaskScreen(
         var penaltyValue by remember { mutableStateOf("") }
         var penaltyInterval by remember { mutableStateOf("day") }
         var penaltyMax by remember { mutableStateOf("") }
+        var templatesExpanded by remember { mutableStateOf(false) }
 
         // Handle success
         LaunchedEffect(actionState) {
@@ -178,6 +185,21 @@ data class CreateTaskScreen(
                                 )
                             }
                         }
+                    }
+
+                    // ── Quick templates ──
+                    item {
+                        QuickTemplatesSection(
+                            expanded = templatesExpanded,
+                            onToggle = { templatesExpanded = !templatesExpanded },
+                            onTemplateSelected = { template ->
+                                title = template.title
+                                description = template.description
+                                tags = template.tags
+                                frequency = template.frequency
+                                pointsText = template.points.toString()
+                            }
+                        )
                     }
 
                     // ── Basic info ──
@@ -659,6 +681,110 @@ data class CreateTaskScreen(
 
                     // Bottom spacer
                     item { Spacer(modifier = Modifier.height(80.dp)) }
+                }
+            }
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+//  Quick Templates Section
+// ────────────────────────────────────────────────────────────
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuickTemplatesSection(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onTemplateSelected: (TaskTemplate) -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "\uD83D\uDCCB",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Plantillas rápidas",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Teal700
+                    )
+                }
+                Text(
+                    text = if (expanded) "\u25B2" else "\u25BC",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Teal600
+                )
+            }
+
+            // Content
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "Toca una plantilla para rellenar el formulario autom\u00E1ticamente.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    TemplateCategory.entries.forEach { category ->
+                        val templates = TaskTemplates.byCategory[category] ?: return@forEach
+                        Column {
+                            Text(
+                                text = "${category.emoji} ${category.label}",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                templates.forEach { template ->
+                                    SuggestionChip(
+                                        onClick = { onTemplateSelected(template) },
+                                        label = {
+                                            Text(
+                                                text = template.title,
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        },
+                                        icon = {
+                                            Text(
+                                                text = "\u2B50${template.points}",
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(4.dp))
                 }
             }
         }

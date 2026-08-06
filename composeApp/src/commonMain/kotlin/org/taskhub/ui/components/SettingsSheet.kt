@@ -170,6 +170,77 @@ fun SettingsSheet(
 
         Spacer(Modifier.height(24.dp))
 
+        // ── Sound & Vibration ────────────────────────────
+        SettingsSection(title = s("settings_sound_vibration")) {
+            var soundEnabled by remember {
+                mutableStateOf(settingsStore.isSoundEnabled())
+            }
+            var vibrationEnabled by remember {
+                mutableStateOf(settingsStore.isVibrationEnabled())
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = s("settings_sound"),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = s("settings_sound_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = soundEnabled,
+                    onCheckedChange = {
+                        soundEnabled = it
+                        settingsStore.setSoundEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Teal600,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = s("settings_vibration"),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = s("settings_vibration_desc"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = vibrationEnabled,
+                    onCheckedChange = {
+                        vibrationEnabled = it
+                        settingsStore.setVibrationEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Teal600,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
         // ── Export CSV ───────────────────────────────────
         Button(
             onClick = {

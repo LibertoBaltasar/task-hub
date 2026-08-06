@@ -155,4 +155,17 @@ data class TaskHistoryResponse(
     val onTime: Boolean = true
 )
 
+// ── Notification DTO ──────────────────────────────────────
+
+@Serializable
+data class NotificationResponse(
+    val id: String,
+    val memberId: String,
+    val taskId: String,
+    val title: String,
+    val message: String,
+    val createdAt: Long = 0,
+    val read: Boolean = false
+)
+
 
