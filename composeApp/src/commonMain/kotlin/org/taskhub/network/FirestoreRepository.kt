@@ -25,6 +25,9 @@ import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.NotificationResponse
+import org.taskhub.network.models.RewardResponse
+import org.taskhub.network.models.RewardRedemption
+import org.taskhub.network.models.Subtask
 import kotlin.random.Random
 
 /**
@@ -386,6 +389,7 @@ class FirestoreRepository(
         frequency: String,
         recurrenceDays: List<Int>,
         tags: List<String>,
+        subtasks: List<Subtask> = emptyList(),
         penaltyMode: String?,
         penaltyValue: Int,
         penaltyInterval: String,
@@ -455,6 +459,23 @@ class FirestoreRepository(
             )
         }
 
+        // Subtasks as array of maps
+        fields["subtasks"] = FirestoreValue(
+            arrayValue = FirestoreArrayValue(
+                values = subtasks.map { st ->
+                    FirestoreValue(
+                        mapValue = FirestoreMapValue(
+                            fields = mapOf(
+                                "id" to FirestoreValue(stringValue = st.id),
+                                "text" to FirestoreValue(stringValue = st.text),
+                                "completed" to FirestoreValue(booleanValue = st.completed)
+                            )
+                        )
+                    )
+                }
+            )
+        )
+
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/tasks") {
             withAuth()
             contentType(ContentType.Application.Json)
@@ -466,6 +487,7 @@ class FirestoreRepository(
             id = id, householdId = householdId, createdBy = createdBy,
             title = title, description = description, points = points,
             frequency = frequency, recurrenceDays = recurrenceDays, tags = tags,
+            subtasks = subtasks,
             penaltyMode = penaltyMode, penaltyValue = penaltyValue,
             penaltyInterval = penaltyInterval, penaltyMax = penaltyMax,
             dueDate = dueDate, lastCompletedDate = null,
@@ -847,6 +869,7 @@ class FirestoreRepository(
         frequency: String,
         recurrenceDays: List<Int>,
         tags: List<String>,
+        subtasks: List<Subtask> = emptyList(),
         penaltyMode: String?,
         penaltyValue: Int,
         penaltyInterval: String,
@@ -906,11 +929,62 @@ class FirestoreRepository(
             )
         )
 
+        // Subtasks as array of maps
+        fields["subtasks"] = FirestoreValue(
+            arrayValue = FirestoreArrayValue(
+                values = subtasks.map { st ->
+                    FirestoreValue(
+                        mapValue = FirestoreMapValue(
+                            fields = mapOf(
+                                "id" to FirestoreValue(stringValue = st.id),
+                                "text" to FirestoreValue(stringValue = st.text),
+                                "completed" to FirestoreValue(booleanValue = st.completed)
+                            )
+                        )
+                    )
+                }
+            )
+        )
+
         val updateMask = fields.keys.joinToString(",")
 
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
             parameter("updateMask.fieldPaths", updateMask)
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /**
+     * Update only the subtasks array on a task document.
+     * Used for quick toggling of individual subtask checkboxes.
+     */
+    suspend fun updateSubtasks(
+        householdId: String,
+        taskId: String,
+        subtasks: List<Subtask>
+    ) {
+        val fields = mapOf(
+            "subtasks" to FirestoreValue(
+                arrayValue = FirestoreArrayValue(
+                    values = subtasks.map { st ->
+                        FirestoreValue(
+                            mapValue = FirestoreMapValue(
+                                fields = mapOf(
+                                    "id" to FirestoreValue(stringValue = st.id),
+                                    "text" to FirestoreValue(stringValue = st.text),
+                                    "completed" to FirestoreValue(booleanValue = st.completed)
+                                )
+                            )
+                        )
+                    }
+                )
+            )
+        )
+        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "subtasks")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -939,6 +1013,14 @@ class FirestoreRepository(
                 ?.mapNotNull { it.integerValue?.toIntOrNull() } ?: emptyList(),
             tags = f["tags"]?.arrayValue?.values
                 ?.mapNotNull { it.stringValue } ?: emptyList(),
+            subtasks = f["subtasks"]?.arrayValue?.values
+                ?.mapNotNull { stValue ->
+                    val sf = stValue.mapValue?.fields ?: return@mapNotNull null
+                    val sid = sf["id"]?.stringValue ?: return@mapNotNull null
+                    val stext = sf["text"]?.stringValue ?: return@mapNotNull null
+                    val scompleted = sf["completed"]?.booleanValue ?: false
+                    Subtask(id = sid, text = stext, completed = scompleted)
+                } ?: emptyList(),
             penaltyMode = f["penaltyMode"]?.stringValue,
             penaltyValue = f["penaltyValue"]?.integerValue?.toIntOrNull() ?: 0,
             penaltyInterval = f["penaltyInterval"]?.stringValue ?: "day",
@@ -1100,6 +1182,133 @@ class FirestoreRepository(
             parameter("updateMask.fieldPaths", "read")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
+        }
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  Rewards (subcollection under households/{id})
+    // ────────────────────────────────────────────────────────
+
+    /** List all rewards for a household. */
+    suspend fun getRewards(householdId: String): List<RewardResponse> {
+        return try {
+            val response: FirestoreListResponse = client.get(
+                "$baseUrl/households/$householdId/rewards"
+            ) {
+                tryAuthOrApiKey()
+            }.body()
+
+            response.documents.map { doc ->
+                val f = doc.fields
+                RewardResponse(
+                    id = extractDocId(doc.name),
+                    householdId = f["householdId"]?.stringValue ?: householdId,
+                    title = f["title"]?.stringValue ?: "",
+                    description = f["description"]?.stringValue ?: "",
+                    cost = f["cost"]?.integerValue?.toIntOrNull() ?: 0,
+                    icon = f["icon"]?.stringValue ?: "🎁",
+                    createdBy = f["createdBy"]?.stringValue ?: "",
+                    createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /** Create a reward. Requires auth (write). */
+    suspend fun createReward(
+        householdId: String,
+        title: String,
+        description: String,
+        cost: Int,
+        icon: String,
+        createdBy: String
+    ): RewardResponse {
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        val fields = mapOf(
+            "householdId" to FirestoreValue(stringValue = householdId),
+            "title" to FirestoreValue(stringValue = title),
+            "description" to FirestoreValue(stringValue = description),
+            "cost" to FirestoreValue(integerValue = cost.toString()),
+            "icon" to FirestoreValue(stringValue = icon),
+            "createdBy" to FirestoreValue(stringValue = createdBy),
+            "createdAt" to FirestoreValue(integerValue = now.toString())
+        )
+
+        val response: FirestoreDocumentResponse = client.post(
+            "$baseUrl/households/$householdId/rewards"
+        ) {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }.body()
+
+        val id = extractDocId(response.name)
+        return RewardResponse(id, householdId, title, description, cost, icon, createdBy, now)
+    }
+
+    /** Delete a reward. Requires auth (write). */
+    suspend fun deleteReward(householdId: String, rewardId: String) {
+        client.delete("$baseUrl/households/$householdId/rewards/$rewardId") {
+            withAuth()
+        }
+    }
+
+    /** Redeem a reward: subtract points from member, record redemption. Requires auth (write). */
+    suspend fun redeemReward(
+        householdId: String,
+        rewardId: String,
+        memberId: String,
+        pointsSpent: Int
+    ): RewardRedemption {
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        // 1. Subtract points from member
+        addMemberPoints(householdId, memberId, -pointsSpent)
+
+        // 2. Save redemption record
+        val fields = mapOf(
+            "rewardId" to FirestoreValue(stringValue = rewardId),
+            "memberId" to FirestoreValue(stringValue = memberId),
+            "redeemedAt" to FirestoreValue(integerValue = now.toString()),
+            "pointsSpent" to FirestoreValue(integerValue = pointsSpent.toString())
+        )
+
+        val response: FirestoreDocumentResponse = client.post(
+            "$baseUrl/households/$householdId/rewardRedemptions"
+        ) {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }.body()
+
+        val id = extractDocId(response.name)
+        return RewardRedemption(id, rewardId, memberId, now, pointsSpent)
+    }
+
+    /** Get all reward redemptions for a household. */
+    suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> {
+        return try {
+            val response: FirestoreListResponse = client.get(
+                "$baseUrl/households/$householdId/rewardRedemptions"
+            ) {
+                tryAuthOrApiKey()
+            }.body()
+
+            response.documents.map { doc ->
+                val f = doc.fields
+                RewardRedemption(
+                    id = extractDocId(doc.name),
+                    rewardId = f["rewardId"]?.stringValue ?: "",
+                    memberId = f["memberId"]?.stringValue ?: "",
+                    redeemedAt = f["redeemedAt"]?.integerValue?.toLongOrNull() ?: 0L,
+                    pointsSpent = f["pointsSpent"]?.integerValue?.toIntOrNull() ?: 0
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

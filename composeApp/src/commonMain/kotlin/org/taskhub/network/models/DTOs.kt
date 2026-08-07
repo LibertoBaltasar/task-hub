@@ -62,6 +62,13 @@ data class AssignmentSlot(
     val memberId: String
 )
 
+@Serializable
+data class Subtask(
+    val id: String,
+    val text: String,
+    val completed: Boolean = false
+)
+
 /**
  * Representa una tarea en Firestore y en la UI.
  *
@@ -85,6 +92,8 @@ data class TaskResponse(
     /** Días de la semana en que aplica (1=Lunes..7=Domingo). Solo para "weekly". */
     val recurrenceDays: List<Int> = emptyList(),
     val tags: List<String> = emptyList(),
+    /** Checklist de subtareas dentro de la tarea. */
+    val subtasks: List<Subtask> = emptyList(),
     /** Modo de penalización por retraso: "fixed" (puntos fijos) o "percentage" (% de points). null = sin penalización. */
     val penaltyMode: String? = null,
     val penaltyValue: Int = 0,
@@ -166,6 +175,29 @@ data class NotificationResponse(
     val message: String,
     val createdAt: Long = 0,
     val read: Boolean = false
+)
+
+// ── Reward DTOs ────────────────────────────────────────────
+
+@Serializable
+data class RewardResponse(
+    val id: String,
+    val householdId: String,
+    val title: String,
+    val description: String = "",
+    val cost: Int = 0,
+    val icon: String = "🎁",
+    val createdBy: String = "",
+    val createdAt: Long = 0
+)
+
+@Serializable
+data class RewardRedemption(
+    val id: String,
+    val rewardId: String,
+    val memberId: String,
+    val redeemedAt: Long = 0,
+    val pointsSpent: Int = 0
 )
 
 

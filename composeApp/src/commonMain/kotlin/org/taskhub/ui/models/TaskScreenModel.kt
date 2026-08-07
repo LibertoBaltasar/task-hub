@@ -12,6 +12,7 @@ import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.CommentResponse
 import org.taskhub.network.models.AssignmentSlot
+import org.taskhub.network.models.Subtask
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.updateWidgetPendingTasks
 import org.taskhub.platform.DebugFlags
@@ -234,6 +235,7 @@ class TaskScreenModel(
         frequency: String,
         recurrenceDays: List<Int>,
         tags: List<String>,
+        subtasks: List<Subtask> = emptyList(),
         penaltyMode: String?,
         penaltyValue: Int,
         penaltyInterval: String,
@@ -255,6 +257,7 @@ class TaskScreenModel(
                     frequency = frequency,
                     recurrenceDays = recurrenceDays,
                     tags = tags,
+                    subtasks = subtasks,
                     penaltyMode = penaltyMode,
                     penaltyValue = penaltyValue,
                     penaltyInterval = penaltyInterval,
@@ -454,6 +457,7 @@ class TaskScreenModel(
         frequency: String,
         recurrenceDays: List<Int>,
         tags: List<String>,
+        subtasks: List<Subtask> = emptyList(),
         penaltyMode: String?,
         penaltyValue: Int,
         penaltyInterval: String,
@@ -472,6 +476,7 @@ class TaskScreenModel(
                     frequency = frequency,
                     recurrenceDays = recurrenceDays,
                     tags = tags,
+                    subtasks = subtasks,
                     penaltyMode = penaltyMode,
                     penaltyValue = penaltyValue,
                     penaltyInterval = penaltyInterval,
@@ -684,6 +689,25 @@ class TaskScreenModel(
 
     fun resetActionState() {
         _actionState.value = TaskActionState.Idle
+    }
+
+    // ── Toggle subtask ──────────────────────────────────────
+
+    fun toggleSubtask(householdId: String, taskId: String, subtaskId: String) {
+        screenModelScope.launch {
+            try {
+                val tasks = repo.getTasks(householdId)
+                val task = tasks.find { it.id == taskId } ?: return@launch
+                val updatedSubtasks = task.subtasks.map { st ->
+                    if (st.id == subtaskId) st.copy(completed = !st.completed) else st
+                }
+                repo.updateSubtasks(householdId, taskId, updatedSubtasks)
+                // Refresh detail
+                loadTaskDetail(householdId, taskId)
+            } catch (_: Exception) {
+                // Non-critical; detail will be stale until next load
+            }
+        }
     }
 
     fun reset() {

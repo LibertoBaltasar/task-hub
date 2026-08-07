@@ -486,6 +486,42 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
 
+                                // Rewards button
+                                item {
+                                    Button(
+                                        onClick = { navigator.push(RewardListScreen(householdId)) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                                        shape = MaterialTheme.shapes.large
+                                    ) {
+                                        Text(
+                                            text = "🎁 Recompensas",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                // Calendar button
+                                item {
+                                    Button(
+                                        onClick = {
+                                            val mState = memberState
+                                            val memberId = (mState as? MemberUiState.Success)?.members?.firstOrNull()?.id
+                                            navigator.push(CalendarScreen(householdId, memberId))
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                                        shape = MaterialTheme.shapes.large
+                                    ) {
+                                        Text(
+                                            text = "📅 Calendario",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
                                 // Members header
                                 item {
                                     Row(

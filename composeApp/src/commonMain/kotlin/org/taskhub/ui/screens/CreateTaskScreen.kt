@@ -21,6 +21,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.Subtask
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.TaskActionState
@@ -71,6 +72,9 @@ data class CreateTaskScreen(
         var penaltyInterval by remember { mutableStateOf("day") }
         var penaltyMax by remember { mutableStateOf("") }
         var templatesExpanded by remember { mutableStateOf(false) }
+        // Subtasks state
+        var subtaskText by remember { mutableStateOf("") }
+        var subtasks by remember { mutableStateOf(listOf<Subtask>()) }
 
         // Handle success
         LaunchedEffect(actionState) {
@@ -137,6 +141,7 @@ data class CreateTaskScreen(
                                         frequency = frequency,
                                         recurrenceDays = recurrenceDays.toList().sorted(),
                                         tags = tags,
+                                        subtasks = subtasks,
                                         penaltyMode = if (hasPenalty) penaltyMode else null,
                                         penaltyValue = pValue,
                                         penaltyInterval = penaltyInterval,
@@ -411,6 +416,79 @@ data class CreateTaskScreen(
                                     },
                                     label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
                                 )
+                            }
+                        }
+                    }
+
+                    // ── Subtasks ──
+                    item {
+                        Text(
+                            text = "✅ Subtareas",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Teal700
+                        )
+                    }
+
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = subtaskText,
+                                onValueChange = { subtaskText = it },
+                                label = { Text("Añadir subtarea") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            Button(
+                                onClick = {
+                                    val text = subtaskText.trim()
+                                    if (text.isNotBlank()) {
+                                        val id = kotlin.random.Random.nextLong().toString(36)
+                                        subtasks = subtasks + Subtask(id = id, text = text, completed = false)
+                                        subtaskText = ""
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                            ) {
+                                Text("+")
+                            }
+                        }
+                    }
+
+                    if (subtasks.isNotEmpty()) {
+                        items(subtasks) { st ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = st.completed,
+                                    onCheckedChange = { checked ->
+                                        subtasks = subtasks.map {
+                                            if (it.id == st.id) it.copy(completed = checked) else it
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(checkedColor = Teal600)
+                                )
+                                Text(
+                                    text = st.text,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(start = 4.dp),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                TextButton(
+                                    onClick = { subtasks = subtasks.filter { it.id != st.id } },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    )
+                                ) {
+                                    Text("✕")
+                                }
                             }
                         }
                     }

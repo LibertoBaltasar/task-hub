@@ -187,6 +187,9 @@ data class TaskDetailScreen(
                                     assignmentId = assignmentId,
                                     assignment = assignment
                                 )
+                            },
+                            onToggleSubtask = { subtaskId ->
+                                model.toggleSubtask(householdId, taskId, subtaskId)
                             }
                         )
                     }
@@ -232,7 +235,8 @@ private fun TaskDetailContent(
     onCommentTextChange: (String) -> Unit,
     onAddComment: (String) -> Unit,
     onCompleteTask: () -> Unit,
-    onComplete: (String, TaskAssignmentResponse) -> Unit
+    onComplete: (String, TaskAssignmentResponse) -> Unit,
+    onToggleSubtask: (String) -> Unit
 ) {
     val now = Clock.System.now().toEpochMilliseconds()
     val pendingAssignments = assignments.filter { it.status == "assigned" }
@@ -430,6 +434,43 @@ private fun TaskDetailContent(
                     style = MaterialTheme.typography.bodySmall,
                     color = Teal500
                 )
+            }
+        }
+
+        // ── Subtasks checklist ──
+        if (task.subtasks.isNotEmpty()) {
+            item {
+                val completedCount = task.subtasks.count { it.completed }
+                Text(
+                    text = "✅ Subtareas ($completedCount/${task.subtasks.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Teal700
+                )
+            }
+            items(task.subtasks) { st ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = st.completed,
+                        onCheckedChange = { onToggleSubtask(st.id) },
+                        colors = CheckboxDefaults.colors(checkedColor = Teal600)
+                    )
+                    Text(
+                        text = st.text,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 4.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        textDecoration = if (st.completed) TextDecoration.LineThrough else TextDecoration.None,
+                        color = if (st.completed) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                else MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
 
