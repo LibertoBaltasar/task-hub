@@ -77,6 +77,9 @@ kotlin {
             // Firebase Cloud Messaging
             implementation("com.google.firebase:firebase-messaging-ktx:24.1.0")
 
+            // Google Sign-In + Calendar
+            implementation("com.google.android.gms:play-services-auth:21.2.0")
+
             // WorkManager para notificaciones programadas
             implementation("androidx.work:work-runtime-ktx:2.9.1")
 

@@ -28,6 +28,7 @@ import org.taskhub.network.models.NotificationResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.network.models.RewardRedemption
 import org.taskhub.network.models.Subtask
+import org.taskhub.storage.TaskCache
 import kotlin.random.Random
 
 /**
@@ -42,7 +43,8 @@ import kotlin.random.Random
  */
 class FirestoreRepository(
     private val projectId: String = "task-hub-62f98",
-    private val apiKey: String = DEFAULT_API_KEY
+    private val apiKey: String = DEFAULT_API_KEY,
+    private val taskCache: TaskCache
 ) {
     private val baseUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
     private val authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
@@ -100,6 +102,21 @@ class FirestoreRepository(
     fun getLocalId(): String? = cachedLocalId
 
     /**
+     * Quick connectivity check — HEAD request to Firestore REST API.
+     * Returns true if the network is reachable, false otherwise.
+     */
+    suspend fun isOnline(): Boolean {
+        return try {
+            client.get("$baseUrl/households/__ping__") {
+                parameter("key", apiKey)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
      * Adds Authorization header to a request builder if we already have a token.
      * Calls [ensureAuth] first so the token is always fresh.
      */
@@ -134,14 +151,19 @@ class FirestoreRepository(
         return HouseholdResponse(id, name, inviteCode, now, now)
     }
 
-    /** Get a household by id. Falls back to API key if auth fails (read-only). */
+    /** Get a household by id. Falls back to local cache if offline. */
     suspend fun getHousehold(id: String): HouseholdResponse {
-        val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$id") {
-            // Try Bearer token first; API key fallback for reads
-            tryAuthOrApiKey()
-        }.body()
+        return try {
+            val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$id") {
+                tryAuthOrApiKey()
+            }.body()
 
-        return toHouseholdResponse(response)
+            val household = toHouseholdResponse(response)
+            taskCache.cacheHousehold(household)
+            household
+        } catch (e: Exception) {
+            taskCache.getCachedHousehold(id) ?: throw e
+        }
     }
 
     /** Batch-fetch multiple households by their document IDs. */
@@ -212,13 +234,19 @@ class FirestoreRepository(
     //  Members (subcollection under households/{id})
     // ────────────────────────────────────────────────────────
 
-    /** List members of a household. Falls back to API key for reads. */
+    /** List members of a household. Falls back to local cache if offline. */
     suspend fun getMembers(householdId: String): List<MemberResponse> {
-        val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/members") {
-            tryAuthOrApiKey()
-        }.body()
+        return try {
+            val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/members") {
+                tryAuthOrApiKey()
+            }.body()
 
-        return response.documents.map { toMemberResponse(it, householdId) }
+            val members = response.documents.map { toMemberResponse(it, householdId) }
+            taskCache.cacheMembers(householdId, members)
+            members
+        } catch (e: Exception) {
+            taskCache.getCachedMembers(householdId) ?: throw e
+        }
     }
 
     /** Add a member to a household. Requires auth (write). */
@@ -496,13 +524,19 @@ class FirestoreRepository(
         )
     }
 
-    /** List all tasks for a household. */
+    /** List all tasks for a household. Falls back to local cache if offline. */
     suspend fun getTasks(householdId: String): List<TaskResponse> {
-        val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/tasks") {
-            tryAuthOrApiKey()
-        }.body()
+        return try {
+            val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/tasks") {
+                tryAuthOrApiKey()
+            }.body()
 
-        return response.documents.map { toTaskResponse(it, householdId) }
+            val tasks = response.documents.map { toTaskResponse(it, householdId) }
+            taskCache.cacheTasks(householdId, tasks)
+            tasks
+        } catch (e: Exception) {
+            taskCache.getCachedTasks(householdId) ?: throw e
+        }
     }
 
     /** Mark a task as completed today. Sets lastCompletedDate, awards points, and records history. */

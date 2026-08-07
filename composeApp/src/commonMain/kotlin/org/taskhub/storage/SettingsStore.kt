@@ -53,6 +53,22 @@ class SettingsStore(private val settings: Settings) {
     fun setVibrationEnabled(enabled: Boolean) =
         settings.putBoolean(KEY_VIBRATION_ENABLED, enabled)
 
+    // ── Google Calendar ──────────────────────────────────
+
+    fun hasGoogleLinked(): Boolean =
+        settings.getStringOrNull(KEY_GOOGLE_ACCESS_TOKEN) != null
+
+    fun getGoogleAccessToken(): String? =
+        settings.getStringOrNull(KEY_GOOGLE_ACCESS_TOKEN)
+
+    fun setGoogleAccessToken(token: String?) {
+        if (token != null) {
+            settings.putString(KEY_GOOGLE_ACCESS_TOKEN, token)
+        } else {
+            settings.remove(KEY_GOOGLE_ACCESS_TOKEN)
+        }
+    }
+
     companion object {
         private const val KEY_NOTIFICATIONS = "taskhub_notifications"
         private const val KEY_LANGUAGE = "taskhub_language"
@@ -60,5 +76,6 @@ class SettingsStore(private val settings: Settings) {
         private const val KEY_WIDGET_THEME = "taskhub_widget_theme"
         private const val KEY_SOUND_ENABLED = "taskhub_sound_enabled"
         private const val KEY_VIBRATION_ENABLED = "taskhub_vibration_enabled"
+        private const val KEY_GOOGLE_ACCESS_TOKEN = "taskhub_google_token"
     }
 }

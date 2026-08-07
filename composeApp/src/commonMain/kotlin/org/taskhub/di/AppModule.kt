@@ -4,10 +4,12 @@ import com.russhwolf.settings.Settings
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.createNotificationScheduler
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
+import org.taskhub.storage.TaskCache
 import org.taskhub.storage.ThemeStore
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.MemberScreenModel
@@ -21,6 +23,9 @@ val appModule: Module = module {
     // Local household persistence (survives auth changes across restarts)
     single { HouseholdStore(settings = get()) }
 
+    // Local task/offline cache (transparent, using SharedPreferences/NSUserDefaults)
+    single { TaskCache(settings = get()) }
+
     // User settings (theme, language, notifications)
     single { SettingsStore(settings = get()) }
 
@@ -28,7 +33,10 @@ val appModule: Module = module {
     single { ThemeStore(settings = get()) }
 
     // Network — talks directly to Firestore REST API
-    single { FirestoreRepository() }
+    single { FirestoreRepository(taskCache = get()) }
+
+    // Google Calendar integration
+    single { GoogleCalendarRepository() }
 
     // Platform notification scheduler
     single { createNotificationScheduler() }
@@ -37,5 +45,5 @@ val appModule: Module = module {
     factory { HouseholdScreenModel(repo = get(), householdStore = get()) }
     factory { MemberScreenModel(repo = get()) }
     factory { NotificationScreenModel(repo = get()) }
-    factory { TaskScreenModel(repo = get(), notificationScheduler = get()) }
+    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarRepo = get()) }
 }

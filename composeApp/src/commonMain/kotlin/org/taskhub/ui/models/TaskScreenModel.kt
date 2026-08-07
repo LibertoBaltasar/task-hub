@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
@@ -134,7 +135,8 @@ enum class TaskSort {
 
 class TaskScreenModel(
     private val repo: FirestoreRepository,
-    private val notificationScheduler: NotificationScheduler
+    private val notificationScheduler: NotificationScheduler,
+    private val calendarRepo: GoogleCalendarRepository
 ) : ScreenModel {
 
     private val _listState = MutableStateFlow<TaskListUiState>(TaskListUiState.Idle)
@@ -163,6 +165,10 @@ class TaskScreenModel(
     private val _currentMemberId = MutableStateFlow<String?>(null)
     val currentMemberId: StateFlow<String?> = _currentMemberId.asStateFlow()
 
+    // Offline state — true when last load served from cache
+    private val _isOffline = MutableStateFlow(false)
+    val isOffline: StateFlow<Boolean> = _isOffline.asStateFlow()
+
     // All available tags (collected from tasks)
     private val _allTags = MutableStateFlow<List<String>>(emptyList())
     val allTags: StateFlow<List<String>> = _allTags.asStateFlow()
@@ -177,9 +183,12 @@ class TaskScreenModel(
                 val assignments = repo.getAllAssignments(householdId)
                 val members = repo.getMembers(householdId)
 
+                // Check connectivity to update offline banner
+                _isOffline.value = !repo.isOnline()
+
                 // ── DEBUG LOG ──
                 if (DebugFlags.isEnabled) {
-                    println("[TaskScreenModel] loadTasks: ${tasks.size} tasks, ${assignments.size} assignments, ${members.size} members for household=$householdId")
+                    println("[TaskScreenModel] loadTasks: ${tasks.size} tasks, ${assignments.size} assignments, ${members.size} members for household=$householdId offline=${_isOffline.value}")
                     for (t in tasks) {
                         println("[TaskScreenModel]   task: id=${t.id}, title=${t.title}, freq=${t.frequency}, lastCompleted=${t.lastCompletedDate}, dueDate=${t.dueDate}")
                     }
@@ -197,6 +206,7 @@ class TaskScreenModel(
                 // ── Update widget with pending tasks ──
                 updateWidgetWithPendingTasks(tasks)
             } catch (e: Exception) {
+                _isOffline.value = true
                 _listState.value = TaskListUiState.Error(
                     e.message ?: "Error al cargar tareas"
                 )
@@ -782,5 +792,48 @@ class TaskScreenModel(
         }
 
         updateWidgetPendingTasks(text)
+    }
+
+    // ── Google Calendar ──────────────────────────────────────
+
+    /** Sealed state for Google Calendar send operations. */
+    sealed class CalendarActionState {
+        data object Idle : CalendarActionState()
+        data object Sending : CalendarActionState()
+        data object Success : CalendarActionState()
+        data class Error(val message: String) : CalendarActionState()
+    }
+
+    private val _calendarActionState = MutableStateFlow<CalendarActionState>(CalendarActionState.Idle)
+    val calendarActionState: StateFlow<CalendarActionState> = _calendarActionState.asStateFlow()
+
+    /**
+     * Sends a task to Google Calendar using the stored access token.
+     * For "once" tasks, uses the task's dueDate. For recurring tasks, uses today.
+     *
+     * @param accessToken The Google OAuth access token (from SettingsStore).
+     * @param task The task to send.
+     */
+    fun sendToGoogleCalendar(accessToken: String, task: TaskResponse) {
+        screenModelScope.launch {
+            _calendarActionState.value = CalendarActionState.Sending
+            try {
+                calendarRepo.createEvent(
+                    accessToken = accessToken,
+                    summary = task.title,
+                    description = task.description.ifBlank { "Tarea de Task Hub" },
+                    dueDateEpochMs = task.dueDate
+                )
+                _calendarActionState.value = CalendarActionState.Success
+            } catch (e: Exception) {
+                _calendarActionState.value = CalendarActionState.Error(
+                    e.message ?: "Error al enviar a Google Calendar"
+                )
+            }
+        }
+    }
+
+    fun resetCalendarActionState() {
+        _calendarActionState.value = CalendarActionState.Idle
     }
 }

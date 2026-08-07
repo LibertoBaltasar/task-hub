@@ -18,8 +18,10 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.koin.compose.koinInject
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
 
@@ -36,8 +38,10 @@ data class TaskDetailScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
+        val settingsStore = koinInject<SettingsStore>()
         val detailState by model.detailState.collectAsState()
         val actionState by model.actionState.collectAsState()
+        val calendarActionState by model.calendarActionState.collectAsState()
         val commentsState by model.commentsState.collectAsState()
         val newCommentText by model.newCommentText.collectAsState()
 
@@ -162,6 +166,7 @@ data class TaskDetailScreen(
 
                     is TaskDetailUiState.Success -> {
                         val memberMap = state.members.associateBy { it.id }
+                        val isGoogleLinked = settingsStore.hasGoogleLinked()
                         TaskDetailContent(
                             task = state.task,
                             assignments = state.assignments,
@@ -169,6 +174,8 @@ data class TaskDetailScreen(
                             actionState = actionState,
                             commentsState = commentsState,
                             newCommentText = newCommentText,
+                            isGoogleLinked = isGoogleLinked,
+                            calendarActionState = calendarActionState,
                             onCommentTextChange = { model.setNewCommentText(it) },
                             onAddComment = { authorName ->
                                 model.addComment(householdId, taskId, authorName)
@@ -190,6 +197,12 @@ data class TaskDetailScreen(
                             },
                             onToggleSubtask = { subtaskId ->
                                 model.toggleSubtask(householdId, taskId, subtaskId)
+                            },
+                            onSendToGoogleCalendar = {
+                                val token = settingsStore.getGoogleAccessToken()
+                                if (token != null) {
+                                    model.sendToGoogleCalendar(token, state.task)
+                                }
                             }
                         )
                     }
@@ -232,11 +245,14 @@ private fun TaskDetailContent(
     actionState: TaskActionState,
     commentsState: CommentsUiState,
     newCommentText: String,
+    isGoogleLinked: Boolean = false,
+    calendarActionState: TaskScreenModel.CalendarActionState = TaskScreenModel.CalendarActionState.Idle,
     onCommentTextChange: (String) -> Unit,
     onAddComment: (String) -> Unit,
     onCompleteTask: () -> Unit,
     onComplete: (String, TaskAssignmentResponse) -> Unit,
-    onToggleSubtask: (String) -> Unit
+    onToggleSubtask: (String) -> Unit,
+    onSendToGoogleCalendar: (() -> Unit)? = null
 ) {
     val now = Clock.System.now().toEpochMilliseconds()
     val pendingAssignments = assignments.filter { it.status == "assigned" }
@@ -434,6 +450,30 @@ private fun TaskDetailContent(
                     style = MaterialTheme.typography.bodySmall,
                     color = Teal500
                 )
+            }
+        }
+
+        // ── Google Calendar button ──
+        if (isGoogleLinked && onSendToGoogleCalendar != null) {
+            item {
+                OutlinedButton(
+                    onClick = onSendToGoogleCalendar,
+                    enabled = calendarActionState !is TaskScreenModel.CalendarActionState.Sending,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large
+                ) {
+                    if (calendarActionState is TaskScreenModel.CalendarActionState.Sending) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Teal600,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Enviando...")
+                    } else {
+                        Text("📅 Enviar a Google Calendar")
+                    }
+                }
             }
         }
 

@@ -3,6 +3,7 @@ package org.taskhub.platform
 import android.content.Context
 import android.content.Intent
 import org.taskhub.TaskHubWidgetProvider
+import org.taskhub.GoogleSignInHelper
 
 actual fun shareText(text: String, title: String) {
     val context = AndroidContextHolder.context ?: return
@@ -24,16 +25,19 @@ actual fun saveWidgetThemeToCache(theme: String) {
 
 actual fun updateWidgetPendingTasks(taskList: String) {
     val context = AndroidContextHolder.context ?: return
-    // Write to shared prefs so the widget can read it
     context.getSharedPreferences("widget_cache", Context.MODE_PRIVATE)
         .edit()
         .putString("pending_tasks", taskList)
         .apply()
-    // Tell the widget to refresh
     val intent = Intent(context, TaskHubWidgetProvider::class.java).apply {
         action = "org.taskhub.WIDGET_REFRESH"
     }
     context.sendBroadcast(intent)
+}
+
+actual fun launchGoogleSignIn() {
+    val context = AndroidContextHolder.context ?: return
+    GoogleSignInHelper.launch(context)
 }
 
 /** Simple static context holder set from MainActivity. */

@@ -59,6 +59,7 @@ data class TaskListScreen(
         val currentMemberId by model.currentMemberId.collectAsState()
         val searchQuery by model.searchQuery.collectAsState()
         val undoState by model.undoState.collectAsState()
+        val isOffline by model.isOffline.collectAsState()
 
         val snackbarHostState = remember { SnackbarHostState() }
 
@@ -205,6 +206,23 @@ data class TaskListScreen(
                 }
 
                 // Content
+                // ── Offline banner ──────────────────────────────
+                if (isOffline) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Coral100
+                    ) {
+                        Text(
+                            text = "📡 Sin conexión — mostrando datos en caché",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Coral800,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
                 when (val state = listState) {
                     is TaskListUiState.Loading -> {
                         Box(

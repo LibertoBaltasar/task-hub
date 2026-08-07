@@ -12,3 +12,7 @@ actual fun saveWidgetThemeToCache(theme: String) {
 actual fun updateWidgetPendingTasks(taskList: String) {
     // iOS: no widget yet — no-op
 }
+
+actual fun launchGoogleSignIn() {
+    // iOS: Google Sign-In not supported — no-op
+}

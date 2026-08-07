@@ -12,3 +12,7 @@ actual fun saveWidgetThemeToCache(theme: String) {
 actual fun updateWidgetPendingTasks(taskList: String) {
     // JVM: no widget — no-op
 }
+
+actual fun launchGoogleSignIn() {
+    // JVM: Google Sign-In not supported — no-op
+}
