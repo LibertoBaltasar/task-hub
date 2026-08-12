@@ -1,0 +1,140 @@
+name: Release — Build & Deploy to Play Store
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'  # Solo tags semánticos: v0.3.0, v1.0.0, etc.
+  workflow_dispatch:               # También permite lanzar manualmente desde GitHub UI
+    inputs:
+      track:
+        description: 'Track de publicación'
+        required: true
+        type: choice
+        options:
+          - internal
+          - alpha
+          - production
+        default: internal
+      version_name:
+        description: 'Version name (ej: 0.3.0). Si se deja vacío, se usa el del build.gradle.kts'
+        required: false
+        type: string
+
+jobs:
+  build-and-publish:
+    name: Build AAB & Publish to Play Store
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Entorno Java + Android SDK ──────────────────────
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # ── Preparar keystore de subida ─────────────────────
+      - name: Decode upload keystore
+        run: |
+          echo "${{ secrets.UPLOAD_KEYSTORE }}" | base64 -d > upload-keystore.jks
+        working-directory: ${{ github.workspace }}
+
+      # ── Resolver versión ────────────────────────────────
+      - name: Set version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version_name }}" ]; then
+            VERSION_NAME="${{ inputs.version_name }}"
+          elif [[ "${{ github.ref }}" =~ ^refs/tags/v(.+)$ ]]; then
+            VERSION_NAME="${BASH_REMATCH[1]}"
+          else
+            echo "Error: no se puede determinar la versión"
+            echo "Usa un tag vX.Y.Z o especifícala en workflow_dispatch"
+            exit 1
+          fi
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$(date +%s)" >> $GITHUB_OUTPUT
+
+      # ── Generar what's new por idioma ───────────────────
+      - name: Generate what's new
+        run: |
+          mkdir -p distribution/whatsnew
+          echo "Versión ${{ steps.version.outputs.version_name }}" > distribution/whatsnew/whatsnew-es-ES
+          echo "Version ${{ steps.version.outputs.version_name }}" > distribution/whatsnew/whatsnew-en-US
+
+      # ── Compilar AAB firmado ────────────────────────────
+      - name: Build release AAB
+        run: |
+          ./gradlew :composeApp:bundleRelease \
+            -Pandroid.injected.signing.store.file=upload-keystore.jks \
+            -Pandroid.injected.signing.store.password="${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}" \
+            -Pandroid.injected.signing.key.alias="${{ secrets.UPLOAD_KEY_ALIAS }}" \
+            -Pandroid.injected.signing.key.password="${{ secrets.UPLOAD_KEY_PASSWORD }}" \
+            -PversionNameOverride="${{ steps.version.outputs.version_name }}" \
+            -PversionCodeOverride="${{ steps.version.outputs.version_code }}"
+
+      # ── Determinar track ────────────────────────────────
+      - name: Determine track
+        id: track
+        run: |
+          if [ -n "${{ inputs.track }}" ]; then
+            echo "track=${{ inputs.track }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == *"-alpha"* ]]; then
+            echo "track=alpha" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == *"-beta"* ]]; then
+            echo "track=internal" >> $GITHUB_OUTPUT
+          else
+            echo "track=internal" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Subir a Google Play Console ─────────────────────
+      - name: Upload to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.SERVICE_ACCOUNT_JSON }}
+          packageName: org.taskhub
+          releaseFiles: composeApp/build/outputs/bundle/release/composeApp-release.aab
+          track: ${{ steps.track.outputs.track }}
+          status: completed                                   # 'draft' para revisar manualmente, 'completed' para publicar
+          whatsNewDirectory: distribution/whatsnew
+          mappingFile: composeApp/build/outputs/mapping/release/mapping.txt
+          inAppUpdatePriority: 2
+
+      # ── Notificar resultado ─────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Task Hub v${{ steps.version.outputs.version_name }}"
+          body: |
+            ## 🚀 Publicado en Play Store
+
+            **Track:** ${{ steps.track.outputs.track }}
+            **Versión:** ${{ steps.version.outputs.version_name }}
+
+            ### 📲 Enlace a Play Store
+            https://play.google.com/store/apps/details?id=org.taskhub
+
+            ---
+            Publicado automáticamente vía GitHub Actions.
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Guardar AAB como artifact (backup) ──────────────
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-hub-${{ steps.version.outputs.version_name }}.aab
+          path: composeApp/build/outputs/bundle/release/composeApp-release.aab
+          retention-days: 30
