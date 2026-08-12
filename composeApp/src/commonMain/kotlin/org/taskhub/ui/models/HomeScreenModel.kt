@@ -9,10 +9,8 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.atStartOfDayIn
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
+import kotlinx.datetime.toLocalDateTime
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.platform.updateWidgetPendingTasks
@@ -26,10 +24,10 @@ import org.taskhub.storage.SavedHousehold
  * (incluyendo el espacio Personal) y actualiza el widget Android
  * con la lista agregada.
  */
-class HomeScreenModel : ScreenModel, KoinComponent {
-
-    private val repo: FirestoreRepository by inject()
-    private val householdStore: HouseholdStore by inject()
+class HomeScreenModel(
+    private val repo: FirestoreRepository,
+    private val householdStore: HouseholdStore
+) : ScreenModel {
 
     private val _uiState = MutableStateFlow(HomeScreenUiState())
     val uiState: StateFlow<HomeScreenUiState> = _uiState.asStateFlow()
@@ -59,7 +57,7 @@ class HomeScreenModel : ScreenModel, KoinComponent {
                     }
                 }
 
-                // Sort: overdue first, then by due date
+                // Sort: overdue first, then by due date, then no-due-date last
                 val now = Clock.System.now().toEpochMilliseconds()
                 val sorted = allTasks.sortedBy { (_, task) ->
                     if (task.dueDate > 0 && task.dueDate < now) 0 // overdue
