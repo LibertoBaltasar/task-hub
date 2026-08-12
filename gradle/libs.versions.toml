@@ -11,6 +11,8 @@ kotlinx-datetime = "0.6.1"
 logback = "1.5.12"
 multiplatform-settings = "1.2.0"
 androidx-activity-compose = "1.9.3"
+firebase-crashlytics = "19.4.0"
+google-services = "4.4.2"
 
 
 [libraries]
@@ -55,6 +57,9 @@ multiplatform-settings = { module = "com.russhwolf:multiplatform-settings-no-arg
 # AndroidX
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity-compose" }
 
+# Firebase
+firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics-ktx", version.ref = "firebase-crashlytics" }
+
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
@@ -63,3 +68,4 @@ compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-m
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
+google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }

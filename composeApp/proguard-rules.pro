@@ -71,6 +71,7 @@
 -keep class org.taskhub.TaskHubWidgetProvider { *; }
 -keep class org.taskhub.TaskHubFirebaseMessagingService { *; }
 -keep class org.taskhub.MainActivity { *; }
+-keep class org.taskhub.TaskHubApplication { *; }
 
 # ── Remove debug logging in release ──────────────────────────────────────────
 -assumenosideeffects class kotlin.jvm.internal.Intrinsics {

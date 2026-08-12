@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.android.application)
+    alias(libs.plugins.google.services)
 }
 
 // ── Release signing (keystore.properties NOT in git) ────────
@@ -85,6 +86,9 @@ kotlin {
 
             // Google Play Services (FCM requiere la task de los servicios de Play)
             implementation("com.google.android.gms:play-services-base:18.5.0")
+
+            // Firebase Crashlytics — reporte de crashes
+            implementation(libs.firebase.crashlytics)
         }
 
         iosMain.dependencies {
