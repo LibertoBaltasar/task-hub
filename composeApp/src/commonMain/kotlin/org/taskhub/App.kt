@@ -21,14 +21,23 @@ import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.AppSettingsState
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.screens.HouseholdListScreen
+import org.taskhub.ui.screens.SplashScreen
 import org.taskhub.ui.screens.WelcomeScreen
 import org.taskhub.ui.theme.TaskHubTheme
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.ui.theme.Teal600
-import org.taskhub.platform.shareText
 
 @Composable
 fun App() {
+    // ── Fase 1: Splash screen (5 segundos) ─────────────────
+    var showSplash by remember { mutableStateOf(true) }
+
+    if (showSplash) {
+        SplashScreen(onFinished = { showSplash = false })
+        return
+    }
+
+    // ── Fase 2: App normal ─────────────────────────────────
     KoinApplication(application = {
         modules(appModule)
     }) {
