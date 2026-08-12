@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
@@ -26,6 +27,7 @@ import org.taskhub.ui.components.HouseholdTaskSection
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
+import org.taskhub.ui.models.HomeScreenModel
 import org.taskhub.ui.theme.Teal600
 
 /**
@@ -42,13 +44,17 @@ class HomeScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val householdStore = koinInject<HouseholdStore>()
         val appSettings = LocalAppSettings.current
+        val model = koinScreenModel<HomeScreenModel>()
+        val uiState by model.uiState.collectAsState()
 
         var households by remember { mutableStateOf<List<SavedHousehold>>(emptyList()) }
         var showFabMenu by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
+        // Cargar hogares + tareas de todos al entrar
         LaunchedEffect(Unit) {
             households = householdStore.getSavedHouseholds()
+            model.loadAllTasks()
         }
 
         // Settings dialog
@@ -130,7 +136,7 @@ class HomeScreen : Screen {
                 }
             }
         ) { padding ->
-            if (households.isEmpty()) {
+            if (uiState.isLoading && households.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -150,14 +156,21 @@ class HomeScreen : Screen {
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Contador total
+                    item {
+                        Text(
+                            "${uiState.pendingCount} tareas pendientes en ${households.size} espacios",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
                     val personal = households.find { it.isPersonal }
                     if (personal != null) {
                         item(key = "personal") {
                             HouseholdTaskSection(
                                 household = personal,
-                                onViewAll = { householdId ->
-                                    navigator.push(HouseholdScreen(householdId))
-                                }
+                                onViewAll = { hid -> navigator.push(HouseholdScreen(hid)) }
                             )
                         }
                     }
@@ -175,9 +188,18 @@ class HomeScreen : Screen {
                         items(shared.size, key = { shared[it].id }) { index ->
                             HouseholdTaskSection(
                                 household = shared[index],
-                                onViewAll = { householdId ->
-                                    navigator.push(HouseholdScreen(householdId))
-                                }
+                                onViewAll = { hid -> navigator.push(HouseholdScreen(hid)) }
+                            )
+                        }
+                    }
+
+                    // Mensaje de error si lo hay
+                    if (uiState.error != null) {
+                        item {
+                            Text(
+                                uiState.error!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
                             )
                         }
                     }
