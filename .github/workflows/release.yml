@@ -24,6 +24,8 @@ jobs:
   build-and-publish:
     name: Build AAB & Publish to Play Store
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # Necesario para crear GitHub Release
 
     steps:
       - name: Checkout
