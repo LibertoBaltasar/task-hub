@@ -49,7 +49,7 @@ jobs:
       # ── Preparar keystore de subida ─────────────────────
       - name: Decode upload keystore
         run: |
-          echo "${{ secrets.UPLOAD_KEYSTORE }}" | base64 -d > upload-keystore.jks
+          echo "${{ secrets.UPLOAD_KEYSTORE }}" | base64 -d > composeApp/upload-keystore.jks
         working-directory: ${{ github.workspace }}
 
       # ── Resolver versión ────────────────────────────────
@@ -79,7 +79,7 @@ jobs:
       - name: Build release AAB
         run: |
           ./gradlew :composeApp:bundleRelease \
-            -Pandroid.injected.signing.store.file=upload-keystore.jks \
+            -Pandroid.injected.signing.store.file=${{ github.workspace }}/composeApp/upload-keystore.jks \
             -Pandroid.injected.signing.store.password="${{ secrets.UPLOAD_KEYSTORE_PASSWORD }}" \
             -Pandroid.injected.signing.key.alias="${{ secrets.UPLOAD_KEY_ALIAS }}" \
             -Pandroid.injected.signing.key.password="${{ secrets.UPLOAD_KEY_PASSWORD }}" \
