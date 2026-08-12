@@ -25,7 +25,9 @@ data class HouseholdResponse(
     val name: String,
     val inviteCode: String,
     val createdAt: Long = 0,
-    val updatedAt: Long = 0
+    val updatedAt: Long = 0,
+    /** True si es el espacio "Personal" auto-creado (sin invitaciones). */
+    val isPersonal: Boolean = false
 )
 
 /** Miembro de un hogar. Cada usuario que se une crea un Member doc. */

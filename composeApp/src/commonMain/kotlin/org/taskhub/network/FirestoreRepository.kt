@@ -130,13 +130,14 @@ class FirestoreRepository(
     // ────────────────────────────────────────────────────────
 
     /** Create a household (auto-generated doc ID). Requires auth (write). */
-    suspend fun createHousehold(name: String): HouseholdResponse {
+    suspend fun createHousehold(name: String, isPersonal: Boolean = false): HouseholdResponse {
         val now = Clock.System.now().toEpochMilliseconds()
-        val inviteCode = generateInviteCode()
+        val inviteCode = if (isPersonal) "PERSONAL" else generateInviteCode()
 
         val fields = mapOf(
             "name" to FirestoreValue(stringValue = name),
             "inviteCode" to FirestoreValue(stringValue = inviteCode),
+            "isPersonal" to FirestoreValue(booleanValue = isPersonal),
             "createdAt" to FirestoreValue(integerValue = now.toString()),
             "updatedAt" to FirestoreValue(integerValue = now.toString())
         )
@@ -148,7 +149,7 @@ class FirestoreRepository(
         }.body()
 
         val id = extractDocId(response.name)
-        return HouseholdResponse(id, name, inviteCode, now, now)
+        return HouseholdResponse(id, name, inviteCode, now, now, isPersonal)
     }
 
     /** Get a household by id. Falls back to local cache if offline. */

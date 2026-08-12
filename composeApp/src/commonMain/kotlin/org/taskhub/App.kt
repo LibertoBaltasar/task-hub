@@ -16,13 +16,13 @@ import cafe.adriel.voyager.transitions.SlideTransition
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.taskhub.di.appModule
+import org.taskhub.network.FirestoreRepository
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.AppSettingsState
 import org.taskhub.ui.components.LocalAppSettings
-import org.taskhub.ui.screens.HouseholdListScreen
+import org.taskhub.ui.screens.HomeScreen
 import org.taskhub.ui.screens.SplashScreen
-import org.taskhub.ui.screens.WelcomeScreen
 import org.taskhub.ui.theme.TaskHubTheme
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.ui.theme.Teal600
@@ -89,16 +89,38 @@ fun App() {
         TaskHubTheme(themeType = themeType) {
             CompositionLocalProvider(LocalAppSettings provides appSettings) {
                 val householdStore = koinInject<HouseholdStore>()
+                val repo = koinInject<FirestoreRepository>()
 
                 var initialScreen by remember { mutableStateOf<Screen?>(null) }
 
                 LaunchedEffect(Unit) {
-                    val savedHouseholds = householdStore.getSavedHouseholds()
-                    initialScreen = if (savedHouseholds.isNotEmpty()) {
-                        HouseholdListScreen(savedHouseholds)
-                    } else {
-                        WelcomeScreen()
+                    // ── Auto-crear espacio Personal si no existe ──────
+                    val personalId = householdStore.getPersonalHouseholdId()
+                    if (personalId == null) {
+                        try {
+                            val personal = repo.createHousehold("Personal", isPersonal = true)
+                            householdStore.savePersonalHousehold(personal.id)
+                            householdStore.saveHousehold(
+                                householdId = personal.id,
+                                householdName = "Personal",
+                                inviteCode = "",
+                                isPersonal = true
+                            )
+                        } catch (_: Exception) {
+                            // Sin conexión: crear solo localmente como placeholder
+                            val fallbackId = "personal-offline"
+                            householdStore.savePersonalHousehold(fallbackId)
+                            householdStore.saveHousehold(
+                                householdId = fallbackId,
+                                householdName = "Personal",
+                                inviteCode = "",
+                                isPersonal = true
+                            )
+                        }
                     }
+
+                    // ── Ir siempre a HomeScreen ───────────────────────
+                    initialScreen = HomeScreen()
                 }
 
                 // Surface paints the background behind system bars (edge-to-edge)

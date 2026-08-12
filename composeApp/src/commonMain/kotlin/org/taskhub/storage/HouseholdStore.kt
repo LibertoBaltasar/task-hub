@@ -15,7 +15,9 @@ import kotlinx.serialization.json.Json
 data class SavedHousehold(
     val id: String,
     val name: String,
-    val inviteCode: String
+    val inviteCode: String,
+    /** True si es el espacio "Personal" auto-creado (sin invitaciones). */
+    val isPersonal: Boolean = false
 )
 
 /**
@@ -32,10 +34,20 @@ class HouseholdStore(private val settings: Settings) {
     /**
      * Save a household to local storage (no duplicates; updates if already present).
      */
-    fun saveHousehold(householdId: String, householdName: String, inviteCode: String) {
+    fun saveHousehold(
+        householdId: String,
+        householdName: String,
+        inviteCode: String,
+        isPersonal: Boolean = false
+    ) {
         val current = getSavedHouseholds().toMutableList()
         val existing = current.indexOfFirst { it.id == householdId }
-        val entry = SavedHousehold(id = householdId, name = householdName, inviteCode = inviteCode)
+        val entry = SavedHousehold(
+            id = householdId,
+            name = householdName,
+            inviteCode = inviteCode,
+            isPersonal = isPersonal
+        )
         if (existing >= 0) {
             current[existing] = entry
         } else {
@@ -66,7 +78,26 @@ class HouseholdStore(private val settings: Settings) {
         settings.putString(KEY_SAVED_HOUSEHOLDS, json.encodeToString(current))
     }
 
+    // ── Personal space ─────────────────────────────────────
+
+    /**
+     * Returns the ID of the auto-created "Personal" household, or null if
+     * it hasn't been created yet (first app launch).
+     */
+    fun getPersonalHouseholdId(): String? {
+        return settings.getString(KEY_PERSONAL_HOUSEHOLD_ID, "").ifEmpty { null }
+    }
+
+    /**
+     * Persist the Personal household ID separately so it can be queried
+     * without scanning all households.
+     */
+    fun savePersonalHousehold(id: String) {
+        settings.putString(KEY_PERSONAL_HOUSEHOLD_ID, id)
+    }
+
     companion object {
         private const val KEY_SAVED_HOUSEHOLDS = "taskhub_saved_households"
+        private const val KEY_PERSONAL_HOUSEHOLD_ID = "taskhub_personal_household_id"
     }
 }
