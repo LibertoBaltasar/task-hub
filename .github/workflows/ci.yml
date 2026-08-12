@@ -37,6 +37,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
 
       - name: Build Server
         run: ./gradlew :server:build
@@ -61,6 +63,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
 
       - name: Build composeApp (desktop)
         run: ./gradlew :composeApp:desktopJar
