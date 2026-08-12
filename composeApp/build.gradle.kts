@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.android.application)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.crashlytics)
 }
 
 // ── Release signing (keystore.properties NOT in git) ────────
@@ -112,8 +113,8 @@ android {
         targetSdk = 35
 
         // ── Version — overridable via -P flags for CI/CD ──────
-        versionCode = (project.findProperty("versionCodeOverride") as? String)?.toInt() ?: 100
-        versionName = (project.findProperty("versionNameOverride") as? String) ?: "0.3.0"
+        versionCode = (project.findProperty("versionCodeOverride") as? String)?.toInt() ?: 101
+        versionName = (project.findProperty("versionNameOverride") as? String) ?: "0.3.1"
     }
 
     // ── Release signing ──────────────────────────────────────

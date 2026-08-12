@@ -36,7 +36,7 @@ data class FirestoreDocument(
 
 @Serializable
 data class FirestoreDocumentResponse(
-    val name: String,  // full resource path: projects/.../documents/collection/docId
+    val name: String = "",  // full resource path: projects/.../documents/collection/docId
     val fields: Map<String, FirestoreValue> = emptyMap(),
     val createTime: String? = null,
     val updateTime: String? = null

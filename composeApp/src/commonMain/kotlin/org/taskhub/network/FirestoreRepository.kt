@@ -149,7 +149,10 @@ class FirestoreRepository(
         }.body()
 
         val id = extractDocId(response.name)
-        return HouseholdResponse(id, name, inviteCode, now, now, isPersonal)
+        val household = HouseholdResponse(id, name, inviteCode, now, now, isPersonal)
+        // Cache immediately so getHousehold has it on first load
+        taskCache.cacheHousehold(household)
+        return household
     }
 
     /** Get a household by id. Falls back to local cache if offline. */
@@ -159,7 +162,7 @@ class FirestoreRepository(
                 tryAuthOrApiKey()
             }.body()
 
-            val household = toHouseholdResponse(response)
+            val household = toHouseholdResponse(response, knownId = id)
             taskCache.cacheHousehold(household)
             household
         } catch (e: Exception) {
@@ -1370,13 +1373,23 @@ class FirestoreRepository(
     // ────────────────────────────────────────────────────────
 
     /** Extract the document ID from the full Firestore resource name. */
-    private fun extractDocId(resourceName: String): String =
-        resourceName.substringAfterLast("/")
+    private fun extractDocId(resourceName: String): String {
+        if (resourceName.isBlank()) {
+            throw IllegalStateException(
+                "Firestore response missing document name — " +
+                "the API returned a response without the expected 'name' field. " +
+                "This is a transient Firestore issue; retry the operation."
+            )
+        }
+        return resourceName.substringAfterLast("/")
+    }
 
-    private fun toHouseholdResponse(doc: FirestoreDocumentResponse): HouseholdResponse {
+    private fun toHouseholdResponse(doc: FirestoreDocumentResponse, knownId: String? = null): HouseholdResponse {
         val f = doc.fields
+        val id = if (doc.name.isNotBlank()) extractDocId(doc.name)
+                 else knownId ?: throw IllegalStateException("Firestore document has no name and no known ID was provided")
         return HouseholdResponse(
-            id = extractDocId(doc.name),
+            id = id,
             name = f["name"]?.stringValue ?: "",
             inviteCode = f["inviteCode"]?.stringValue ?: "",
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
@@ -1386,8 +1399,10 @@ class FirestoreRepository(
 
     private fun toMemberResponse(doc: FirestoreDocumentResponse, householdId: String): MemberResponse {
         val f = doc.fields
+        val id = if (doc.name.isNotBlank()) extractDocId(doc.name)
+                 else throw IllegalStateException("Member document missing 'name' field in Firestore response")
         return MemberResponse(
-            id = extractDocId(doc.name),
+            id = id,
             householdId = f["householdId"]?.stringValue ?: householdId,
             displayName = f["displayName"]?.stringValue ?: "",
             avatarUrl = f["avatarUrl"]?.stringValue,
