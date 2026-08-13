@@ -95,7 +95,7 @@ fun App() {
 
                 LaunchedEffect(Unit) {
                     // ── Auto-crear espacio Personal si no existe ──────
-                    val personalId = householdStore.getPersonalHouseholdId()
+                    var personalId = householdStore.getPersonalHouseholdId()
                     if (personalId == null) {
                         try {
                             val personal = repo.createHousehold("Personal", isPersonal = true)
@@ -106,16 +106,27 @@ fun App() {
                                 inviteCode = "",
                                 isPersonal = true
                             )
+                            personalId = personal.id
                         } catch (_: Exception) {
                             // Sin conexión: crear solo localmente como placeholder
-                            val fallbackId = "personal-offline"
-                            householdStore.savePersonalHousehold(fallbackId)
+                            personalId = "personal-offline"
+                            householdStore.savePersonalHousehold(personalId)
                             householdStore.saveHousehold(
-                                householdId = fallbackId,
+                                householdId = personalId,
                                 householdName = "Personal",
                                 inviteCode = "",
                                 isPersonal = true
                             )
+                        }
+                    }
+
+                    // ── Asegurar que el espacio Personal tenga un miembro "Yo" ──
+                    // Para que completar tareas sepa quién las hace (cubre migración).
+                    if (!personalId.isNullOrBlank() && personalId != "personal-offline") {
+                        try {
+                            repo.ensurePersonalMember(personalId)
+                        } catch (_: Exception) {
+                            // No crítico: si falla (offline), se reintenta al reabrir
                         }
                     }
 

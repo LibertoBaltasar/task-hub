@@ -305,6 +305,29 @@ class FirestoreRepository(
             currentStreak = 0, bestStreak = 0, lastStreakDate = 0)
     }
 
+    /**
+     * Asegura que el espacio Personal tenga un miembro "Yo".
+     * Sin él, completar tareas falla con "No se ha identificado al miembro actual".
+     * Idempotente: si ya hay miembros, devuelve el primero sin crear nada.
+     * Cubre también la migración de espacios Personales creados antes de este fix.
+     */
+    suspend fun ensurePersonalMember(householdId: String): String {
+        val members = try {
+            getMembers(householdId)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (members.isNotEmpty()) return members.first().id
+
+        val member = createMember(
+            householdId = householdId,
+            displayName = "Yo",
+            role = "admin",
+            userId = getLocalId()
+        )
+        return member.id
+    }
+
     /** Remove (leave) a member — soft-delete by setting leftAt. Requires auth (write). */
     suspend fun deleteMember(householdId: String, memberId: String): Boolean {
         val now = Clock.System.now().toEpochMilliseconds()

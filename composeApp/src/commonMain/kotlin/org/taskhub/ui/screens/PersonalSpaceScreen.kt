@@ -10,8 +10,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.taskhub.ui.models.MemberScreenModel
+import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.theme.Coral500
 import org.taskhub.ui.theme.Teal500
 import org.taskhub.ui.theme.Teal600
@@ -25,9 +28,8 @@ import org.taskhub.ui.theme.Teal900
  * mismo, no tiene sentido mostrar código de invitación, QR, recompensas,
  * ranking ni gestión de miembros. Solo tareas propias + calendario.
  *
- * Nota: no se carga [org.taskhub.ui.models.HouseholdScreenModel] ni miembros —
- * el espacio Personal se auto-crea en App.kt y sus tareas no dependen de un
- * miembro concreto (memberId = null ⇒ "todas las tareas").
+ * El espacio Personal tiene un único miembro "Yo" (auto-creado en App.kt), de
+ * modo que completar tareas sabe quién las hace (points/rachas/historial).
  */
 data class PersonalSpaceScreen(
     val householdId: String
@@ -36,6 +38,15 @@ data class PersonalSpaceScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val memberModel = koinScreenModel<MemberScreenModel>()
+        val memberState by memberModel.uiState.collectAsState()
+
+        // Cargar el miembro "Yo" para pasarlo a las pantallas de tareas/calendario
+        LaunchedEffect(householdId) {
+            memberModel.loadMembers(householdId)
+        }
+
+        val memberId = (memberState as? MemberUiState.Success)?.members?.firstOrNull()?.id
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -122,7 +133,7 @@ data class PersonalSpaceScreen(
                     // Ver mis tareas (acción principal)
                     item {
                         Button(
-                            onClick = { navigator.push(TaskListScreen(householdId, null)) },
+                            onClick = { navigator.push(TaskListScreen(householdId, memberId)) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = Coral500),
                             shape = MaterialTheme.shapes.large
@@ -138,7 +149,7 @@ data class PersonalSpaceScreen(
                     // Nueva tarea
                     item {
                         Button(
-                            onClick = { navigator.push(CreateTaskScreen(householdId, "")) },
+                            onClick = { navigator.push(CreateTaskScreen(householdId, memberId ?: "")) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = Teal600),
                             shape = MaterialTheme.shapes.large
@@ -154,7 +165,7 @@ data class PersonalSpaceScreen(
                     // Calendario
                     item {
                         Button(
-                            onClick = { navigator.push(CalendarScreen(householdId, null)) },
+                            onClick = { navigator.push(CalendarScreen(householdId, memberId)) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = Teal500),
                             shape = MaterialTheme.shapes.large
