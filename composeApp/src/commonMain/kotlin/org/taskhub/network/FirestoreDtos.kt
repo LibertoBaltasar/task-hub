@@ -100,10 +100,10 @@ data class FirebaseAuthRequest(
 
 @Serializable
 data class FirebaseAuthResponse(
-    val idToken: String,
-    val refreshToken: String,
-    val expiresIn: String,
-    val localId: String
+    val idToken: String? = null,
+    val refreshToken: String? = null,
+    val expiresIn: String? = null,
+    val localId: String? = null
 )
 
 // ── RunQuery response (one element per result) ─────────────

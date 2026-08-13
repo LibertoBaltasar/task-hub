@@ -92,10 +92,20 @@ class FirestoreRepository(
             setBody(FirebaseAuthRequest(returnSecureToken = true))
         }.body()
 
-        bearerToken = response.idToken
-        cachedLocalId = response.localId
+        val idToken = response.idToken
+        val localId = response.localId
+        val expiresIn = response.expiresIn?.toLongOrNull()
+        if (idToken.isNullOrBlank() || localId.isNullOrBlank() || expiresIn == null) {
+            throw IllegalStateException(
+                "Firebase anonymous auth devolvió una respuesta incompleta " +
+                "(sin idToken/localId/expiresIn). Verifica la API key del proyecto."
+            )
+        }
+
+        bearerToken = idToken
+        cachedLocalId = localId
         // expiresIn is in seconds. Refresh 5 minutes before actual expiry.
-        tokenExpiry = now + (response.expiresIn.toLong() * 1000) - 300_000
+        tokenExpiry = now + (expiresIn * 1000) - 300_000
     }
 
     /** Returns the anonymous user's localId after auth. Null if not yet authenticated. */
@@ -1429,6 +1439,6 @@ class FirestoreRepository(
          * TODO: Replace with the real key from your Firebase project,
          *       or inject it via build config / environment.
          */
-        const val DEFAULT_API_KEY = "\u00ABredacted:AIza\u2026\u00BB"
+        const val DEFAULT_API_KEY = "AIzaSyD5Xo11SqvysWRgEFv_91rBjYuFIq93lV8"
     }
 }
