@@ -95,7 +95,11 @@ fun App() {
 
                 LaunchedEffect(Unit) {
                     // ── Auto-crear espacio Personal si no existe ──────
+                    // Fuente primaria: la clave dedicada. Si falla, derivar
+                    // del listado guardado (isPersonal), que es más fiable.
                     var personalId = householdStore.getPersonalHouseholdId()
+                        ?: householdStore.getSavedHouseholds()
+                            .firstOrNull { it.isPersonal }?.id
                     if (personalId == null) {
                         try {
                             val personal = repo.createHousehold("Personal", isPersonal = true)
