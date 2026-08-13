@@ -164,7 +164,7 @@ class WelcomeScreen : Screen {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Button(
-                            onClick = { navigator.push(HouseholdListScreen(savedHouseholds)) },
+                            onClick = { navigator.replaceAll(HomeScreen()) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(56.dp),

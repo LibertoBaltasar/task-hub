@@ -1403,7 +1403,8 @@ class FirestoreRepository(
             name = f["name"]?.stringValue ?: "",
             inviteCode = f["inviteCode"]?.stringValue ?: "",
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
+            updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L,
+            isPersonal = f["isPersonal"]?.booleanValue ?: false
         )
     }
 

@@ -17,9 +17,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.koin.compose.koinInject
 import org.taskhub.network.models.MemberResponse
-import org.taskhub.storage.HouseholdStore
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
@@ -37,7 +35,6 @@ data class HouseholdScreen(val householdId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val householdStore = koinInject<HouseholdStore>()
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val memberModel = koinScreenModel<MemberScreenModel>()
         val notificationModel = koinScreenModel<NotificationScreenModel>()
@@ -88,6 +85,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val inviteCode = when (val hState = householdState) {
             is HouseholdUiState.Success -> hState.household.inviteCode
             else -> ""
+        }
+
+        val isPersonalSpace = when (val hState = householdState) {
+            is HouseholdUiState.Success -> hState.household.isPersonal
+            else -> false
         }
 
         // QR / Share dialog
@@ -193,12 +195,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         householdModel.deleteHousehold(
                             householdId = householdId,
                             onSuccess = {
-                                val updated = householdStore.getSavedHouseholds()
-                                if (updated.isEmpty()) {
-                                    navigator.replaceAll(WelcomeScreen())
-                                } else {
-                                    navigator.replaceAll(HouseholdListScreen(updated))
-                                }
+                                navigator.replaceAll(HomeScreen())
                             },
                             onError = { _ ->
                                 isDeleting = false
@@ -258,14 +255,13 @@ data class HouseholdScreen(val householdId: String) : Screen {
                     ) {
                         TextButton(
                             onClick = {
-                                val updated = householdStore.getSavedHouseholds()
-                                navigator.replaceAll(HouseholdListScreen(updated))
+                                navigator.replaceAll(HomeScreen())
                             },
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = MaterialTheme.colorScheme.onPrimary
                             )
                         ) {
-                            Text("← Hogares")
+                            Text("← Inicio")
                         }
 
                         Spacer(Modifier.weight(1f))
@@ -321,16 +317,18 @@ data class HouseholdScreen(val householdId: String) : Screen {
                             Text("⚙️", style = MaterialTheme.typography.titleLarge)
                         }
 
-                        // Delete button
-                        if (isDeleting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            IconButton(onClick = { showConfirmDialog1 = true }) {
-                                Text("🗑️", style = MaterialTheme.typography.titleLarge)
+                        // Delete button — no para el espacio personal
+                        if (!isPersonalSpace) {
+                            if (isDeleting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                IconButton(onClick = { showConfirmDialog1 = true }) {
+                                    Text("🗑️", style = MaterialTheme.typography.titleLarge)
+                                }
                             }
                         }
                     }
@@ -364,66 +362,70 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     .padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
-                                // Household info card
+                                // Info card — distinto para espacio personal vs hogar
                                 item {
-                                    Card(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { showQrDialog = true },
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = Teal50
-                                        )
-                                    ) {
-                                        Column(
+                                    if (household.isPersonal) {
+                                        PersonalHeroCard()
+                                    } else {
+                                        Card(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(20.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                .clickable { showQrDialog = true },
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = Teal50
+                                            )
                                         ) {
-                                            Text(
-                                                text = "🏠",
-                                                style = MaterialTheme.typography.displaySmall
-                                            )
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(20.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Text(
+                                                    text = "🏠",
+                                                    style = MaterialTheme.typography.displaySmall
+                                                )
 
-                                            Spacer(modifier = Modifier.height(8.dp))
+                                                Spacer(modifier = Modifier.height(8.dp))
 
-                                            Text(
-                                                text = household.name,
-                                                style = MaterialTheme.typography.headlineSmall,
-                                                color = Teal900,
-                                                fontWeight = FontWeight.Bold,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                                Text(
+                                                    text = household.name,
+                                                    style = MaterialTheme.typography.headlineSmall,
+                                                    color = Teal900,
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
 
-                                            Spacer(modifier = Modifier.height(16.dp))
+                                                Spacer(modifier = Modifier.height(16.dp))
 
-                                            Text(
-                                                text = "Código de invitación",
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = Teal700,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                                Text(
+                                                    text = "Código de invitación",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = Teal700,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
 
-                                            Text(
-                                                text = household.inviteCode,
-                                                style = MaterialTheme.typography.headlineMedium,
-                                                color = Teal600,
-                                                fontWeight = FontWeight.Bold,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                                Text(
+                                                    text = household.inviteCode,
+                                                    style = MaterialTheme.typography.headlineMedium,
+                                                    color = Teal600,
+                                                    fontWeight = FontWeight.Bold,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
 
-                                            Spacer(modifier = Modifier.height(4.dp))
+                                                Spacer(modifier = Modifier.height(4.dp))
 
-                                            Text(
-                                                text = "Comparte este código para invitar miembros",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = Teal700,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                                Text(
+                                                    text = "Comparte este código para invitar miembros",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Teal700,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -470,35 +472,39 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
 
-                                // Ranking button
-                                item {
-                                    Button(
-                                        onClick = { navigator.push(RankingScreen(householdId)) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Coral500),
-                                        shape = MaterialTheme.shapes.large
-                                    ) {
-                                        Text(
-                                            text = "🏆 Ranking",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                // Ranking button — solo hogares compartidos
+                                if (!household.isPersonal) {
+                                    item {
+                                        Button(
+                                            onClick = { navigator.push(RankingScreen(householdId)) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Coral500),
+                                            shape = MaterialTheme.shapes.large
+                                        ) {
+                                            Text(
+                                                text = "🏆 Ranking",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
 
-                                // Rewards button
-                                item {
-                                    Button(
-                                        onClick = { navigator.push(RewardListScreen(householdId)) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Teal500),
-                                        shape = MaterialTheme.shapes.large
-                                    ) {
-                                        Text(
-                                            text = "🎁 Recompensas",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                // Rewards button — solo hogares compartidos
+                                if (!household.isPersonal) {
+                                    item {
+                                        Button(
+                                            onClick = { navigator.push(RewardListScreen(householdId)) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                                            shape = MaterialTheme.shapes.large
+                                        ) {
+                                            Text(
+                                                text = "🎁 Recompensas",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
 
@@ -522,93 +528,95 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
 
-                                // Members header
-                                item {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "👥 Miembros",
-                                            style = MaterialTheme.typography.titleLarge,
-                                            color = MaterialTheme.colorScheme.onBackground,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                // Members header — solo hogares compartidos
+                                if (!household.isPersonal) {
+                                    item {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "👥 Miembros",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                color = MaterialTheme.colorScheme.onBackground,
+                                                fontWeight = FontWeight.Bold
+                                            )
 
-                                        Spacer(Modifier.weight(1f))
+                                            Spacer(Modifier.weight(1f))
 
-                                        when (val mState = memberState) {
-                                            is MemberUiState.Success -> {
-                                                Text(
-                                                    text = "${mState.members.size}",
-                                                    style = MaterialTheme.typography.titleMedium,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
+                                            when (val mState = memberState) {
+                                                is MemberUiState.Success -> {
+                                                    Text(
+                                                        text = "${mState.members.size}",
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
 
-                                            else -> {}
-                                        }
-                                    }
-                                }
-
-                                // Members list
-                                when (val mState = memberState) {
-                                    is MemberUiState.Loading -> {
-                                        item {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(100.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                CircularProgressIndicator(color = Teal600)
+                                                else -> {}
                                             }
                                         }
                                     }
 
-                                    is MemberUiState.Success -> {
-                                        if (mState.members.isEmpty()) {
+                                    // Members list
+                                    when (val mState = memberState) {
+                                        is MemberUiState.Loading -> {
+                                            item {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(100.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    CircularProgressIndicator(color = Teal600)
+                                                }
+                                            }
+                                        }
+
+                                        is MemberUiState.Success -> {
+                                            if (mState.members.isEmpty()) {
+                                                item {
+                                                    Card(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                                        )
+                                                    ) {
+                                                        Text(
+                                                            text = "No hay miembros aún. ¡Invita a alguien!",
+                                                            modifier = Modifier.padding(24.dp),
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                items(mState.members) { member ->
+                                                    MemberCard(member)
+                                                }
+                                            }
+                                        }
+
+                                        is MemberUiState.Error -> {
                                             item {
                                                 Card(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     colors = CardDefaults.cardColors(
-                                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                                        containerColor = MaterialTheme.colorScheme.errorContainer
                                                     )
                                                 ) {
                                                     Text(
-                                                        text = "No hay miembros aún. ¡Invita a alguien!",
-                                                        modifier = Modifier.padding(24.dp),
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        textAlign = TextAlign.Center
+                                                        text = "Error: ${mState.message}",
+                                                        modifier = Modifier.padding(16.dp),
+                                                        color = MaterialTheme.colorScheme.onErrorContainer
                                                     )
                                                 }
                                             }
-                                        } else {
-                                            items(mState.members) { member ->
-                                                MemberCard(member)
-                                            }
                                         }
-                                    }
 
-                                    is MemberUiState.Error -> {
-                                        item {
-                                            Card(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = CardDefaults.cardColors(
-                                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                                )
-                                            ) {
-                                                Text(
-                                                    text = "Error: ${mState.message}",
-                                                    modifier = Modifier.padding(16.dp),
-                                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                                )
-                                            }
-                                        }
+                                        is MemberUiState.Idle -> {}
                                     }
-
-                                    is MemberUiState.Idle -> {}
                                 }
 
                                 // Bottom spacer
@@ -708,6 +716,54 @@ private fun MemberCard(member: MemberResponse) {
                     fontWeight = FontWeight.Bold
                 )
             }
+        }
+    }
+}
+
+/**
+ * Card principal del espacio Personal.
+ * A diferencia de un hogar compartido, no muestra nombre de hogar vacío,
+ * código de invitación ni QR — solo una cabecera limpia.
+ */
+@Composable
+private fun PersonalHeroCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = Teal50
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "👤",
+                style = MaterialTheme.typography.displaySmall
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Mi espacio personal",
+                style = MaterialTheme.typography.headlineSmall,
+                color = Teal900,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Tus tareas y hábitos, sin compartir con nadie",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Teal700,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

@@ -482,7 +482,7 @@ private fun TaskDetailContent(
             item {
                 val completedCount = task.subtasks.count { it.completed }
                 Text(
-                    text = "✅ Subtareas ($completedCount/${task.subtasks.size})",
+                    text = "✅ Checklist ($completedCount/${task.subtasks.size})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Teal700

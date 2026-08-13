@@ -227,6 +227,79 @@ data class CreateTaskScreen(
                         )
                     }
 
+                    // ── Checklist ──
+                    item {
+                        Text(
+                            text = "✅ Checklist",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Teal700
+                        )
+                    }
+
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = subtaskText,
+                                onValueChange = { subtaskText = it },
+                                label = { Text("Añadir ítem") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            Button(
+                                onClick = {
+                                    val text = subtaskText.trim()
+                                    if (text.isNotBlank()) {
+                                        val id = kotlin.random.Random.nextLong().toString(36)
+                                        subtasks = subtasks + Subtask(id = id, text = text, completed = false)
+                                        subtaskText = ""
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                            ) {
+                                Text("+")
+                            }
+                        }
+                    }
+
+                    if (subtasks.isNotEmpty()) {
+                        items(subtasks) { st ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = st.completed,
+                                    onCheckedChange = { checked ->
+                                        subtasks = subtasks.map {
+                                            if (it.id == st.id) it.copy(completed = checked) else it
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(checkedColor = Teal600)
+                                )
+                                Text(
+                                    text = st.text,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(start = 4.dp),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                TextButton(
+                                    onClick = { subtasks = subtasks.filter { it.id != st.id } },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    )
+                                ) {
+                                    Text("✕")
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         OutlinedTextField(
                             value = description,
@@ -420,87 +493,21 @@ data class CreateTaskScreen(
                         }
                     }
 
-                    // ── Subtasks ──
-                    item {
-                        Text(
-                            text = "✅ Subtareas",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Teal700
-                        )
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = subtaskText,
-                                onValueChange = { subtaskText = it },
-                                label = { Text("Añadir subtarea") },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true
-                            )
-                            Button(
-                                onClick = {
-                                    val text = subtaskText.trim()
-                                    if (text.isNotBlank()) {
-                                        val id = kotlin.random.Random.nextLong().toString(36)
-                                        subtasks = subtasks + Subtask(id = id, text = text, completed = false)
-                                        subtaskText = ""
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Teal600)
-                            ) {
-                                Text("+")
-                            }
-                        }
-                    }
-
-                    if (subtasks.isNotEmpty()) {
-                        items(subtasks) { st ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = st.completed,
-                                    onCheckedChange = { checked ->
-                                        subtasks = subtasks.map {
-                                            if (it.id == st.id) it.copy(completed = checked) else it
-                                        }
-                                    },
-                                    colors = CheckboxDefaults.colors(checkedColor = Teal600)
-                                )
-                                Text(
-                                    text = st.text,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(start = 4.dp),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                TextButton(
-                                    onClick = { subtasks = subtasks.filter { it.id != st.id } },
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.error
-                                    )
-                                ) {
-                                    Text("✕")
-                                }
-                            }
-                        }
-                    }
-
                     // ── Assignment ──
                     item {
-                        Text(
-                            text = "👥 Asignación",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Teal700
-                        )
+                        Column {
+                            Text(
+                                text = "👥 Asignación",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Teal700
+                            )
+                            Text(
+                                text = "Si no seleccionas a nadie, la tarea se asigna a todos los miembros.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     // Members list

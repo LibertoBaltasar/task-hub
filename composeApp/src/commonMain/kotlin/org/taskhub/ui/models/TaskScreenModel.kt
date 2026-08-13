@@ -15,7 +15,6 @@ import org.taskhub.network.models.CommentResponse
 import org.taskhub.network.models.AssignmentSlot
 import org.taskhub.network.models.Subtask
 import org.taskhub.platform.NotificationScheduler
-import org.taskhub.platform.updateWidgetPendingTasks
 import org.taskhub.platform.DebugFlags
 import kotlinx.datetime.*
 
@@ -69,7 +68,7 @@ import kotlinx.datetime.*
  *   - Esto evita el problema de las instancias huérfanas/duplicadas.
  *
  * Flujo de la app:
- *   1. App.kt → ¿hay households guardados? → HouseholdListScreen o WelcomeScreen
+ *   1. App.kt → HomeScreen (dashboard unificado con espacio Personal + hogares)
  *   2. HouseholdScreen → botón "Ver Tareas" → TaskListScreen
  *   3. TaskListScreen → carga tareas → filtra por PENDING (default) → agrupa por día
  *   4. Al crear/completar tarea → loadTasks() refresca + actualiza widget Android
@@ -202,9 +201,6 @@ class TaskScreenModel(
                 _allTags.value = tagSet.toList().sorted()
 
                 _listState.value = TaskListUiState.Success(tasks, assignments, members)
-
-                // ── Update widget with pending tasks ──
-                updateWidgetWithPendingTasks(tasks)
             } catch (e: Exception) {
                 _isOffline.value = true
                 _listState.value = TaskListUiState.Error(
@@ -276,12 +272,17 @@ class TaskScreenModel(
                     assignmentRotation = assignmentRotation
                 )
 
-                // Auto-assign if members selected
-                if (memberIds.isNotEmpty()) {
+                // Auto-assign: if no specific members selected, assign to ALL members
+                val membersToAssign = if (memberIds.isNotEmpty()) {
+                    memberIds
+                } else {
+                    repo.getMembers(householdId).map { it.id }
+                }
+                if (membersToAssign.isNotEmpty()) {
                     repo.assignTask(
                         householdId = householdId,
                         taskId = task.id,
-                        memberIds = memberIds,
+                        memberIds = membersToAssign,
                         mandatory = mandatory,
                         dueDate = dueDate
                     )
@@ -724,74 +725,6 @@ class TaskScreenModel(
         _listState.value = TaskListUiState.Idle
         _detailState.value = TaskDetailUiState.Idle
         _actionState.value = TaskActionState.Idle
-    }
-
-    // ── Widget helper ────────────────────────────────────────
-
-    /**
-     * Compute pending task titles and push them to the platform widget.
-     * Mirrors the isTaskDueToday / isTaskCompletedToday logic from TaskListScreen.
-     */
-    private fun updateWidgetWithPendingTasks(tasks: List<TaskResponse>) {
-        val now = Clock.System.now()
-        val tz = TimeZone.currentSystemDefault()
-        val today = now.toLocalDateTime(tz).date
-        val todayStartEpoch = today.atStartOfDayIn(tz).toEpochMilliseconds()
-
-        val pending = tasks.filter { task ->
-            val due = when (task.frequency) {
-                "daily" -> {
-                    val lcd = task.lastCompletedDate
-                    if (lcd == null) true
-                    else {
-                        val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-                        lcdDate != today
-                    }
-                }
-                "weekly" -> {
-                    val todayDow = today.dayOfWeek.ordinal + 1
-                    if (task.recurrenceDays.isNotEmpty() && todayDow !in task.recurrenceDays) false
-                    else {
-                        val lcd = task.lastCompletedDate
-                        if (lcd == null) true
-                        else {
-                            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-                            lcdDate != today
-                        }
-                    }
-                }
-                "monthly" -> {
-                    val lcd = task.lastCompletedDate
-                    if (lcd == null) true
-                    else {
-                        val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-                        lcdDate.month != today.month || lcdDate.year != today.year
-                    }
-                }
-                "once" -> task.lastCompletedDate == null
-                else -> false
-            }
-            val done = task.lastCompletedDate != null && task.lastCompletedDate >= todayStartEpoch
-            due && !done
-        }
-
-        val text = if (pending.isEmpty()) {
-            "🎉 ¡No hay tareas pendientes!"
-        } else {
-            pending.joinToString("\n") { t ->
-                val freqIcon = when (t.frequency) {
-                    "daily" -> "🔄"
-                    "weekly" -> "📅"
-                    "monthly" -> "📆"
-                    else -> "•"
-                }
-                val overdue = t.dueDate > 0 && t.dueDate < todayStartEpoch
-                val marker = if (overdue) "⚠️ " else ""
-                "$marker$freqIcon ${t.title}"
-            }
-        }
-
-        updateWidgetPendingTasks(text)
     }
 
     // ── Google Calendar ──────────────────────────────────────

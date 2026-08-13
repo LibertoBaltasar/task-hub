@@ -114,7 +114,7 @@ android {
 
         // ── Version — overridable via -P flags for CI/CD ──────
         versionCode = (project.findProperty("versionCodeOverride") as? String)?.toInt() ?: 106
-        versionName = (project.findProperty("versionNameOverride") as? String) ?: "0.3.6"
+        versionName = (project.findProperty("versionNameOverride") as? String) ?: "0.6.0"
     }
 
     // ── Release signing ──────────────────────────────────────

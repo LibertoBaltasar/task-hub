@@ -34,7 +34,7 @@ import org.taskhub.ui.theme.Teal600
  * Pantalla principal de la app — dashboard unificado que muestra las tareas
  * de todos los hogares del usuario (incluyendo el espacio Personal).
  *
- * Reemplaza a [WelcomeScreen] y [HouseholdListScreen] como landing page.
+ * Reemplaza a [WelcomeScreen] como landing page.
  */
 class HomeScreen : Screen {
 
