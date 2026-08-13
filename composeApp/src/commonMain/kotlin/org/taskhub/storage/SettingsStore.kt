@@ -69,6 +69,42 @@ class SettingsStore(private val settings: Settings) {
         }
     }
 
+    // ── Google Auth (login) ──────────────────────────────
+
+    fun isGoogleLoggedIn(): Boolean =
+        settings.getStringOrNull(KEY_GOOGLE_UID) != null
+
+    fun getGoogleUid(): String? =
+        settings.getStringOrNull(KEY_GOOGLE_UID)
+
+    fun getGoogleEmail(): String? =
+        settings.getStringOrNull(KEY_GOOGLE_EMAIL)
+
+    fun setGoogleAuth(uid: String?, email: String?) {
+        if (uid != null) {
+            settings.putString(KEY_GOOGLE_UID, uid)
+        } else {
+            settings.remove(KEY_GOOGLE_UID)
+        }
+        if (email != null) {
+            settings.putString(KEY_GOOGLE_EMAIL, email)
+        } else {
+            settings.remove(KEY_GOOGLE_EMAIL)
+        }
+    }
+
+    fun clearGoogleAuth() {
+        settings.remove(KEY_GOOGLE_UID)
+        settings.remove(KEY_GOOGLE_EMAIL)
+    }
+
+    /** Si el usuario ya vio el prompt de login con Google en el primer arranque. */
+    fun hasSeenGooglePrompt(): Boolean =
+        settings.getBoolean(KEY_GOOGLE_PROMPT_SEEN, false)
+
+    fun setHasSeenGooglePrompt(seen: Boolean) =
+        settings.putBoolean(KEY_GOOGLE_PROMPT_SEEN, seen)
+
     companion object {
         private const val KEY_NOTIFICATIONS = "taskhub_notifications"
         private const val KEY_LANGUAGE = "taskhub_language"
@@ -77,5 +113,8 @@ class SettingsStore(private val settings: Settings) {
         private const val KEY_SOUND_ENABLED = "taskhub_sound_enabled"
         private const val KEY_VIBRATION_ENABLED = "taskhub_vibration_enabled"
         private const val KEY_GOOGLE_ACCESS_TOKEN = "taskhub_google_token"
+        private const val KEY_GOOGLE_UID = "taskhub_google_uid"
+        private const val KEY_GOOGLE_EMAIL = "taskhub_google_email"
+        private const val KEY_GOOGLE_PROMPT_SEEN = "taskhub_google_prompt_seen"
     }
 }

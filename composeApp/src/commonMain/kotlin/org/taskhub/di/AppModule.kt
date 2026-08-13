@@ -11,6 +11,7 @@ import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
 import org.taskhub.storage.ThemeStore
+import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HomeScreenModel
 import org.taskhub.ui.models.MemberScreenModel
@@ -39,12 +40,15 @@ val appModule: Module = module {
     // Google Calendar integration
     single { GoogleCalendarRepository() }
 
+    // Google login / auth manager (compartido entre HomeScreen y Ajustes)
+    single { GoogleAuthManager(repo = get(), settingsStore = get(), householdStore = get()) }
+
     // Platform notification scheduler
     single { createNotificationScheduler() }
 
     // ScreenModels (Voyager — each screen gets its own instance via factory)
     factory { HomeScreenModel(repo = get(), householdStore = get()) }
-    factory { HouseholdScreenModel(repo = get(), householdStore = get()) }
+    factory { HouseholdScreenModel(repo = get(), householdStore = get(), authManager = get()) }
     factory { MemberScreenModel(repo = get()) }
     factory { NotificationScreenModel(repo = get()) }
     factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarRepo = get()) }

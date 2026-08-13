@@ -32,6 +32,9 @@ class MainActivity : ComponentActivity() {
         // Hold a static reference to the app context for platform helpers
         AndroidContextHolder.context = applicationContext
 
+        // Registrar el launcher de Google Sign-In (requisito para el login con Google)
+        GoogleSignInHelper.register(this)
+
         // Set debug mode from BuildConfig (false in release builds)
         DebugFlags.isEnabled = BuildConfig.DEBUG
 

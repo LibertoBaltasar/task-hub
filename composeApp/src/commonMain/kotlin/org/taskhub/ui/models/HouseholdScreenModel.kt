@@ -20,7 +20,8 @@ sealed class HouseholdUiState {
 
 class HouseholdScreenModel(
     private val repo: FirestoreRepository,
-    private val householdStore: HouseholdStore
+    private val householdStore: HouseholdStore,
+    private val authManager: GoogleAuthManager
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<HouseholdUiState>(HouseholdUiState.Idle)
@@ -32,6 +33,7 @@ class HouseholdScreenModel(
             try {
                 val household = repo.createHousehold(name)
                 householdStore.saveHousehold(household.id, household.name, household.inviteCode)
+                authManager.syncHouseholdsToCloud()
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
@@ -56,6 +58,7 @@ class HouseholdScreenModel(
                     householdStore.saveHousehold(household.id, household.name, household.inviteCode)
                     _uiState.value = HouseholdUiState.Success(household)
                 }
+                authManager.syncHouseholdsToCloud()
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: "Código de invitación inválido"
@@ -91,6 +94,7 @@ class HouseholdScreenModel(
             try {
                 repo.deleteHousehold(householdId)
                 householdStore.removeHousehold(householdId)
+                authManager.syncHouseholdsToCloud()
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.message ?: "Error al eliminar el hogar")
@@ -109,6 +113,7 @@ class HouseholdScreenModel(
                     repo.deleteHousehold(id)
                     householdStore.removeHousehold(id)
                 }
+                authManager.syncHouseholdsToCloud()
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.message ?: "Error al eliminar los hogares")

@@ -112,6 +112,92 @@ class FirestoreRepository(
     fun getLocalId(): String? = cachedLocalId
 
     /**
+     * Inicia sesión con Google: intercambia un Google idToken por un token de
+     * Firebase Auth vía accounts:signInWithIdp. Devuelve el UID estable de Google
+     * (localId) + email/displayName, que persisten entre reinstalaciones.
+     */
+    suspend fun signInWithGoogle(googleIdToken: String): GoogleSignInResult {
+        val response: FirebaseAuthResponse = client.post(
+            "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=$apiKey"
+        ) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                SignInWithIdpRequest(
+                    postBody = "id_token=$googleIdToken&providerId=google.com",
+                    requestUri = "http://localhost",
+                    returnSecureToken = true
+                )
+            )
+        }.body()
+
+        val idToken = response.idToken
+        val localId = response.localId
+        val expiresIn = response.expiresIn?.toLongOrNull()
+        if (idToken.isNullOrBlank() || localId.isNullOrBlank() || expiresIn == null) {
+            throw IllegalStateException(
+                "Google sign-in falló: respuesta de Firebase Auth incompleta. " +
+                "Verifica que el proveedor Google esté habilitado en Firebase Auth."
+            )
+        }
+
+        val now = Clock.System.now().toEpochMilliseconds()
+        bearerToken = idToken
+        cachedLocalId = localId
+        tokenExpiry = now + (expiresIn * 1000) - 300_000
+
+        return GoogleSignInResult(
+            uid = localId,
+            email = response.email,
+            displayName = response.displayName
+        )
+    }
+
+    /** Resultado del login con Google. */
+    data class GoogleSignInResult(
+        val uid: String,
+        val email: String? = null,
+        val displayName: String? = null
+    )
+
+    /**
+     * Persiste en Firestore la lista de IDs de hogares a los que pertenece el
+     * usuario (documento users/{uid}). Permite restaurar los hogares tras una
+     * reinstalación cuando el usuario vuelve a iniciar sesión con Google.
+     */
+    suspend fun saveUserHouseholds(uid: String, householdIds: List<String>) {
+        val fields = mapOf(
+            "householdIds" to FirestoreValue(
+                arrayValue = FirestoreArrayValue(
+                    values = householdIds.map { FirestoreValue(stringValue = it) }
+                )
+            ),
+            "updatedAt" to FirestoreValue(integerValue = Clock.System.now().toEpochMilliseconds().toString())
+        )
+        client.patch("$baseUrl/users/$uid") {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /**
+     * Recupera de Firestore los IDs de hogares guardados para el usuario.
+     * Devuelve lista vacía si no existe el documento users/{uid}.
+     */
+    suspend fun loadUserHouseholds(uid: String): List<String> {
+        return try {
+            val response: FirestoreDocumentResponse = client.get("$baseUrl/users/$uid") {
+                tryAuthOrApiKey()
+            }.body()
+            response.fields["householdIds"]?.arrayValue?.values
+                ?.mapNotNull { it.stringValue }
+                ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
      * Quick connectivity check — HEAD request to Firestore REST API.
      * Returns true if the network is reachable, false otherwise.
      */

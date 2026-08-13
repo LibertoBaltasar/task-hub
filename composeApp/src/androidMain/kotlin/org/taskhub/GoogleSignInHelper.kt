@@ -31,9 +31,9 @@ object GoogleSignInHelper {
 
     /**
      * The Web SDK client ID from Firebase Console.
-     * Change this to match your Firebase project's web OAuth client ID.
+     * De google-services.json (oauth_client con client_type 3 = Web).
      */
-    const val WEB_CLIENT_ID = "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com"
+    const val WEB_CLIENT_ID = "278503294422-g54vhkk502dju3fp8ra8hi0h7037b0m0.apps.googleusercontent.com"
 
     private var signInLauncher: ActivityResultLauncher<Intent>? = null
 

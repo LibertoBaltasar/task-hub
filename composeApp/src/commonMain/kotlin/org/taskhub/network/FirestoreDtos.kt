@@ -103,7 +103,17 @@ data class FirebaseAuthResponse(
     val idToken: String? = null,
     val refreshToken: String? = null,
     val expiresIn: String? = null,
-    val localId: String? = null
+    val localId: String? = null,
+    val email: String? = null,
+    val displayName: String? = null,
+    val photoUrl: String? = null
+)
+
+@Serializable
+data class SignInWithIdpRequest(
+    val postBody: String,
+    val requestUri: String = "http://localhost",
+    val returnSecureToken: Boolean = true
 )
 
 // ── RunQuery response (one element per result) ─────────────

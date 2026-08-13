@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.dp
 import org.koin.compose.koinInject
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.models.GoogleAuthManager
+import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.ui.theme.Teal600
 import org.taskhub.platform.saveWidgetThemeToCache
@@ -38,6 +40,8 @@ fun SettingsSheet(
 ) {
     val settingsStore = koinInject<SettingsStore>()
     val appSettings = LocalAppSettings.current
+    val authManager = koinInject<GoogleAuthManager>()
+    val authState by authManager.state.collectAsState()
 
     var notificationsEnabled by remember {
         mutableStateOf(settingsStore.isNotificationsEnabled())
@@ -62,6 +66,79 @@ fun SettingsSheet(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
         )
+
+        Spacer(Modifier.height(24.dp))
+
+        // ── Cuenta de Google ──────────────────────────────
+        SettingsSection(title = "Cuenta") {
+            when (val state = authState) {
+                is GoogleAuthState.SignedIn -> {
+                    Text(
+                        text = "✅ Conectado como ${state.email ?: "Google"}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Tus datos se guardan en la nube y se recuperan si reinstalas.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { authManager.signOut() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cerrar sesión")
+                    }
+                }
+
+                is GoogleAuthState.SigningIn -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Teal600
+                        )
+                        Text("Conectando con Google...")
+                    }
+                }
+
+                is GoogleAuthState.Error -> {
+                    Text(
+                        text = "❌ ${state.message}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = { authManager.signIn() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Reintentar")
+                    }
+                }
+
+                else -> {
+                    Text(
+                        text = "Sin sesión: tus datos solo se guardan en este dispositivo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { authManager.signIn() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                    ) {
+                        Text("Iniciar sesión con Google")
+                    }
+                }
+            }
+        }
 
         Spacer(Modifier.height(24.dp))
 

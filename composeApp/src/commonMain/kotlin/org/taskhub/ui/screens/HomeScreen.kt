@@ -23,10 +23,13 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
+import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.HouseholdTaskSection
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
+import org.taskhub.ui.models.GoogleAuthManager
+import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.models.HomeScreenModel
 import org.taskhub.ui.theme.Teal600
 
@@ -46,10 +49,18 @@ class HomeScreen : Screen {
         val appSettings = LocalAppSettings.current
         val model = koinScreenModel<HomeScreenModel>()
         val uiState by model.uiState.collectAsState()
+        val settingsStore = koinInject<SettingsStore>()
+        val authManager = koinInject<GoogleAuthManager>()
+        val authState by authManager.state.collectAsState()
 
         var households by remember { mutableStateOf<List<SavedHousehold>>(emptyList()) }
         var showFabMenu by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
+
+        // Prompt de login con Google en el primer arranque (solo si aún no ha iniciado sesión)
+        var showGooglePrompt by remember {
+            mutableStateOf(!settingsStore.hasSeenGooglePrompt() && !settingsStore.isGoogleLoggedIn())
+        }
 
         // Cargar hogares + tareas de todos al entrar
         LaunchedEffect(Unit) {
@@ -78,6 +89,69 @@ class HomeScreen : Screen {
                     )
                 }
             }
+        }
+
+        // Google login prompt (primer arranque)
+        if (showGooglePrompt) {
+            AlertDialog(
+                onDismissRequest = {
+                    showGooglePrompt = false
+                    settingsStore.setHasSeenGooglePrompt(true)
+                },
+                title = { Text("Guarda tus datos con Google") },
+                text = {
+                    Column {
+                        Text(
+                            "Inicia sesión con Google para que tus tareas y hogares se " +
+                                "guarden en la nube. Así no los pierdes si cambias de móvil o reinstalas."
+                        )
+                        if (authState is GoogleAuthState.SigningIn) {
+                            Spacer(Modifier.height(16.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Teal600
+                                )
+                                Text("Conectando con Google...")
+                            }
+                        }
+                        if (authState is GoogleAuthState.Error) {
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = "❌ ${(authState as GoogleAuthState.Error).message}",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            settingsStore.setHasSeenGooglePrompt(true)
+                            showGooglePrompt = false
+                            authManager.signIn()
+                        },
+                        enabled = authState !is GoogleAuthState.SigningIn,
+                        colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                    ) {
+                        Text("Iniciar sesión con Google")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showGooglePrompt = false
+                            settingsStore.setHasSeenGooglePrompt(true)
+                        }
+                    ) {
+                        Text("Ahora no")
+                    }
+                }
+            )
         }
 
         Scaffold(
