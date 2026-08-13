@@ -170,7 +170,7 @@ class HomeScreen : Screen {
                         item(key = "personal") {
                             HouseholdTaskSection(
                                 household = personal,
-                                onViewAll = { hid -> navigator.push(HouseholdScreen(hid)) }
+                                onViewAll = { hid -> navigator.push(PersonalSpaceScreen(hid)) }
                             )
                         }
                     }
