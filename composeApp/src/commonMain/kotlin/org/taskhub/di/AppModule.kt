@@ -35,7 +35,7 @@ val appModule: Module = module {
     single { ThemeStore(settings = get()) }
 
     // Network — talks directly to Firestore REST API
-    single { FirestoreRepository(taskCache = get()) }
+    single { FirestoreRepository(taskCache = get(), settingsStore = get()) }
 
     // Google Calendar integration
     single { GoogleCalendarRepository() }

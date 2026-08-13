@@ -93,9 +93,22 @@ class SettingsStore(private val settings: Settings) {
         }
     }
 
+    /** Refresh token de Firebase del login Google (para restaurar la sesión). */
+    fun getGoogleRefreshToken(): String? =
+        settings.getStringOrNull(KEY_GOOGLE_REFRESH_TOKEN)
+
+    fun setGoogleRefreshToken(token: String?) {
+        if (token != null) {
+            settings.putString(KEY_GOOGLE_REFRESH_TOKEN, token)
+        } else {
+            settings.remove(KEY_GOOGLE_REFRESH_TOKEN)
+        }
+    }
+
     fun clearGoogleAuth() {
         settings.remove(KEY_GOOGLE_UID)
         settings.remove(KEY_GOOGLE_EMAIL)
+        settings.remove(KEY_GOOGLE_REFRESH_TOKEN)
     }
 
     /** Si el usuario ya vio el prompt de login con Google en el primer arranque. */
@@ -104,6 +117,29 @@ class SettingsStore(private val settings: Settings) {
 
     fun setHasSeenGooglePrompt(seen: Boolean) =
         settings.putBoolean(KEY_GOOGLE_PROMPT_SEEN, seen)
+
+    // ── Auth anónima persistente ─────────────────────────
+    //
+    // Firebase Auth anónimo genera un UID nuevo en cada signUp. Para que el
+    // usuario anónimo conserve SU identidad (y sus datos) entre reinicios y
+    // reinstalaciones, guardamos el refresh token del usuario anónimo. Con él
+    // se renueva el idToken sin crear una identidad nueva (mismo UID).
+
+    fun getAnonymousRefreshToken(): String? =
+        settings.getStringOrNull(KEY_ANON_REFRESH_TOKEN)
+
+    fun getAnonymousUid(): String? =
+        settings.getStringOrNull(KEY_ANON_UID)
+
+    fun saveAnonymousAuth(refreshToken: String, uid: String) {
+        settings.putString(KEY_ANON_REFRESH_TOKEN, refreshToken)
+        settings.putString(KEY_ANON_UID, uid)
+    }
+
+    fun clearAnonymousAuth() {
+        settings.remove(KEY_ANON_REFRESH_TOKEN)
+        settings.remove(KEY_ANON_UID)
+    }
 
     companion object {
         private const val KEY_NOTIFICATIONS = "taskhub_notifications"
@@ -115,6 +151,9 @@ class SettingsStore(private val settings: Settings) {
         private const val KEY_GOOGLE_ACCESS_TOKEN = "taskhub_google_token"
         private const val KEY_GOOGLE_UID = "taskhub_google_uid"
         private const val KEY_GOOGLE_EMAIL = "taskhub_google_email"
+        private const val KEY_GOOGLE_REFRESH_TOKEN = "taskhub_google_refresh_token"
         private const val KEY_GOOGLE_PROMPT_SEEN = "taskhub_google_prompt_seen"
+        private const val KEY_ANON_REFRESH_TOKEN = "taskhub_anon_refresh_token"
+        private const val KEY_ANON_UID = "taskhub_anon_uid"
     }
 }

@@ -1,8 +1,107 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+
+    // ══════════════════════════════════════════════════════════
+    //  Task Hub — Reglas de seguridad (v2)
+    //
+    //  Modelo de acceso:
+    //   - Todo acceso requiere autenticación (request.auth != null).
+    //   - Un usuario puede acceder a un hogar solo si es MIEMBRO
+    //     (existe un documento members/{uid}) o PROPIETARIO (ownerId).
+    //   - Unirse se hace resolviendo invites/{código} y creando el
+    //     documento members/{uid} aportando el código válido.
+    //
+    //  Requisitos de datos (los cumple el cliente):
+    //   - households/{id}.ownerId = UID del creador.
+    //   - members/{uid}  → miembros vinculados a una cuenta (id = UID).
+    //   - members/{auto} → perfiles "hijo/a" sin cuenta (id automático).
+    //   - invites/{código} → { householdId } (mapa código → hogar).
+    // ══════════════════════════════════════════════════════════
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function householdDoc(hid) {
+      return get(/databases/$(database)/documents/households/$(hid));
+    }
+
+    function isOwner(hid) {
+      return signedIn()
+        && request.auth.uid == householdDoc(hid).data.ownerId;
+    }
+
+    function isMember(hid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/households/$(hid)/members/$(request.auth.uid));
+    }
+
+    // ── users/{uid}: solo el propio usuario ────────────────────
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ── invites/{código}: resolubles por código, nunca listables ──
+    match /invites/{code} {
+      // get por id: el código actúa como secreto compartido fuera de banda
+      allow get: if signedIn();
+      allow list: if false;
+      // crear/borrar: solo el propietario del hogar referenciado
+      allow create: if signedIn()
+        && request.auth.uid == householdDoc(request.resource.data.householdId).data.ownerId;
+      allow delete: if signedIn()
+        && request.auth.uid == householdDoc(resource.data.householdId).data.ownerId;
+    }
+
+    // ── households/{hid}: metadatos (name, inviteCode, ownerId…) ──
+    match /households/{hid} {
+      // get por id: necesario para unirse (tras resolver el código)
+      // y para leer tu propio hogar. El ID es aleatorio → no enumerable.
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(hid);
+    }
+
+    // ── members/{mid} ──────────────────────────────────────────
+    match /households/{hid}/members/{mid} {
+      allow read: if isMember(hid) || isOwner(hid);
+      allow create: if signedIn() && (
+          isOwner(hid)
+          || isMember(hid)
+          // auto-alta: el UID que se crea aporta el código de invitación válido
+          || (request.auth.uid == mid
+              && request.resource.data.inviteCode == householdDoc(hid).data.inviteCode)
+        );
+      allow update, delete: if isMember(hid) || isOwner(hid);
+    }
+
+    // ── Contenido del hogar: solo miembros/propietario ─────────
+    match /households/{hid}/tasks/{tid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
+    }
+    match /households/{hid}/tasks/{tid}/assignments/{aid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
+    }
+    match /households/{hid}/tasks/{tid}/comments/{cid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
+    }
+    match /households/{hid}/taskHistory/{thid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
+    }
+    match /households/{hid}/notifications/{nid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
+    }
+    match /households/{hid}/rewards/{rid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
+    }
+    match /households/{hid}/rewardRedemptions/{rrid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
+    }
+    match /households/{hid}/members/{mid}/achievements/{achid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
     }
   }
 }

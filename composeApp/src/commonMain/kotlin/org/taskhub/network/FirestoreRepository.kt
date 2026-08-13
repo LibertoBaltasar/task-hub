@@ -5,6 +5,7 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.request.forms.FormDataContent
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Clock
@@ -28,6 +29,7 @@ import org.taskhub.network.models.NotificationResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.network.models.RewardRedemption
 import org.taskhub.network.models.Subtask
+import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
 import kotlin.random.Random
 
@@ -44,10 +46,12 @@ import kotlin.random.Random
 class FirestoreRepository(
     private val projectId: String = "task-hub-62f98",
     private val apiKey: String = DEFAULT_API_KEY,
-    private val taskCache: TaskCache
+    private val taskCache: TaskCache,
+    private val settingsStore: SettingsStore
 ) {
     private val baseUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
     private val authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
+    private val secureTokenUrl = "https://securetoken.googleapis.com/v1/token"
 
     // ── Auth state (in-memory, regenerated on app restart — fine for anonymous) ──
     @Volatile
@@ -87,6 +91,39 @@ class FirestoreRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         if (bearerToken != null && now < tokenExpiry) return
 
+        // 1) Restaurar sesión de Google si existe (UID estable del login Google).
+        val googleRefresh = settingsStore.getGoogleRefreshToken()
+        if (settingsStore.getGoogleUid() != null && googleRefresh != null) {
+            try {
+                val refreshed = refreshFirebaseToken(googleRefresh)
+                bearerToken = refreshed.idToken
+                cachedLocalId = refreshed.userId
+                tokenExpiry = refreshed.tokenExpiry
+                settingsStore.setGoogleRefreshToken(refreshed.refreshToken ?: googleRefresh)
+                return
+            } catch (_: Exception) {
+                // Sesión de Google caducada → cae al flujo anónimo.
+                settingsStore.clearGoogleAuth()
+            }
+        }
+
+        // 2) Restaurar la identidad anónima persistida (mismo UID entre reinicios).
+        val savedRefresh = settingsStore.getAnonymousRefreshToken()
+        if (savedRefresh != null) {
+            try {
+                val refreshed = refreshFirebaseToken(savedRefresh)
+                bearerToken = refreshed.idToken
+                cachedLocalId = refreshed.userId
+                tokenExpiry = refreshed.tokenExpiry
+                settingsStore.saveAnonymousAuth(refreshed.refreshToken ?: savedRefresh, refreshed.userId)
+                return
+            } catch (_: Exception) {
+                // Token caducado/revocado → alta anónima nueva.
+                settingsStore.clearAnonymousAuth()
+            }
+        }
+
+        // 3) Alta anónima nueva (sin email/password) y persistir el refresh token.
         val response: FirebaseAuthResponse = client.post("$authUrl?key=$apiKey") {
             contentType(ContentType.Application.Json)
             setBody(FirebaseAuthRequest(returnSecureToken = true))
@@ -95,10 +132,11 @@ class FirestoreRepository(
         val idToken = response.idToken
         val localId = response.localId
         val expiresIn = response.expiresIn?.toLongOrNull()
-        if (idToken.isNullOrBlank() || localId.isNullOrBlank() || expiresIn == null) {
+        val refreshToken = response.refreshToken
+        if (idToken.isNullOrBlank() || localId.isNullOrBlank() || expiresIn == null || refreshToken.isNullOrBlank()) {
             throw IllegalStateException(
                 "Firebase anonymous auth devolvió una respuesta incompleta " +
-                "(sin idToken/localId/expiresIn). Verifica la API key del proyecto."
+                "(sin idToken/localId/expiresIn/refreshToken). Verifica la API key del proyecto."
             )
         }
 
@@ -106,10 +144,56 @@ class FirestoreRepository(
         cachedLocalId = localId
         // expiresIn is in seconds. Refresh 5 minutes before actual expiry.
         tokenExpiry = now + (expiresIn * 1000) - 300_000
+        settingsStore.saveAnonymousAuth(refreshToken, localId)
     }
 
-    /** Returns the anonymous user's localId after auth. Null if not yet authenticated. */
-    fun getLocalId(): String? = cachedLocalId
+    /**
+     * Renueva un idToken de Firebase Auth usando su refresh token, sin crear una
+     * identidad nueva. Devuelve el MISMO UID (user_id), de modo que el usuario
+     * (anónimo o de Google) conserva sus datos entre reinicios y reinstalaciones.
+     *
+     * Endpoint: POST https://securetoken.googleapis.com/v1/token?key=API_KEY
+     * Body (form-urlencoded): grant_type=refresh_token&refresh_token=...
+     */
+    private suspend fun refreshFirebaseToken(refreshToken: String): RefreshedAuth {
+        val response: TokenRefreshResponse = client.post("$secureTokenUrl?key=$apiKey") {
+            contentType(ContentType.Application.FormUrlEncoded)
+            setBody(FormDataContent(Parameters.build {
+                append("grant_type", "refresh_token")
+                append("refresh_token", refreshToken)
+            }))
+        }.body()
+
+        val idToken = response.id_token
+        val userId = response.user_id
+        val expiresIn = response.expires_in?.toLongOrNull()
+        if (idToken.isNullOrBlank() || userId.isNullOrBlank() || expiresIn == null) {
+            throw IllegalStateException("Renovación del token de Firebase falló (respuesta incompleta)")
+        }
+
+        val now = Clock.System.now().toEpochMilliseconds()
+        return RefreshedAuth(
+            idToken = idToken,
+            userId = userId,
+            tokenExpiry = now + (expiresIn * 1000) - 300_000,
+            refreshToken = response.refresh_token
+        )
+    }
+
+    private data class RefreshedAuth(
+        val idToken: String,
+        val userId: String,
+        val tokenExpiry: Long,
+        val refreshToken: String? = null
+    )
+
+    /**
+     * Devuelve el UID del usuario actual (anónimo o Google). Cae al UID persistido
+     * si aún no se ha autenticado en esta sesión, para que esté disponible antes
+     * de la primera llamada de red (p.ej. al crear el miembro "Yo" del Personal).
+     */
+    fun getLocalId(): String? =
+        cachedLocalId ?: settingsStore.getGoogleUid() ?: settingsStore.getAnonymousUid()
 
     /**
      * Inicia sesión con Google: intercambia un Google idToken por un token de
@@ -144,6 +228,12 @@ class FirestoreRepository(
         bearerToken = idToken
         cachedLocalId = localId
         tokenExpiry = now + (expiresIn * 1000) - 300_000
+
+        // Persistir la sesión de Google para restaurarla en próximos arranques
+        // (el refresh token permite renovar el idToken sin re-login).
+        settingsStore.setGoogleRefreshToken(response.refreshToken)
+        // La identidad de Google sustituye a la anónima.
+        settingsStore.clearAnonymousAuth()
 
         return GoogleSignInResult(
             uid = localId,
@@ -227,13 +317,16 @@ class FirestoreRepository(
 
     /** Create a household (auto-generated doc ID). Requires auth (write). */
     suspend fun createHousehold(name: String, isPersonal: Boolean = false): HouseholdResponse {
+        ensureAuth()
         val now = Clock.System.now().toEpochMilliseconds()
         val inviteCode = if (isPersonal) "PERSONAL" else generateInviteCode()
+        val ownerId = getLocalId() ?: throw IllegalStateException("No autenticado")
 
         val fields = mapOf(
             "name" to FirestoreValue(stringValue = name),
             "inviteCode" to FirestoreValue(stringValue = inviteCode),
             "isPersonal" to FirestoreValue(booleanValue = isPersonal),
+            "ownerId" to FirestoreValue(stringValue = ownerId),
             "createdAt" to FirestoreValue(integerValue = now.toString()),
             "updatedAt" to FirestoreValue(integerValue = now.toString())
         )
@@ -245,10 +338,35 @@ class FirestoreRepository(
         }.body()
 
         val id = extractDocId(response.name)
+
+        // Publicar el mapa código → hogar para poder unirse sin listar hogares.
+        if (!isPersonal) {
+            try {
+                createInvite(inviteCode, id)
+            } catch (_: Exception) {
+                // No crítico: sin invite, otros no pueden unirse por código.
+            }
+        }
+
         val household = HouseholdResponse(id, name, inviteCode, now, now, isPersonal)
         // Cache immediately so getHousehold has it on first load
         taskCache.cacheHousehold(household)
         return household
+    }
+
+    /**
+     * Escribe invites/{code} → { householdId }. Las reglas de Firestore permiten
+     * resolverlo por código (get) pero no listar la colección, de modo que el
+     * código actúa como secreto compartido fuera de banda.
+     */
+    private suspend fun createInvite(code: String, householdId: String) {
+        val fields = mapOf("householdId" to FirestoreValue(stringValue = householdId))
+        client.post("$baseUrl/invites") {
+            withAuth()
+            parameter("documentId", code)
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
     }
 
     /** Get a household by id. Falls back to local cache if offline. */
@@ -325,32 +443,18 @@ class FirestoreRepository(
         return false
     }
 
-    /** Find a household by invite code (query). Falls back to API key for reads. */
+    /** Find a household by invite code. Uses the invites/{code} map (no list). */
     suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
-        val query = RunQueryRequest(
-            structuredQuery = StructuredQuery(
-                from = listOf(CollectionSelector("households")),
-                where = Filter(
-                    fieldFilter = FieldFilter(
-                        field = FieldReference("inviteCode"),
-                        op = "EQUAL",
-                        value = FirestoreValue(stringValue = inviteCode)
-                    )
-                ),
-                limit = 1
-            )
-        )
-
-        val items: List<RunQueryResponseItem> = client.post("$baseUrl:runQuery") {
+        // 1) Resolver código → householdId vía invites/{code}.
+        val inviteResponse: FirestoreDocumentResponse = client.get("$baseUrl/invites/$inviteCode") {
             tryAuthOrApiKey()
-            contentType(ContentType.Application.Json)
-            setBody(query)
         }.body()
 
-        val doc = items.firstOrNull()?.document
+        val householdId = inviteResponse.fields["householdId"]?.stringValue
             ?: throw IllegalStateException("Código de invitación inválido")
 
-        return toHouseholdResponse(doc)
+        // 2) Leer el hogar por su ID.
+        return getHousehold(householdId)
     }
 
     // ────────────────────────────────────────────────────────
@@ -394,7 +498,8 @@ class FirestoreRepository(
         displayName: String,
         role: String = "child",
         avatarUrl: String? = null,
-        userId: String? = null
+        userId: String? = null,
+        inviteCode: String? = null
     ): MemberResponse {
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -418,15 +523,34 @@ class FirestoreRepository(
         } else {
             fields["userId"] = FirestoreValue(nullValue = "NULL_VALUE")
         }
+        // Solo se incluye al auto-unirse: las reglas validan este código
+        // contra el inviteCode del hogar para autorizar la creación.
+        if (inviteCode != null) {
+            fields["inviteCode"] = FirestoreValue(stringValue = inviteCode)
+        }
 
-        val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/members") {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
+        val response: FirestoreDocumentResponse =
+            if (userId != null) {
+                // Miembro vinculado a una cuenta → documento keyed por su UID,
+                // para que las reglas puedan verificar membresía con exists().
+                client.post("$baseUrl/households/$householdId/members") {
+                    withAuth()
+                    parameter("documentId", userId)
+                    contentType(ContentType.Application.Json)
+                    setBody(FirestoreDocument(fields))
+                }.body()
+            } else {
+                // Perfil "hijo/a" sin cuenta → ID automático.
+                client.post("$baseUrl/households/$householdId/members") {
+                    withAuth()
+                    contentType(ContentType.Application.Json)
+                    setBody(FirestoreDocument(fields))
+                }.body()
+            }
 
         val id = extractDocId(response.name)
         return MemberResponse(id, householdId, displayName, avatarUrl, role, 0, now,
+            userId = userId,
             currentStreak = 0, bestStreak = 0, lastStreakDate = 0)
     }
 
@@ -443,6 +567,9 @@ class FirestoreRepository(
      * miembro actual", sin importar cómo se haya navegado hasta la tarea.
      */
     suspend fun resolveCurrentMember(householdId: String): String {
+        // Asegura autenticación para que getLocalId() devuelva el UID real
+        // (persistido) y no null en el primer arranque.
+        ensureAuth()
         val localId = getLocalId()
         val members = try {
             getMembers(householdId)

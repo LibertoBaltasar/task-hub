@@ -62,11 +62,11 @@ class MemberScreenModel(
         }
     }
 
-    fun addMember(householdId: String, displayName: String, role: String, userId: String? = null) {
+    fun addMember(householdId: String, displayName: String, role: String, userId: String? = null, inviteCode: String? = null) {
         screenModelScope.launch {
             _uiState.value = MemberUiState.Loading
             try {
-                val member = repo.createMember(householdId, displayName, role, userId = userId)
+                val member = repo.createMember(householdId, displayName, role, userId = userId, inviteCode = inviteCode)
                 _lastCreatedMember.value = member
                 // Reload the full member list
                 val members = repo.getMembers(householdId)

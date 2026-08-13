@@ -116,6 +116,15 @@ data class SignInWithIdpRequest(
     val returnSecureToken: Boolean = true
 )
 
+/** Respuesta del endpoint securetoken.googleapis.com/v1/token (refresh token). */
+@Serializable
+data class TokenRefreshResponse(
+    val id_token: String? = null,
+    val user_id: String? = null,
+    val expires_in: String? = null,
+    val refresh_token: String? = null
+)
+
 // ── RunQuery response (one element per result) ─────────────
 
 @Serializable

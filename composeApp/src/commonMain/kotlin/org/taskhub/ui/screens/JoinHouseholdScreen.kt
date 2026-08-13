@@ -238,7 +238,7 @@ class JoinHouseholdScreen : Screen {
                         onClick = {
                             focusManager.clearFocus()
                             val userId = householdModel.getLocalId()
-                            memberModel.addMember(joinedHouseholdId!!, displayName.trim(), role, userId = userId)
+                            memberModel.addMember(joinedHouseholdId!!, displayName.trim(), role, userId = userId, inviteCode = inviteCode.trim())
                         },
                         modifier = Modifier
                             .fillMaxWidth()
