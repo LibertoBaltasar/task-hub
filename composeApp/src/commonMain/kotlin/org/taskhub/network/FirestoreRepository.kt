@@ -286,6 +286,45 @@ class FirestoreRepository(
         }
     }
 
+    /**
+     * Desvincula al usuario actual de un hogar: borra (DELETE real) los miembros
+     * cuyo [currentUserId] coincide y, si no queda ningún miembro, elimina el
+     * hogar completo de la base de datos.
+     *
+     * Devuelve true si el hogar se eliminó por completo (no quedaban miembros).
+     * Si [currentUserId] es null (usuario anónimo sin auth aún), no borra miembros
+     * pero sí comprueba si el hogar queda vacío.
+     */
+    suspend fun leaveHousehold(householdId: String, currentUserId: String?): Boolean {
+        if (currentUserId != null) {
+            val members = try {
+                getMembers(householdId)
+            } catch (_: Exception) {
+                emptyList()
+            }
+            members.filter { it.userId == currentUserId }.forEach { member ->
+                try {
+                    client.delete("$baseUrl/households/$householdId/members/${member.id}") {
+                        withAuth()
+                    }
+                } catch (_: Exception) {
+                    // No crítico: si el doc ya no existe, seguimos.
+                }
+            }
+        }
+
+        val remaining = try {
+            getMembers(householdId)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        if (remaining.isEmpty()) {
+            deleteHousehold(householdId)
+            return true
+        }
+        return false
+    }
+
     /** Find a household by invite code (query). Falls back to API key for reads. */
     suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
         val query = RunQueryRequest(

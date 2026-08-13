@@ -121,5 +121,22 @@ class HouseholdScreenModel(
         }
     }
 
+    fun leaveHousehold(
+        householdId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        screenModelScope.launch {
+            try {
+                repo.leaveHousehold(householdId, authManager.currentUserId())
+                householdStore.removeHousehold(householdId)
+                authManager.syncHouseholdsToCloud()
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.message ?: "Error al salir del hogar")
+            }
+        }
+    }
+
     fun getLocalId(): String? = repo.getLocalId()
 }

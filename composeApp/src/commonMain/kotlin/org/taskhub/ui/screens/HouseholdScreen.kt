@@ -47,6 +47,10 @@ data class HouseholdScreen(val householdId: String) : Screen {
         var showConfirmDialog2 by remember { mutableStateOf(false) }
         var isDeleting by remember { mutableStateOf(false) }
 
+        // Leave (desvincularse) dialog state
+        var showLeaveDialog by remember { mutableStateOf(false) }
+        var isLeaving by remember { mutableStateOf(false) }
+
         // QR / Share dialog state
         var showQrDialog by remember { mutableStateOf(false) }
 
@@ -208,6 +212,42 @@ data class HouseholdScreen(val householdId: String) : Screen {
             )
         }
 
+        if (showLeaveDialog) {
+            AlertDialog(
+                onDismissRequest = { showLeaveDialog = false },
+                title = { Text("Salir del hogar") },
+                text = {
+                    Text(
+                        "¿Desvincularte de '$householdName'? Dejarás de verlo en tu " +
+                            "dispositivo. Si eres el último miembro, el hogar se eliminará."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showLeaveDialog = false
+                        isLeaving = true
+
+                        householdModel.leaveHousehold(
+                            householdId = householdId,
+                            onSuccess = {
+                                navigator.replaceAll(HomeScreen())
+                            },
+                            onError = { _ ->
+                                isLeaving = false
+                            }
+                        )
+                    }) {
+                        Text("Salir", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLeaveDialog = false }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
         // ── Settings dialog ──
         if (showSettings) {
             Dialog(
@@ -313,7 +353,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         }
 
                         // Delete button
-                        if (isDeleting) {
+                        if (isDeleting || isLeaving) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 color = MaterialTheme.colorScheme.onPrimary,
@@ -327,7 +367,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                     }
                 }
 
-                if (isDeleting) {
+                if (isDeleting || isLeaving) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -600,6 +640,21 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
 
                                     is MemberUiState.Idle -> {}
+                                }
+
+                                // Salir (desvincularse) del hogar
+                                item {
+                                    OutlinedButton(
+                                        onClick = { showLeaveDialog = true },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = MaterialTheme.shapes.large
+                                    ) {
+                                        Text(
+                                            text = "🚪 Salir del hogar",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
 
                                 // Bottom spacer

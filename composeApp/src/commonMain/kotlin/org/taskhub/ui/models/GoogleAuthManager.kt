@@ -76,6 +76,13 @@ class GoogleAuthManager(
         _state.value = GoogleAuthState.Anonymous
     }
 
+    /**
+     * ID estable del usuario actual: el UID de Google si hay sesión iniciada,
+     * o el localId anónimo en caso contrario. Sirve para identificar los
+     * miembros creados por este usuario en un hogar (member.userId).
+     */
+    fun currentUserId(): String? = settingsStore.getGoogleUid() ?: repo.getLocalId()
+
     /** Intercambia el idToken de Google por credenciales de Firebase y restaura datos. */
     private suspend fun handleGoogleToken(googleIdToken: String) {
         try {
