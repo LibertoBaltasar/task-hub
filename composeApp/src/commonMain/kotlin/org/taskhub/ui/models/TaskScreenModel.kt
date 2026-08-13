@@ -323,8 +323,12 @@ class TaskScreenModel(
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
+                // Resolución robusta del miembro: si la UI no lo ha establecido
+                // (p.ej. navegación directa al detalle desde Home o Calendario),
+                // se deduce del usuario autenticado en Firestore. Así completar una
+                // tarea en el espacio Personal nunca falla por falta de miembro.
                 val memberId = _currentMemberId.value
-                    ?: throw IllegalStateException("No se ha identificado al miembro actual")
+                    ?: repo.resolveCurrentMember(householdId)
 
                 // Fetch the task to get its points + save previous state for undo
                 val tasks = repo.getTasks(householdId)

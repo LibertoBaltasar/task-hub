@@ -431,27 +431,49 @@ class FirestoreRepository(
     }
 
     /**
-     * Asegura que el espacio Personal tenga un miembro "Yo".
-     * Sin él, completar tareas falla con "No se ha identificado al miembro actual".
-     * Idempotente: si ya hay miembros, devuelve el primero sin crear nada.
-     * Cubre también la migración de espacios Personales creados antes de este fix.
+     * Resuelve el ID del miembro que representa al usuario actual en un hogar.
+     *
+     * Orden de preferencia:
+     *   1. Miembro cuyo [userId] coincide con el usuario autenticado (localId).
+     *   2. El primer miembro existente (espacios Personales legados sin userId,
+     *      u hogares donde el usuario actual aún no tiene userId asignado).
+     *   3. Si no hay ningún miembro, crea uno "Yo" (admin) vinculado al usuario.
+     *
+     * Garantiza que completar tareas nunca falle con "No se ha identificado al
+     * miembro actual", sin importar cómo se haya navegado hasta la tarea.
      */
-    suspend fun ensurePersonalMember(householdId: String): String {
+    suspend fun resolveCurrentMember(householdId: String): String {
+        val localId = getLocalId()
         val members = try {
             getMembers(householdId)
         } catch (_: Exception) {
             emptyList()
         }
+
+        // 1. Miembro vinculado al usuario autenticado actual
+        members.firstOrNull { localId != null && it.userId == localId }?.let { return it.id }
+
+        // 2. Fallback: primer miembro existente
         if (members.isNotEmpty()) return members.first().id
 
-        val member = createMember(
+        // 3. Sin miembros: crear uno "Yo" vinculado al usuario actual
+        return createMember(
             householdId = householdId,
             displayName = "Yo",
             role = "admin",
-            userId = getLocalId()
-        )
-        return member.id
+            userId = localId
+        ).id
     }
+
+    /**
+     * Asegura que el espacio Personal tenga un miembro "Yo".
+     * Sin él, completar tareas falla con "No se ha identificado al miembro actual".
+     * Idempotente: si ya hay miembros, devuelve el primero sin crear nada.
+     * Cubre también la migración de espacios Personales creados antes de este fix.
+     * Delega en [resolveCurrentMember], que además vincula al usuario autenticado.
+     */
+    suspend fun ensurePersonalMember(householdId: String): String =
+        resolveCurrentMember(householdId)
 
     /** Remove (leave) a member — soft-delete by setting leftAt. Requires auth (write). */
     suspend fun deleteMember(householdId: String, memberId: String): Boolean {
