@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -136,7 +138,7 @@ class HomeScreen : Screen {
                             authManager.signIn()
                         },
                         enabled = authState !is GoogleAuthState.SigningIn,
-                        colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text("Iniciar sesión con Google")
                     }
@@ -182,8 +184,7 @@ class HomeScreen : Screen {
                                     navigator.push(CreateHouseholdScreen())
                                     showFabMenu = false
                                 },
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(40.dp)
+                                containerColor = MaterialTheme.colorScheme.secondary
                             ) {
                                 Icon(Icons.Default.Add, "Crear hogar", modifier = Modifier.size(20.dp))
                             }
@@ -193,19 +194,22 @@ class HomeScreen : Screen {
                                     navigator.push(JoinHouseholdScreen())
                                     showFabMenu = false
                                 },
-                                containerColor = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(40.dp)
+                                containerColor = MaterialTheme.colorScheme.tertiary
                             ) {
-                                Icon(Icons.Default.Add, "Unirse a hogar", modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.AddCircle, "Unirse a hogar", modifier = Modifier.size(20.dp))
                             }
                             Spacer(Modifier.height(12.dp))
                         }
                     }
                     FloatingActionButton(
                         onClick = { showFabMenu = !showFabMenu },
-                        containerColor = Teal600
+                        containerColor = MaterialTheme.colorScheme.primary
                     ) {
-                        Icon(Icons.Default.Add, "Nuevo hogar")
+                        if (showFabMenu) {
+                            Icon(Icons.Default.Close, "Cerrar")
+                        } else {
+                            Icon(Icons.Default.Add, "Nuevo hogar")
+                        }
                     }
                 }
             }

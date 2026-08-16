@@ -61,7 +61,7 @@ fun HouseholdTaskSection(
                 Coral500.copy(alpha = 0.06f)
         )
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

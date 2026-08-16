@@ -18,7 +18,9 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.theme.*
+import kotlinx.coroutines.launch
 
 data class RankingScreen(val householdId: String) : Screen {
 
@@ -30,8 +32,10 @@ data class RankingScreen(val householdId: String) : Screen {
         var members by remember { mutableStateOf<List<MemberResponse>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
+        val coroutineScope = rememberCoroutineScope()
 
-        LaunchedEffect(householdId) {
+        // ── Función de carga extraíble para poder reintentar ──
+        suspend fun loadRanking() {
             isLoading = true
             try {
                 val all = repo.getMembers(householdId)
@@ -45,41 +49,20 @@ data class RankingScreen(val householdId: String) : Screen {
             isLoading = false
         }
 
+        LaunchedEffect(householdId) {
+            loadRanking()
+        }
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Volver")
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            text = "🏆 Ranking",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
+                TaskHubTopBar(
+                    title = "Ranking",
+                    onBack = { navigator.pop() }
+                )
 
                 when {
                     isLoading -> {
@@ -98,7 +81,7 @@ data class RankingScreen(val householdId: String) : Screen {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("❌ $errorMessage", color = MaterialTheme.colorScheme.error)
                                 Spacer(Modifier.height(16.dp))
-                                Button(onClick = { /* retry */ }) { Text("Reintentar") }
+                                Button(onClick = { coroutineScope.launch { loadRanking() } }) { Text("Reintentar") }
                             }
                         }
                     }
@@ -167,14 +150,29 @@ private fun RankingRow(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Position
-            Text(
-                text = medalEmoji,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.width(36.dp),
-                textAlign = TextAlign.Center
-            )
+            // Position with text descriptor
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(40.dp)
+            ) {
+                Text(
+                    text = medalEmoji,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = when (position) {
+                        1 -> "1º"
+                        2 -> "2º"
+                        3 -> "3º"
+                        else -> ""
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
 
             Spacer(Modifier.width(12.dp))
 
@@ -202,7 +200,7 @@ private fun RankingRow(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = if (member.role == "admin") "Administrador" else "Miembro",
+                    text = if (member.role == "admin") "Admin" else "Niño/a",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

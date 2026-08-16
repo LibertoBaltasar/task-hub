@@ -14,6 +14,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
@@ -68,27 +69,21 @@ class JoinHouseholdScreen : Screen {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+            Column(modifier = Modifier.fillMaxSize()) {
+                TaskHubTopBar(
+                    title = "Unirse a un hogar",
+                    onBack = { navigator.pop() }
+                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    TextButton(onClick = { navigator.pop() }) {
-                        Text("← Volver")
-                    }
-                    Spacer(Modifier.weight(1f))
-                }
+                    Spacer(modifier = Modifier.height(32.dp))
 
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Step indicator
-                val step = when {
+                    // Step indicator
+                    val step = when {
                     joinedHouseholdId == null -> 1
                     householdState is HouseholdUiState.Success && memberState !is MemberUiState.Success -> 2
                     else -> 1
@@ -265,6 +260,7 @@ class JoinHouseholdScreen : Screen {
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }
+                }
                 }
             }
         }

@@ -132,7 +132,7 @@ fun SettingsSheet(
                     Button(
                         onClick = { authManager.signIn() },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text("Iniciar sesión con Google")
                     }
@@ -325,7 +325,7 @@ fun SettingsSheet(
                 callbacks.onExportCsv()
             },
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = Teal600),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
             shape = MaterialTheme.shapes.large
         ) {
             Text(
@@ -359,7 +359,7 @@ private fun SettingsSection(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            color = Teal600
+            color = MaterialTheme.colorScheme.primary
         )
         Spacer(Modifier.height(8.dp))
         content()

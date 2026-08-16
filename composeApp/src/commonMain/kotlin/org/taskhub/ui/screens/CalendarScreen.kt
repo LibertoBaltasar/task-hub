@@ -28,6 +28,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
 import org.taskhub.network.models.TaskResponse
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
 
@@ -120,11 +121,35 @@ data class CalendarScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // ── Top bar ─────────────────────────────────
-                CalendarTopBar(
-                    mode = mode,
-                    onModeToggle = { mode = if (mode == CalendarMode.WEEK) CalendarMode.MONTH else CalendarMode.WEEK },
-                    anchorDate = anchorDate,
-                    onPrev = {
+                TaskHubTopBar(
+                    title = "Calendario",
+                    onBack = { navigator.pop() },
+                    actions = {
+                        TextButton(
+                            onClick = {
+                                mode = if (mode == CalendarMode.WEEK) CalendarMode.MONTH else CalendarMode.WEEK
+                            },
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(
+                                if (mode == CalendarMode.WEEK) "Mes" else "Semana",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                )
+                // Navigation row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = {
                         anchorDate = when (mode) {
                             CalendarMode.WEEK -> anchorDate.minus(7, DateTimeUnit.DAY)
                             CalendarMode.MONTH -> {
@@ -132,8 +157,25 @@ data class CalendarScreen(
                                 LocalDate(ym.year, ym.month, 1)
                             }
                         }
-                    },
-                    onNext = {
+                    }) {
+                        Text("◀", style = MaterialTheme.typography.titleMedium)
+                    }
+                    Text(
+                        text = when (mode) {
+                            CalendarMode.WEEK -> {
+                                val monday = getMondayOfWeek(anchorDate)
+                                val sunday = monday.plus(6, DateTimeUnit.DAY)
+                                "Semana del ${monday.dayOfMonth} ${spanishMonthAbbr(monday.month)}"
+                            }
+                            CalendarMode.MONTH ->
+                                "${spanishMonthFull(anchorDate.month)} ${anchorDate.year}"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center
+                    )
+                    TextButton(onClick = {
                         anchorDate = when (mode) {
                             CalendarMode.WEEK -> anchorDate.plus(7, DateTimeUnit.DAY)
                             CalendarMode.MONTH -> {
@@ -141,9 +183,10 @@ data class CalendarScreen(
                                 LocalDate(ym.year, ym.month, 1)
                             }
                         }
-                    },
-                    onBack = { navigator.pop() }
-                )
+                    }) {
+                        Text("▶", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
 
                 // ── Loading / Error states ──────────────────
                 when (val state = listState) {
@@ -184,102 +227,6 @@ data class CalendarScreen(
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-// ────────────────────────────────────────────────────────────
-//  Top bar
-// ────────────────────────────────────────────────────────────
-
-@Composable
-private fun CalendarTopBar(
-    mode: CalendarMode,
-    onModeToggle: () -> Unit,
-    anchorDate: LocalDate,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    onBack: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Teal600,
-        shadowElevation = 4.dp
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)) {
-            // Row 1: back + title
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(
-                    onClick = onBack,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Text("← Volver")
-                }
-
-                Spacer(Modifier.weight(1f))
-
-                Text(
-                    text = when (mode) {
-                        CalendarMode.WEEK -> {
-                            val monday = getMondayOfWeek(anchorDate)
-                            val sunday = monday.plus(6, DateTimeUnit.DAY)
-                            "Semana del ${monday.dayOfMonth} ${spanishMonthAbbr(monday.month)}"
-                        }
-                        CalendarMode.MONTH ->
-                            "${spanishMonthFull(anchorDate.month)} ${anchorDate.year}"
-                    },
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(Modifier.weight(1f))
-
-                // Toggle mode
-                TextButton(
-                    onClick = onModeToggle,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Text(
-                        if (mode == CalendarMode.WEEK) "📅 Mes" else "📅 Semana",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                }
-            }
-
-            // Row 2: navigation arrows
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(
-                    onClick = onPrev,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Text("◀", style = MaterialTheme.typography.headlineSmall)
-                }
-
-                Spacer(Modifier.width(32.dp))
-
-                TextButton(
-                    onClick = onNext,
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) {
-                    Text("▶", style = MaterialTheme.typography.headlineSmall)
                 }
             }
         }
@@ -539,7 +486,7 @@ private fun MonthDayCell(
                 if (entries.size > 6) {
                     Text(
                         text = "+",
-                        fontSize = 8.sp,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -561,9 +508,9 @@ private fun TaskChip(entry: DayTaskEntry) {
         else -> Teal500
     }
     val textColor = when {
-        entry.isCompleted -> Color(0xFF2E7D32)
-        entry.isOverdue -> Color(0xFFC62828)
-        else -> Color.White
+        entry.isCompleted -> MaterialTheme.colorScheme.primary
+        entry.isOverdue -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.onPrimary
     }
 
     Surface(
@@ -574,7 +521,7 @@ private fun TaskChip(entry: DayTaskEntry) {
         Text(
             text = entry.task.title,
             modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp),
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+            style = MaterialTheme.typography.labelSmall,
             color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -734,7 +681,7 @@ private fun TaskPopupItem(
                     text = "⭐ ${entry.task.points}",
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelMedium,
-                    color = Teal700,
+                    color = Teal800,
                     fontWeight = FontWeight.Bold
                 )
             }

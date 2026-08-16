@@ -17,6 +17,9 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.ui.components.BadgeTone
+import org.taskhub.ui.components.PointsBadge
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.RewardActionState
 import org.taskhub.ui.theme.*
@@ -60,41 +63,10 @@ data class CreateRewardScreen(val householdId: String) : Screen {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Cancelar")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "Nueva Recompensa",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
-                        // Placeholder for symmetry
-                        Spacer(Modifier.width(72.dp))
-                    }
-                }
+                TaskHubTopBar(
+                    title = "Nueva recompensa",
+                    onBack = { navigator.pop() }
+                )
 
                 // Form
                 Column(
@@ -157,7 +129,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                 items(commonEmojis) { emoji ->
                                     Surface(
                                         modifier = Modifier
-                                            .size(40.dp)
+                                            .size(48.dp)
                                             .clickable {
                                                 selectedIcon = emoji
                                                 showEmojiPicker = false
@@ -319,7 +291,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = isValid && !isCreating,
-                        colors = ButtonDefaults.buttonColors(containerColor = Teal600),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = MaterialTheme.shapes.large,
                         contentPadding = PaddingValues(16.dp)
                     ) {

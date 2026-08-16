@@ -28,12 +28,14 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskHistoryResponse
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.Achievement
 import org.taskhub.ui.models.AchievementChecker
 import org.taskhub.ui.models.TaskScreenModel
@@ -55,8 +57,10 @@ data class StatsScreen(
         var achievements by remember { mutableStateOf<List<Achievement>>(emptyList()) }
         var isLoading by remember { mutableStateOf(true) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
+        val coroutineScope = rememberCoroutineScope()
 
-        LaunchedEffect(householdId, memberId) {
+        // ── Función de carga extraíble para poder reintentar ──
+        suspend fun loadStats() {
             isLoading = true
             try {
                 // Load all data — including taskHistory for accurate stats
@@ -78,41 +82,20 @@ data class StatsScreen(
             isLoading = false
         }
 
+        LaunchedEffect(householdId, memberId) {
+            loadStats()
+        }
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Volver")
-                        }
-                        Spacer(Modifier.weight(1f))
-                        Text(
-                            text = "📊 Estadísticas",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
+                TaskHubTopBar(
+                    title = "Estadísticas",
+                    onBack = { navigator.pop() }
+                )
 
                 when {
                     isLoading -> {
@@ -131,7 +114,7 @@ data class StatsScreen(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("❌ $errorMessage", color = MaterialTheme.colorScheme.error)
                                 Spacer(Modifier.height(16.dp))
-                                Button(onClick = { /* retry */ }) { Text("Reintentar") }
+                                Button(onClick = { coroutineScope.launch { loadStats() } }) { Text("Reintentar") }
                             }
                         }
                     }
@@ -362,7 +345,7 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
                     "$bestStreak días",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Teal700
+                    color = Teal800
                 )
             }
         }
@@ -382,6 +365,7 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
             val maxCount = (data.maxOfOrNull { it.count } ?: 1).coerceAtLeast(1)
             val barColor = Teal500
             val textMeasurer = rememberTextMeasurer()
+            val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
                 val chartWidth = size.width
@@ -407,7 +391,7 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
                     if (dayCount.count > 0) {
                         val textLayout = textMeasurer.measure(
                             "${dayCount.count}",
-                            TextStyle(fontSize = 10.sp, color = Color.DarkGray)
+                            labelTextStyle
                         )
                         drawText(
                             textLayout,
@@ -421,7 +405,7 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
                     // Label
                     val labelLayout = textMeasurer.measure(
                         dayCount.dayLabel,
-                        TextStyle(fontSize = 9.sp, color = Color.Gray)
+                        labelTextStyle
                     )
                     drawText(
                         labelLayout,
@@ -450,6 +434,7 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
             val textMeasurer = rememberTextMeasurer()
             val lineColor = Coral500
             val pointColor = Coral600
+            val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
                 val chartWidth = size.width
@@ -487,7 +472,7 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
                 dailyPoints.forEachIndexed { index, dp ->
                     val labelLayout = textMeasurer.measure(
                         dp.dayLabel,
-                        TextStyle(fontSize = 9.sp, color = Color.Gray)
+                        labelTextStyle
                     )
                     val x = padding + (index.toFloat() / (dailyPoints.size - 1).coerceAtLeast(1)) * usableWidth
                     drawText(

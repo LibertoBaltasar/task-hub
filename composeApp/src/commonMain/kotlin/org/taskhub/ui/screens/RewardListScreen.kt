@@ -5,6 +5,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +20,9 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
+import org.taskhub.ui.components.BadgeTone
+import org.taskhub.ui.components.PointsBadge
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardUiState
@@ -58,51 +63,28 @@ data class RewardListScreen(val householdId: String) : Screen {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Volver")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "🎁 Recompensas",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
+                TaskHubTopBar(
+                    title = "Recompensas",
+                    onBack = { navigator.pop() },
+                    actions = {
                         if (isAdmin) {
                             TextButton(
                                 onClick = {
                                     navigator.push(CreateRewardScreen(householdId))
                                 },
                                 colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                    contentColor = MaterialTheme.colorScheme.primary
                                 )
                             ) {
-                                Text("+", style = MaterialTheme.typography.titleLarge)
+                                Text(
+                                    "+ Nueva",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
-                }
+                )
 
                 when (val rState = rewardState) {
                     is RewardUiState.Loading -> {
@@ -251,18 +233,10 @@ private fun RewardCard(
             Spacer(Modifier.height(12.dp))
 
             // Cost badge
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = Coral500
-            ) {
-                Text(
-                    text = "⭐ ${reward.cost}",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onTertiary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            PointsBadge(
+                text = "⭐ ${reward.cost}",
+                tone = BadgeTone.Coral
+            )
 
             Spacer(Modifier.height(8.dp))
 
@@ -274,7 +248,7 @@ private fun RewardCard(
                 Button(
                     onClick = onRedeem,
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     shape = MaterialTheme.shapes.medium,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {
@@ -288,9 +262,12 @@ private fun RewardCard(
                 if (isAdmin) {
                     IconButton(
                         onClick = { showDeleteConfirm = true },
-                        modifier = Modifier.size(36.dp)
                     ) {
-                        Text("🗑️", style = MaterialTheme.typography.bodyMedium)
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Eliminar recompensa",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }

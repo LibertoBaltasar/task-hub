@@ -16,6 +16,7 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.NotificationResponse
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.models.NotificationUiState
 import org.taskhub.ui.theme.*
@@ -45,41 +46,10 @@ data class NotificationListScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Volver")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "🔔 Notificaciones",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
-                        // Placeholder for spacing
-                        Spacer(modifier = Modifier.width(64.dp))
-                    }
-                }
+                TaskHubTopBar(
+                    title = "Notificaciones",
+                    onBack = { navigator.pop() }
+                )
 
                 // Content
                 when (val s = state) {
@@ -238,7 +208,7 @@ private fun NotificationCard(
                         Text(
                             text = "✓ Marcar como leída",
                             style = MaterialTheme.typography.labelMedium,
-                            color = Teal600
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }

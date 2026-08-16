@@ -17,6 +17,7 @@ import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardActionState
 import org.taskhub.ui.theme.*
+import org.taskhub.ui.components.TaskHubTopBar
 
 data class MemberRewardScreen(
     val householdId: String,
@@ -56,39 +57,10 @@ data class MemberRewardScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Volver")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "Canjear",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-                        Spacer(Modifier.width(72.dp))
-                    }
-                }
+                TaskHubTopBar(
+                    title = "Canjear",
+                    onBack = { navigator.pop() }
+                )
 
                 Column(
                     modifier = Modifier
@@ -148,7 +120,7 @@ data class MemberRewardScreen(
                                 text = "⭐ ${reward.cost}",
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (canAfford) Teal700 else MaterialTheme.colorScheme.error
+                                color = if (canAfford) Teal800 else MaterialTheme.colorScheme.error
                             )
 
                             Spacer(Modifier.height(8.dp))
@@ -169,7 +141,7 @@ data class MemberRewardScreen(
                                 text = "⭐ $memberPoints",
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (canAfford) Teal600 else MaterialTheme.colorScheme.error
+                                color = if (canAfford) Teal800 else MaterialTheme.colorScheme.error
                             )
 
                             if (!canAfford) {
@@ -209,7 +181,7 @@ data class MemberRewardScreen(
                         onClick = { showConfirmDialog = true },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = canAfford && !isRedeeming,
-                        colors = ButtonDefaults.buttonColors(containerColor = Coral500),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
                         shape = MaterialTheme.shapes.large,
                         contentPadding = PaddingValues(16.dp)
                     ) {
@@ -221,7 +193,7 @@ data class MemberRewardScreen(
                             )
                         } else {
                             Text(
-                                text = if (canAfford) "🎁 Canjear Recompensa" else "Puntos insuficientes",
+                                text = if (canAfford) "Canjear Recompensa" else "Puntos insuficientes",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -262,7 +234,7 @@ data class MemberRewardScreen(
                                 pointsSpent = reward.cost
                             )
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Coral500)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
                     ) {
                         Text("Sí, canjear")
                     }

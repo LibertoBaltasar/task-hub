@@ -10,6 +10,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +21,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
@@ -32,6 +33,8 @@ import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.PointsBadge
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.theme.*
@@ -80,13 +83,6 @@ data class TaskListScreen(
             }
         }
 
-        LaunchedEffect(householdId) {
-            model.setCurrentMemberId(memberId)
-            model.loadTasks(householdId)
-        }
-
-        // Reload when returning to screen (lifecycle resume)  
-        // or when action completes
         LaunchedEffect(householdId) {
             model.setCurrentMemberId(memberId)
             model.loadTasks(householdId)
@@ -143,67 +139,26 @@ data class TaskListScreen(
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Volver")
+                TaskHubTopBar(
+                    title = "Tareas",
+                    onBack = { navigator.pop() },
+                    actions = {
+                        IconButton(onClick = { model.loadTasks(householdId) }) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Actualizar")
                         }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "📋 Tareas",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
-                        // Refresh button
-                        TextButton(
-                            onClick = { model.loadTasks(householdId) },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("🔄", style = MaterialTheme.typography.titleLarge)
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Ajustes")
                         }
-
-                        // Settings icon
-                        TextButton(
-                            onClick = { showSettings = true },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("⚙️", style = MaterialTheme.typography.titleLarge)
-                        }
-
                         TextButton(
                             onClick = { navigator.push(CreateTaskScreen(householdId, currentMemberId ?: "")) },
                             colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
+                                contentColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
                             Text("+ Nueva", fontWeight = FontWeight.Bold)
                         }
                     }
-                }
+                )
 
                 // Content
                 // ── Offline banner ──────────────────────────────
@@ -584,8 +539,8 @@ private fun TaskListContent(
             item {
                 Text(
                     text = "DEBUG: ${state.tasks.size} tasks, filter=$filter, groups=${groups.size}, tagFilter=$tagFilter",
-                    fontSize = 10.sp,
-                    color = androidx.compose.ui.graphics.Color.Red,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
@@ -717,7 +672,7 @@ private fun TaskCard(
                         onClick = onComplete,
                         enabled = !isLoading,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Teal600
+                            containerColor = MaterialTheme.colorScheme.primary
                         ),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                     ) {
@@ -766,18 +721,7 @@ private fun TaskCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Points badge
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = if (task.penaltyMode != null) Coral500 else Teal500
-                ) {
-                    Text(
-                        text = "${task.points} pts",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onTertiary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                PointsBadge(text = "${task.points} pts")
 
                 // Frequency badge
                 val freqLabel = when (task.frequency) {
@@ -794,7 +738,7 @@ private fun TaskCard(
                         text = freqLabel,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Teal700
+                        color = Teal800
                     )
                 }
 
@@ -827,7 +771,7 @@ private fun TaskCard(
                     Text(
                         text = "✅ ${formatDeadline(task.lastCompletedDate!!)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Teal600
+                        color = MaterialTheme.colorScheme.primary
                     )
                 } else if (task.dueDate > 0) {
                     val deadlineText = formatDeadline(task.dueDate)
@@ -945,18 +889,7 @@ private fun GroupHeader(
 
             // Overdue badge
             if (isOverdue) {
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = Coral500
-                ) {
-                    Text(
-                        text = "!",
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onTertiary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                PointsBadge(text = "!")
                 Spacer(modifier = Modifier.width(8.dp))
             }
 

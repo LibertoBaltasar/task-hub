@@ -3,6 +3,9 @@ package org.taskhub.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +26,7 @@ import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.models.*
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.theme.*
 
 // ────────────────────────────────────────────────────────────
@@ -96,63 +100,25 @@ data class TaskDetailScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Tareas")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "📋 Detalle",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
-                        TextButton(
+                TaskHubTopBar(
+                    title = "Detalle",
+                    onBack = { navigator.pop() },
+                    actions = {
+                        IconButton(
                             onClick = {
                                 val state = detailState
                                 if (state is TaskDetailUiState.Success) {
                                     navigator.push(EditTaskScreen(householdId, state.task))
                                 }
-                            },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
+                            }
                         ) {
-                            Text("✏️", style = MaterialTheme.typography.titleMedium)
+                            Icon(Icons.Default.Edit, contentDescription = "Editar")
                         }
-
-                        TextButton(
-                            onClick = { showDeleteDialog = true },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("🗑️", style = MaterialTheme.typography.titleMedium)
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar")
                         }
-
-                        Spacer(Modifier.width(16.dp))
                     }
-                }
+                )
 
                 when (val state = detailState) {
                     is TaskDetailUiState.Loading -> {
@@ -322,7 +288,7 @@ private fun TaskDetailContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        InfoBadge(label = "Puntos", value = "${task.points} ⭐", color = Teal500)
+                        InfoBadge(label = "Puntos", value = "${task.points} ⭐", color = MaterialTheme.colorScheme.primary)
                         InfoBadge(
                             label = "Frecuencia",
                             value = when (task.frequency) {
@@ -331,7 +297,7 @@ private fun TaskDetailContent(
                                 "monthly" -> "Mensual"
                                 else -> "Una vez"
                             },
-                            color = Teal500
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -402,7 +368,7 @@ private fun TaskDetailContent(
                             Text(
                                 text = "Tope máximo: -${task.penaltyMax} pts",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Coral500
+                                color = Coral700
                             )
                         }
                     }
@@ -427,7 +393,7 @@ private fun TaskDetailContent(
                     Button(
                         onClick = onCompleteTask,
                         enabled = actionState !is TaskActionState.Loading,
-                        colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         if (actionState is TaskActionState.Loading) {
                             CircularProgressIndicator(
@@ -448,7 +414,7 @@ private fun TaskDetailContent(
                 Text(
                     text = "Completado: ${formatDateTime(task.lastCompletedDate!!)}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Teal500
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -485,7 +451,7 @@ private fun TaskDetailContent(
                     text = "✅ Checklist ($completedCount/${task.subtasks.size})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Teal700
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
             items(task.subtasks) { st ->
@@ -520,7 +486,7 @@ private fun TaskDetailContent(
                 text = "📋 Pendientes (${pendingAssignments.size})",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Teal700
+                color = MaterialTheme.colorScheme.primary
             )
         }
 
@@ -562,7 +528,7 @@ private fun TaskDetailContent(
                     text = "✅ Completadas (${completedAssignments.size})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Teal700
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -587,7 +553,7 @@ private fun TaskDetailContent(
                 text = "💬 Comentarios",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Teal700
+                color = MaterialTheme.colorScheme.primary
             )
         }
 
@@ -771,6 +737,12 @@ private fun AssignmentCard(
                     }
                     Spacer(Modifier.width(8.dp))
                     Text(
+                        text = if (member?.role == "admin") "Admin" else "Niño/a",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
                         text = member?.displayName ?: assignment.memberId.take(8),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
@@ -826,7 +798,7 @@ private fun AssignmentCard(
                     onClick = onComplete,
                     enabled = !isLoading,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Teal600
+                        containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
                     if (isLoading) {

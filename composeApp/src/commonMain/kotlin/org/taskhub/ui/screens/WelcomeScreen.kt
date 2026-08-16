@@ -1,6 +1,8 @@
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +19,7 @@ import org.taskhub.storage.HouseholdStore
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.Coral500
 import org.taskhub.ui.theme.Teal600
@@ -62,37 +65,15 @@ class WelcomeScreen : Screen {
             color = MaterialTheme.colorScheme.background
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ═══ Top bar with settings ═══
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🏠 Task Hub",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
-                        // Settings icon
-                        TextButton(
-                            onClick = { showSettings = true },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("⚙️", style = MaterialTheme.typography.titleLarge)
+                // Top bar
+                TaskHubTopBar(
+                    title = "Task Hub",
+                    actions = {
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Ajustes")
                         }
                     }
-                }
+                )
 
                 // Main content
                 Column(
@@ -132,7 +113,7 @@ class WelcomeScreen : Screen {
                             .fillMaxWidth()
                             .height(56.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Teal600
+                            containerColor = MaterialTheme.colorScheme.primary
                         ),
                         shape = MaterialTheme.shapes.large
                     ) {
@@ -150,7 +131,7 @@ class WelcomeScreen : Screen {
                             .fillMaxWidth()
                             .height(56.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Coral500
+                            contentColor = MaterialTheme.colorScheme.tertiary
                         ),
                         shape = MaterialTheme.shapes.large
                     ) {

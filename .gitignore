@@ -29,3 +29,6 @@ Thumbs.db
 keystore.properties
 *.keystore
 *.jks
+
+# Kotlin build cache
+.kotlin/

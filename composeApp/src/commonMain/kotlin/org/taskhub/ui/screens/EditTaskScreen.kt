@@ -23,6 +23,7 @@ import org.taskhub.ui.models.TaskActionState
 import org.taskhub.ui.models.TaskScreenModel
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.theme.*
 
 // ────────────────────────────────────────────────────────────
@@ -89,38 +90,10 @@ data class EditTaskScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Cancelar")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "✏️ Editar tarea",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
-                        // Save button
+                TaskHubTopBar(
+                    title = "Editar tarea",
+                    onBack = { navigator.pop() },
+                    actions = {
                         if (actionState !is TaskActionState.Loading) {
                             TextButton(
                                 onClick = {
@@ -142,7 +115,7 @@ data class EditTaskScreen(
                                     taskModel.updateTask(
                                         householdId = householdId,
                                         taskId = task.id,
-                                        title = title.ifBlank { "Sin título" },
+                                        title = title,
                                         description = description,
                                         points = points,
                                         frequency = frequency,
@@ -155,9 +128,9 @@ data class EditTaskScreen(
                                         assignmentRotation = rotation
                                     )
                                 },
-                                enabled = actionState !is TaskActionState.Loading,
+                                enabled = actionState !is TaskActionState.Loading && title.isNotBlank(),
                                 colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                    contentColor = MaterialTheme.colorScheme.primary
                                 )
                             ) {
                                 Text("Guardar", fontWeight = FontWeight.Bold)
@@ -165,12 +138,12 @@ data class EditTaskScreen(
                         } else {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 strokeWidth = 2.dp
                             )
                         }
                     }
-                }
+                )
 
                 // Form content
                 LazyColumn(
@@ -202,7 +175,7 @@ data class EditTaskScreen(
                             text = "📝 Información básica",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -212,7 +185,13 @@ data class EditTaskScreen(
                             onValueChange = { title = it },
                             label = { Text("Título de la tarea *") },
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                            singleLine = true,
+                            isError = title.isBlank(),
+                            supportingText = {
+                                if (title.isBlank()) {
+                                    Text("El título es obligatorio")
+                                }
+                            }
                         )
                     }
 
@@ -234,7 +213,13 @@ data class EditTaskScreen(
                             label = { Text("Puntos") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = pointsText.toIntOrNull() == null,
+                            supportingText = {
+                                if (pointsText.toIntOrNull() == null) {
+                                    Text("Debe ser un número")
+                                }
+                            }
                         )
                     }
 
@@ -244,7 +229,7 @@ data class EditTaskScreen(
                             text = "🔄 Frecuencia",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -315,7 +300,7 @@ data class EditTaskScreen(
                             text = "🏷️ Etiquetas",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -340,7 +325,7 @@ data class EditTaskScreen(
                                         tagsText = ""
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text("+")
                             }
@@ -415,7 +400,7 @@ data class EditTaskScreen(
                             text = "👥 Asignación",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -581,7 +566,7 @@ data class EditTaskScreen(
                                 text = "⚠️ Penalización por retraso",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Teal700
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Switch(
                                 checked = hasPenalty,

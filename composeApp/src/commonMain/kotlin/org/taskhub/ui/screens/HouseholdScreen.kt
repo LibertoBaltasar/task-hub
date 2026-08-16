@@ -18,9 +18,16 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.MemberResponse
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Settings
+import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
@@ -120,7 +127,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                             text = inviteCode,
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal600,
+                            color = MaterialTheme.colorScheme.primary,
                             textAlign = TextAlign.Center
                         )
 
@@ -143,9 +150,9 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                 "Invitación a Task Hub"
                             )
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("📤 Compartir")
+                        Text("Compartir")
                     }
                 },
                 dismissButton = {
@@ -277,39 +284,10 @@ data class HouseholdScreen(val householdId: String) : Screen {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = {
-                                navigator.replaceAll(HomeScreen())
-                            },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Inicio")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "🏠 Task Hub",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
+                TaskHubTopBar(
+                    title = "Task Hub",
+                    onBack = { navigator.replaceAll(HomeScreen()) },
+                    actions = {
                         // Notification bell with badge
                         Box {
                             IconButton(
@@ -320,52 +298,35 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
                             ) {
-                                Text(
-                                    text = "🔔",
-                                    style = MaterialTheme.typography.titleLarge
-                                )
+                                Icon(Icons.Default.Notifications, contentDescription = "Notificaciones")
                             }
-                            // Badge for unread count
                             if (notificationUnreadCount > 0) {
-                                Badge(
+                                PointsBadge(
+                                    text = if (notificationUnreadCount > 99) "99+" else notificationUnreadCount.toString(),
                                     modifier = Modifier
                                         .align(Alignment.TopEnd)
-                                        .offset(x = 4.dp, y = (-4).dp),
-                                    containerColor = Coral500,
-                                    contentColor = MaterialTheme.colorScheme.onError
-                                ) {
-                                    Text(
-                                        text = if (notificationUnreadCount > 99) "99+" else notificationUnreadCount.toString(),
-                                        style = MaterialTheme.typography.labelSmall
-                                    )
-                                }
+                                        .offset(x = 4.dp, y = (-4).dp)
+                                )
                             }
                         }
-
-                        // Settings icon
-                        TextButton(
-                            onClick = { showSettings = true },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("⚙️", style = MaterialTheme.typography.titleLarge)
+                        // Settings
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(Icons.Default.Settings, contentDescription = "Ajustes")
                         }
-
-                        // Delete button
+                        // Delete
                         if (isDeleting || isLeaving) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 strokeWidth = 2.dp
                             )
                         } else {
                             IconButton(onClick = { showConfirmDialog1 = true }) {
-                                Text("🗑️", style = MaterialTheme.typography.titleLarge)
+                                Icon(Icons.Default.Delete, contentDescription = "Eliminar hogar")
                             }
                         }
                     }
-                }
+                )
 
                 if (isDeleting || isLeaving) {
                     Box(
@@ -432,7 +393,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = "Código de invitación",
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = Teal700,
+                                                color = MaterialTheme.colorScheme.primary,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -440,7 +401,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = household.inviteCode,
                                                 style = MaterialTheme.typography.headlineMedium,
-                                                color = Teal600,
+                                                color = MaterialTheme.colorScheme.primary,
                                                 fontWeight = FontWeight.Bold,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
@@ -451,7 +412,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = "Comparte este código para invitar miembros",
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = Teal700,
+                                                color = MaterialTheme.colorScheme.primary,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -472,11 +433,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                                 navigator.push(TaskListScreen(householdId, memberId))
                                             },
                                             modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Coral500),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
                                             shape = MaterialTheme.shapes.large
                                         ) {
                                             Text(
-                                                text = "📋 Ver Tareas",
+                                                text = "Ver Tareas",
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -489,11 +450,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                                 navigator.push(StatsScreen(householdId, memberId))
                                             },
                                             modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                             shape = MaterialTheme.shapes.large
                                         ) {
                                             Text(
-                                                text = "📊 Estadísticas",
+                                                text = "Estadísticas",
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -506,11 +467,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     Button(
                                         onClick = { navigator.push(RankingScreen(householdId)) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Coral500),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
                                         shape = MaterialTheme.shapes.large
                                     ) {
                                         Text(
-                                            text = "🏆 Ranking",
+                                            text = "Ranking",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -522,11 +483,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     Button(
                                         onClick = { navigator.push(RewardListScreen(householdId)) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         shape = MaterialTheme.shapes.large
                                     ) {
                                         Text(
-                                            text = "🎁 Recompensas",
+                                            text = "Recompensas",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -542,11 +503,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             navigator.push(CalendarScreen(householdId, memberId))
                                         },
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         shape = MaterialTheme.shapes.large
                                     ) {
                                         Text(
-                                            text = "📅 Calendario",
+                                            text = "Calendario",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -720,7 +681,7 @@ private fun MemberCard(member: MemberResponse) {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = if (member.role == "admin") "👑" else "🧒",
+                        text = if (member.role == "admin") "👑 Admin" else "🧒 Niño/a",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
@@ -742,18 +703,10 @@ private fun MemberCard(member: MemberResponse) {
             }
 
             // Points badge
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = Coral500
-            ) {
-                Text(
-                    text = "⭐ ${member.totalPoints}",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onTertiary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            PointsBadge(
+                text = "${member.totalPoints} pts",
+                modifier = Modifier
+            )
         }
     }
 }

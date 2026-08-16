@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.taskhub.ui.theme.Teal800
-import org.taskhub.ui.theme.Coral500
+import org.taskhub.ui.theme.Coral100
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -35,7 +35,7 @@ fun SplashScreen(onFinished: () -> Unit) {
     // Al montar: activa el fade-in y programa el callback a los 5s
     LaunchedEffect(Unit) {
         visible = true
-        delay(5000)
+        delay(1500)
         onFinished()
     }
 
@@ -60,7 +60,7 @@ fun SplashScreen(onFinished: () -> Unit) {
                 text = "HUB",
                 fontSize = 72.sp,
                 fontWeight = FontWeight.Black,
-                color = Coral500,
+                color = Coral100,
                 modifier = Modifier.alpha(alpha)
             )
             Spacer(modifier = Modifier.height(16.dp))

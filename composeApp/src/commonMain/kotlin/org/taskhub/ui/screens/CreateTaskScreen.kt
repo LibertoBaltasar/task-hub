@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
@@ -29,6 +32,7 @@ import org.taskhub.ui.models.TaskScreenModel
 import org.taskhub.ui.models.TaskTemplate
 import org.taskhub.ui.models.TaskTemplates
 import org.taskhub.ui.models.TemplateCategory
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.theme.*
 
 // ────────────────────────────────────────────────────────────
@@ -40,6 +44,7 @@ data class CreateTaskScreen(
     val createdBy: String
 ) : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
@@ -67,6 +72,40 @@ data class CreateTaskScreen(
         var deadlineDay by remember { mutableStateOf("") }
         var deadlineTime by remember { mutableStateOf("12:00") }
         var hasPenalty by remember { mutableStateOf(false) }
+        var showDatePicker by remember { mutableStateOf(false) }
+
+        // ── DatePicker para elegir la fecha límite ────────────
+        if (showDatePicker) {
+            val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+            val initialMillis = if (deadlineDay.isValidDateFormat()) {
+                val parts = deadlineDay.split("-")
+                LocalDate(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+                    .atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
+            } else {
+                today.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
+            }
+            val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            datePickerState.selectedDateMillis?.let { millis ->
+                                val date = Instant.fromEpochMilliseconds(millis)
+                                    .toLocalDateTime(TimeZone.UTC).date
+                                deadlineDay = "${date.year}-${date.monthNumber.toString().padStart(2, '0')}-${date.dayOfMonth.toString().padStart(2, '0')}"
+                            }
+                            showDatePicker = false
+                        }
+                    ) { Text("Aceptar") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
         var penaltyMode by remember { mutableStateOf("fixed") }
         var penaltyValue by remember { mutableStateOf("") }
         var penaltyInterval by remember { mutableStateOf("day") }
@@ -90,38 +129,10 @@ data class CreateTaskScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.pop() },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Cancelar")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "➕ Nueva tarea",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-
-                        // Save button
+                TaskHubTopBar(
+                    title = "Nueva tarea",
+                    onBack = { navigator.pop() },
+                    actions = {
                         if (actionState !is TaskActionState.Loading) {
                             TextButton(
                                 onClick = {
@@ -135,7 +146,7 @@ data class CreateTaskScreen(
                                     taskModel.createTask(
                                         householdId = householdId,
                                         createdBy = createdBy,
-                                        title = title.ifBlank { "Sin título" },
+                                        title = title,
                                         description = description,
                                         points = points,
                                         frequency = frequency,
@@ -151,9 +162,9 @@ data class CreateTaskScreen(
                                         dueDate = dueDate
                                     )
                                 },
-                                enabled = actionState !is TaskActionState.Loading,
+                                enabled = actionState !is TaskActionState.Loading && title.isNotBlank(),
                                 colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                    contentColor = MaterialTheme.colorScheme.primary
                                 )
                             ) {
                                 Text("Crear", fontWeight = FontWeight.Bold)
@@ -161,12 +172,12 @@ data class CreateTaskScreen(
                         } else {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 strokeWidth = 2.dp
                             )
                         }
                     }
-                }
+                )
 
                 // Form content
                 LazyColumn(
@@ -213,7 +224,7 @@ data class CreateTaskScreen(
                             text = "📝 Información básica",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -223,7 +234,13 @@ data class CreateTaskScreen(
                             onValueChange = { title = it },
                             label = { Text("Título de la tarea *") },
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
+                            singleLine = true,
+                            isError = title.isBlank(),
+                            supportingText = {
+                                if (title.isBlank()) {
+                                    Text("El título es obligatorio")
+                                }
+                            }
                         )
                     }
 
@@ -233,7 +250,7 @@ data class CreateTaskScreen(
                             text = "✅ Checklist",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -259,7 +276,7 @@ data class CreateTaskScreen(
                                         subtaskText = ""
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text("+")
                             }
@@ -318,7 +335,13 @@ data class CreateTaskScreen(
                             label = { Text("Puntos") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = pointsText.toIntOrNull() == null,
+                            supportingText = {
+                                if (pointsText.toIntOrNull() == null) {
+                                    Text("Debe ser un número")
+                                }
+                            }
                         )
                     }
 
@@ -328,7 +351,7 @@ data class CreateTaskScreen(
                             text = "🔄 Frecuencia",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -399,7 +422,7 @@ data class CreateTaskScreen(
                             text = "🏷️ Etiquetas",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
 
@@ -424,7 +447,7 @@ data class CreateTaskScreen(
                                         tagsText = ""
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text("+")
                             }
@@ -500,7 +523,7 @@ data class CreateTaskScreen(
                                 text = "👥 Asignación",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Teal700
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Text(
                                 text = "Si no seleccionas a nadie, la tarea se asigna a todos los miembros.",
@@ -601,7 +624,7 @@ data class CreateTaskScreen(
                                 text = "⏰ Fecha límite",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Teal700
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Switch(
                                 checked = hasDeadline,
@@ -621,21 +644,28 @@ data class CreateTaskScreen(
                         item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OutlinedTextField(
-                                    value = deadlineDay,
-                                    onValueChange = { deadlineDay = it },
-                                    label = { Text("Fecha (YYYY-MM-DD)") },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
+                                OutlinedButton(
+                                    onClick = { showDatePicker = true },
+                                    modifier = Modifier.weight(1f).height(56.dp)
+                                ) {
+                                    Icon(Icons.Default.DateRange, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = if (deadlineDay.isBlank()) "Elegir fecha" else deadlineDay,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                                 OutlinedTextField(
                                     value = deadlineTime,
                                     onValueChange = { deadlineTime = it },
                                     label = { Text("Hora (HH:MM)") },
                                     modifier = Modifier.weight(1f),
-                                    singleLine = true
+                                    singleLine = true,
+                                    isError = !deadlineTime.isValidTimeFormat()
                                 )
                             }
                         }
@@ -652,7 +682,7 @@ data class CreateTaskScreen(
                                 text = "⚠️ Penalización por retraso",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Teal700
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Switch(
                                 checked = hasPenalty,
@@ -809,7 +839,7 @@ private fun QuickTemplatesSection(
                         text = "Plantillas rápidas",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Teal700
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
                 Text(
@@ -879,6 +909,12 @@ private fun QuickTemplatesSection(
 // ────────────────────────────────────────────────────────────
 //  Helpers
 // ────────────────────────────────────────────────────────────
+
+private fun String.isValidDateFormat(): Boolean =
+    Regex("""\d{4}-\d{2}-\d{2}""").matches(this)
+
+private fun String.isValidTimeFormat(): Boolean =
+    Regex("""\d{2}:\d{2}""").matches(this)
 
 private fun parseDeadline(dateStr: String, timeStr: String): Long {
     val parts = dateStr.split("-")

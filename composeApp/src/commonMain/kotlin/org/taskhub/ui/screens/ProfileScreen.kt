@@ -131,9 +131,9 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                     Button(
                         onClick = { navigator.push(CreateHouseholdScreen()) },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = Teal600)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
+                        Icon(Icons.Default.Add, contentDescription = "Crear nuevo hogar")
                         Spacer(Modifier.width(8.dp))
                         Text("Crear nuevo hogar")
                     }
@@ -144,7 +144,7 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         onClick = { navigator.push(JoinHouseholdScreen()) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
+                        Icon(Icons.Default.Add, contentDescription = "Unirse a un hogar")
                         Spacer(Modifier.width(8.dp))
                         Text("Unirse a un hogar")
                     }
@@ -158,7 +158,7 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         onClick = { showSettings = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = null)
+                        Icon(Icons.Default.Settings, contentDescription = "Ajustes")
                         Spacer(Modifier.width(8.dp))
                         Text("Ajustes")
                     }
@@ -190,7 +190,7 @@ private fun HouseholdProfileCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = color)
+            Icon(icon, contentDescription = household.name, tint = color)
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -215,7 +215,7 @@ private fun HouseholdProfileCard(
             if (onNavigate != null) {
                 Icon(
                     Icons.Default.ArrowBack,
-                    contentDescription = null,
+                    contentDescription = "Ir al hogar",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                 )

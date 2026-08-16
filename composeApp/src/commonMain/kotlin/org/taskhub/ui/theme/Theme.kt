@@ -7,6 +7,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 
 // ── Theme enum ────────────────────────────────────────────
 
@@ -90,17 +93,17 @@ val MonoBlack = Color(0xFF000000)
 // ── Default schemes ───────────────────────────────────────
 
 private val DefaultLightColorScheme = lightColorScheme(
-    primary = Teal600,
+    primary = Teal800,
     onPrimary = Color.White,
     primaryContainer = Teal100,
     onPrimaryContainer = Teal900,
 
-    secondary = Teal400,
+    secondary = Teal700,
     onSecondary = Color.White,
     secondaryContainer = Teal50,
     onSecondaryContainer = Teal700,
 
-    tertiary = Coral500,
+    tertiary = Coral700,
     onTertiary = Color.White,
     tertiaryContainer = Coral100,
     onTertiaryContainer = Coral800,
@@ -156,7 +159,7 @@ private val DefaultDarkColorScheme = darkColorScheme(
 // ── Naturaleza schemes (verdes, marrones) ─────────────────
 
 private val NaturalezaLightColorScheme = lightColorScheme(
-    primary = Green700,
+    primary = Green800,
     onPrimary = Color.White,
     primaryContainer = Green100,
     onPrimaryContainer = Green900,
@@ -166,7 +169,7 @@ private val NaturalezaLightColorScheme = lightColorScheme(
     secondaryContainer = Brown100,
     onSecondaryContainer = Brown900,
 
-    tertiary = Green400,
+    tertiary = Green700,
     onTertiary = Color.White,
     tertiaryContainer = Green50,
     onTertiaryContainer = Green800,
@@ -285,6 +288,15 @@ private val MinimalDarkColorScheme = darkColorScheme(
     outlineVariant = MonoGray600,
 )
 
+// ── Tipografía ────────────────────────────────────────────
+
+private val TaskHubTypography = Typography(
+    headlineSmall = TextStyle(fontWeight = FontWeight.Bold),
+    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold),
+    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, letterSpacing = 0.15.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp),
+)
+
 // ── Theme composable ──────────────────────────────────────
 
 @Composable
@@ -301,7 +313,7 @@ fun TaskHubTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography(),
+        typography = TaskHubTypography,
         content = content
     )
 }

@@ -13,12 +13,14 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.theme.Coral500
 import org.taskhub.ui.theme.Teal500
 import org.taskhub.ui.theme.Teal600
 import org.taskhub.ui.theme.Teal700
+import org.taskhub.ui.theme.Teal800
 import org.taskhub.ui.theme.Teal900
 
 /**
@@ -53,39 +55,11 @@ data class PersonalSpaceScreen(
             color = MaterialTheme.colorScheme.background
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // ── Top bar ──
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Teal600,
-                    shadowElevation = 4.dp
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { navigator.replaceAll(HomeScreen()) },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("← Inicio")
-                        }
-
-                        Spacer(Modifier.weight(1f))
-
-                        Text(
-                            text = "👤 Mi espacio",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(Modifier.weight(1f))
-                    }
-                }
+                // Top bar
+                TaskHubTopBar(
+                    title = "Mi espacio",
+                    onBack = { navigator.replaceAll(HomeScreen()) }
+                )
 
                 // ── Content ──
                 LazyColumn(
@@ -122,7 +96,7 @@ data class PersonalSpaceScreen(
                                 Text(
                                     text = "Tus tareas y hábitos, sin compartir con nadie",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Teal700,
+                                    color = MaterialTheme.colorScheme.primary,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -135,11 +109,11 @@ data class PersonalSpaceScreen(
                         Button(
                             onClick = { navigator.push(TaskListScreen(householdId, memberId)) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Coral500),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text(
-                                text = "📋 Ver mis tareas",
+                                text = "Ver mis tareas",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -151,11 +125,11 @@ data class PersonalSpaceScreen(
                         Button(
                             onClick = { navigator.push(CreateTaskScreen(householdId, memberId ?: "")) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Teal600),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text(
-                                text = "➕ Nueva tarea",
+                                text = "Nueva tarea",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -167,11 +141,11 @@ data class PersonalSpaceScreen(
                         Button(
                             onClick = { navigator.push(CalendarScreen(householdId, memberId)) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Teal500),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text(
-                                text = "📅 Calendario",
+                                text = "Calendario",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
