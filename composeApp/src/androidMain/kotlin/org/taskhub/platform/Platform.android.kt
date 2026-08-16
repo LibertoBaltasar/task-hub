@@ -7,12 +7,18 @@ import org.taskhub.GoogleSignInHelper
 
 actual fun shareText(text: String, title: String) {
     val context = AndroidContextHolder.context ?: return
-    val intent = Intent(Intent.ACTION_SEND).apply {
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_TEXT, text)
         putExtra(Intent.EXTRA_SUBJECT, title)
     }
-    context.startActivity(Intent.createChooser(intent, title))
+    // AndroidContextHolder.context es el applicationContext (no una Activity),
+    // así que startActivity() exige FLAG_ACTIVITY_NEW_TASK. Sin ella lanza
+    // AndroidRuntimeException y la app se cierra al pulsar "Compartir".
+    val chooser = Intent.createChooser(sendIntent, title).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    context.startActivity(chooser)
 }
 
 actual fun saveWidgetThemeToCache(theme: String) {
