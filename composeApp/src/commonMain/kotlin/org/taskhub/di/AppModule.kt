@@ -7,6 +7,7 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.createNotificationScheduler
+import org.taskhub.platform.createAdController
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
@@ -46,10 +47,13 @@ val appModule: Module = module {
     // Platform notification scheduler
     single { createNotificationScheduler() }
 
+    // Platform ad controller (AdMob interstitial / banner)
+    single { createAdController() }
+
     // ScreenModels (Voyager — each screen gets its own instance via factory)
     factory { HomeScreenModel(repo = get(), householdStore = get()) }
     factory { HouseholdScreenModel(repo = get(), householdStore = get(), authManager = get()) }
     factory { MemberScreenModel(repo = get()) }
     factory { NotificationScreenModel(repo = get()) }
-    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarRepo = get()) }
+    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarRepo = get(), adController = get()) }
 }

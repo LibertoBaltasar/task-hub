@@ -16,6 +16,7 @@ import org.taskhub.network.models.AssignmentSlot
 import org.taskhub.network.models.Subtask
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.DebugFlags
+import org.taskhub.platform.AdController
 import kotlinx.datetime.*
 
 /**
@@ -135,7 +136,8 @@ enum class TaskSort {
 class TaskScreenModel(
     private val repo: FirestoreRepository,
     private val notificationScheduler: NotificationScheduler,
-    private val calendarRepo: GoogleCalendarRepository
+    private val calendarRepo: GoogleCalendarRepository,
+    private val adController: AdController
 ) : ScreenModel {
 
     private val _listState = MutableStateFlow<TaskListUiState>(TaskListUiState.Idle)
@@ -356,6 +358,10 @@ class TaskScreenModel(
                 } catch (_: Exception) { }
 
                 _actionState.value = TaskActionState.Success
+
+                // Mostrar interstitial tras completar una tarea con éxito
+                // (respeta el cooldown interno; no-op en plataformas sin AdMob)
+                adController.maybeShowInterstitial()
             } catch (e: Exception) {
                 _undoState.value = null
                 _actionState.value = TaskActionState.Error(

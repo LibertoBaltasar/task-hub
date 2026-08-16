@@ -90,6 +90,12 @@ kotlin {
 
             // Firebase Crashlytics — reporte de crashes
             implementation(libs.firebase.crashlytics)
+
+            // AdMob — anuncios (interstitial + banner preparado)
+            implementation("com.google.android.gms:play-services-ads:23.5.0")
+
+            // In-App Updates — actualización forzada (modo IMMEDIATE)
+            implementation("com.google.android.play:app-update:2.1.0")
         }
 
         iosMain.dependencies {

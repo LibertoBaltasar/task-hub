@@ -1,6 +1,7 @@
 package org.taskhub
 
 import android.app.Application
+import com.google.android.gms.ads.MobileAds
 import com.google.firebase.FirebaseApp
 
 /**
@@ -22,5 +23,10 @@ class TaskHubApplication : Application() {
         // Asegurar que FirebaseApp se inicialice (normalmente ya lo hace
         // FirebaseInitProvider antes de onCreate, pero es idempotente).
         FirebaseApp.initializeApp(this)
+
+        // Inicializar el SDK de AdMob (Google Mobile Ads). Aquí no se carga
+        // ningún anuncio; solo deja el SDK listo para el interstitial (tras
+        // completar tarea) y el banner (preparado, deshabilitado de momento).
+        MobileAds.initialize(this)
     }
 }

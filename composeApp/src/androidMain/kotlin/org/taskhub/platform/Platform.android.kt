@@ -2,6 +2,7 @@ package org.taskhub.platform
 
 import android.content.Context
 import android.content.Intent
+import android.app.Activity
 import org.taskhub.TaskHubWidgetProvider
 import org.taskhub.GoogleSignInHelper
 
@@ -50,4 +51,12 @@ actual fun launchGoogleSignIn() {
 object AndroidContextHolder {
     @Volatile
     var context: Context? = null
+
+    /**
+     * Activity actual en primer plano (null si no hay ninguna).
+     * Se setea en MainActivity.onCreate y se limpia en onDestroy.
+     * Se usa para mostrar el interstitial de AdMob, que requiere una Activity.
+     */
+    @Volatile
+    var activity: Activity? = null
 }

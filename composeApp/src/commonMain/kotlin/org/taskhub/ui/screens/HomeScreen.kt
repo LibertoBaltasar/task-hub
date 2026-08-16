@@ -34,6 +34,7 @@ import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.models.HomeScreenModel
 import org.taskhub.ui.theme.Teal600
+import org.taskhub.platform.AdBannerSlot
 
 /**
  * Pantalla principal de la app — dashboard unificado que muestra las tareas
@@ -283,6 +284,13 @@ class HomeScreen : Screen {
                     }
 
                     item { Spacer(Modifier.height(80.dp)) }
+
+                    // Banner de anuncios (preparado; deshabilitado por defecto).
+                    // Se coloca al final del contenido principal, encima de
+                    // cualquier barra inferior.
+                    item(key = "ad_banner") {
+                        AdBannerSlot()
+                    }
                 }
             }
         }
