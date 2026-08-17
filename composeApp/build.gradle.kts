@@ -119,8 +119,8 @@ android {
         targetSdk = 35
 
         // ── Version — overridable via -P flags for CI/CD ──────
-        versionCode = (project.findProperty("versionCodeOverride") as? String)?.toInt() ?: 116
-        versionName = (project.findProperty("versionNameOverride") as? String) ?: "0.7.9"
+        versionCode = (project.findProperty("versionCodeOverride") as? String)?.toInt() ?: 117
+        versionName = (project.findProperty("versionNameOverride") as? String) ?: "0.7.10"
     }
 
     // ── Release signing ──────────────────────────────────────
