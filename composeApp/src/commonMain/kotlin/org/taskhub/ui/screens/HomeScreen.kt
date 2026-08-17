@@ -6,8 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -180,25 +180,27 @@ class HomeScreen : Screen {
                 Column(horizontalAlignment = Alignment.End) {
                     AnimatedVisibility(visible = showFabMenu) {
                         Column(horizontalAlignment = Alignment.End) {
-                            FloatingActionButton(
+                            ExtendedFloatingActionButton(
                                 onClick = {
                                     navigator.push(CreateHouseholdScreen())
                                     showFabMenu = false
                                 },
-                                containerColor = MaterialTheme.colorScheme.secondary
-                            ) {
-                                Icon(Icons.Default.Add, "Crear hogar", modifier = Modifier.size(20.dp))
-                            }
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                                contentColor = MaterialTheme.colorScheme.onSecondary,
+                                icon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                text = { Text("Crear hogar", fontWeight = FontWeight.SemiBold) }
+                            )
                             Spacer(Modifier.height(12.dp))
-                            FloatingActionButton(
+                            ExtendedFloatingActionButton(
                                 onClick = {
                                     navigator.push(JoinHouseholdScreen())
                                     showFabMenu = false
                                 },
-                                containerColor = MaterialTheme.colorScheme.tertiary
-                            ) {
-                                Icon(Icons.Default.AddCircle, "Unirse a hogar", modifier = Modifier.size(20.dp))
-                            }
+                                containerColor = MaterialTheme.colorScheme.tertiary,
+                                contentColor = MaterialTheme.colorScheme.onTertiary,
+                                icon = { Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                text = { Text("Unirse a hogar", fontWeight = FontWeight.SemiBold) }
+                            )
                             Spacer(Modifier.height(12.dp))
                         }
                     }
@@ -209,7 +211,7 @@ class HomeScreen : Screen {
                         if (showFabMenu) {
                             Icon(Icons.Default.Close, "Cerrar")
                         } else {
-                            Icon(Icons.Default.Add, "Nuevo hogar")
+                            Icon(Icons.Default.Add, "Añadir hogar")
                         }
                     }
                 }

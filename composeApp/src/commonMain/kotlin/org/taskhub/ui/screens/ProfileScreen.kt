@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -144,7 +145,7 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         onClick = { navigator.push(JoinHouseholdScreen()) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Unirse a un hogar")
+                        Icon(Icons.Default.Home, contentDescription = "Unirse a un hogar")
                         Spacer(Modifier.width(8.dp))
                         Text("Unirse a un hogar")
                     }
