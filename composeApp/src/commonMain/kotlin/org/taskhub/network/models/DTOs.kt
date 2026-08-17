@@ -49,7 +49,26 @@ data class MemberResponse(
     /** Mejor racha histórica. */
     val bestStreak: Int = 0,
     /** Último día de racha registrado (epoch millis). 0 = sin racha. */
-    val lastStreakDate: Long = 0
+    val lastStreakDate: Long = 0,
+    /** Epoch millis en que el miembro abandonó el hogar (soft-delete). 0 = activo. */
+    val leftAt: Long = 0
+)
+
+/**
+ * Perfil GLOBAL de un usuario, independiente de su membresía en hogares.
+ * Vive en la colección `users/{userId}` y es la base del "perfilado creciente":
+ * añadir foto, bio, preferencias, etc. solo requiere añadir campos aquí y en
+ * [org.taskhub.network.FirestoreRepository.upsertUserProfile].
+ */
+@Serializable
+data class UserProfile(
+    /** UID de Firebase Auth (anónimo o Google). */
+    val id: String,
+    val displayName: String = "",
+    /** URL de la foto de perfil. null = sin foto todavía. */
+    val avatarUrl: String? = null,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0
 )
 
 @Serializable
@@ -114,6 +133,12 @@ data class TaskResponse(
      * Es el campo central para el cálculo de "¿toca hoy?".
      */
     val lastCompletedDate: Long? = null,
+    /**
+     * ID del miembro que marcó la tarea como hecha la última vez.
+     * null = nunca completada. Es la base de "quien marca hecho recibe los
+     * puntos" (al margen de quién esté asignado) y de "editar quién la hizo".
+     */
+    val completedBy: String? = null,
     /** Rotación diaria de asignados: quién le toca cada día de la semana. */
     val assignmentRotation: List<AssignmentSlot> = emptyList(),
     val createdAt: Long = 0,

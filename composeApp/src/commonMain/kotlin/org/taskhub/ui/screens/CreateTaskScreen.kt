@@ -41,10 +41,12 @@ import org.taskhub.ui.theme.*
 
 data class CreateTaskScreen(
     val householdId: String,
-    val createdBy: String
+    val createdBy: String,
+    /** Si se indica, la tarea sale preasignada a este miembro (crear tarea directa desde un miembro). */
+    val preselectedMemberId: String? = null
 ) : Screen {
 
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
@@ -66,7 +68,9 @@ data class CreateTaskScreen(
         var recurrenceDays by remember { mutableStateOf(setOf<Int>()) }
         var tagsText by remember { mutableStateOf("") }
         var tags by remember { mutableStateOf(listOf<String>()) }
-        var selectedMembers by remember { mutableStateOf(setOf<String>()) }
+        var selectedMembers by remember {
+            mutableStateOf(preselectedMemberId?.let { setOf(it) } ?: emptySet())
+        }
         var mandatory by remember { mutableStateOf(false) }
         var hasDeadline by remember { mutableStateOf(false) }
         var deadlineDay by remember { mutableStateOf("") }
@@ -356,9 +360,10 @@ data class CreateTaskScreen(
                     }
 
                     item {
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val freqs = listOf(
                                 "once" to "Una vez",
@@ -456,9 +461,10 @@ data class CreateTaskScreen(
 
                     if (tags.isNotEmpty()) {
                         item {
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 tags.forEach { tag ->
                                     InputChip(
@@ -474,37 +480,18 @@ data class CreateTaskScreen(
                         }
                     }
 
-                    // Predefined tags
+                    // Predefined tags (FlowRow: los chips hacen wrap en vez de comprimirse)
                     item {
                         val predefinedTags = listOf(
                             "limpieza", "cocina", "compras", "mascotas",
                             "mantenimiento", "niños", "exterior", "administración", "otro"
                         )
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            predefinedTags.take(6).forEach { tag ->
-                                FilterChip(
-                                    selected = tag in tags,
-                                    onClick = {
-                                        tags = if (tag in tags) tags - tag else tags + tag
-                                    },
-                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
-                                )
-                            }
-                        }
-                    }
-                    item {
-                        val predefinedTags = listOf(
-                            "limpieza", "cocina", "compras", "mascotas",
-                            "mantenimiento", "niños", "exterior", "administración", "otro"
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            predefinedTags.drop(6).forEach { tag ->
+                            predefinedTags.forEach { tag ->
                                 FilterChip(
                                     selected = tag in tags,
                                     onClick = {
@@ -910,13 +897,13 @@ private fun QuickTemplatesSection(
 //  Helpers
 // ────────────────────────────────────────────────────────────
 
-private fun String.isValidDateFormat(): Boolean =
+internal fun String.isValidDateFormat(): Boolean =
     Regex("""\d{4}-\d{2}-\d{2}""").matches(this)
 
-private fun String.isValidTimeFormat(): Boolean =
+internal fun String.isValidTimeFormat(): Boolean =
     Regex("""\d{2}:\d{2}""").matches(this)
 
-private fun parseDeadline(dateStr: String, timeStr: String): Long {
+internal fun parseDeadline(dateStr: String, timeStr: String): Long {
     val parts = dateStr.split("-")
     val year = parts.getOrNull(0)?.toIntOrNull() ?: return 0L
     val month = parts.getOrNull(1)?.toIntOrNull() ?: return 0L

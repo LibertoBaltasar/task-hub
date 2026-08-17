@@ -93,6 +93,24 @@ class MemberScreenModel(
         }
     }
 
+    /**
+     * Edita el rol de un miembro ("admin" | "child") sin recrearlo.
+     * Recarga la lista al terminar.
+     */
+    fun updateMemberRole(householdId: String, memberId: String, role: String) {
+        screenModelScope.launch {
+            try {
+                repo.updateMemberRole(householdId, memberId, role)
+                val members = repo.getMembers(householdId)
+                _uiState.value = MemberUiState.Success(members)
+            } catch (e: Exception) {
+                _uiState.value = MemberUiState.Error(
+                    e.message ?: "Error al cambiar el rol"
+                )
+            }
+        }
+    }
+
     fun reset() {
         _uiState.value = MemberUiState.Idle
         _lastCreatedMember.value = null

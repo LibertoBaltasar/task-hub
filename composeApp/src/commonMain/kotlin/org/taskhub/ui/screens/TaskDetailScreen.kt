@@ -1,5 +1,6 @@
 package org.taskhub.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,6 +46,7 @@ data class TaskDetailScreen(
         val settingsStore = koinInject<SettingsStore>()
         val detailState by model.detailState.collectAsState()
         val actionState by model.actionState.collectAsState()
+        val reassignState by model.reassignState.collectAsState()
         val calendarActionState by model.calendarActionState.collectAsState()
         val commentsState by model.commentsState.collectAsState()
         val newCommentText by model.newCommentText.collectAsState()
@@ -138,6 +140,7 @@ data class TaskDetailScreen(
                             assignments = state.assignments,
                             memberMap = memberMap,
                             actionState = actionState,
+                            reassignState = reassignState,
                             commentsState = commentsState,
                             newCommentText = newCommentText,
                             isGoogleLinked = isGoogleLinked,
@@ -159,6 +162,14 @@ data class TaskDetailScreen(
                                     task = state.task,
                                     assignmentId = assignmentId,
                                     assignment = assignment
+                                )
+                            },
+                            onChangeCompletedBy = { memberId ->
+                                model.reassignTaskCompletion(
+                                    householdId = householdId,
+                                    taskId = taskId,
+                                    taskPoints = state.task.points,
+                                    newMemberId = memberId
                                 )
                             },
                             onToggleSubtask = { subtaskId ->
@@ -209,6 +220,7 @@ private fun TaskDetailContent(
     assignments: List<TaskAssignmentResponse>,
     memberMap: Map<String, MemberResponse>,
     actionState: TaskActionState,
+    reassignState: TaskActionState = TaskActionState.Idle,
     commentsState: CommentsUiState,
     newCommentText: String,
     isGoogleLinked: Boolean = false,
@@ -217,6 +229,7 @@ private fun TaskDetailContent(
     onAddComment: (String) -> Unit,
     onCompleteTask: () -> Unit,
     onComplete: (String, TaskAssignmentResponse) -> Unit,
+    onChangeCompletedBy: (String) -> Unit,
     onToggleSubtask: (String) -> Unit,
     onSendToGoogleCalendar: (() -> Unit)? = null
 ) {
@@ -230,6 +243,10 @@ private fun TaskDetailContent(
         val lcdDate = kotlinx.datetime.Instant.fromEpochMilliseconds(task.lastCompletedDate!!).toLocalDateTime(tz).date
         lcdDate == today
     }
+
+    // Estado para el diálogo "¿quién ha hecho la tarea?" (editar quién la completó).
+    var showChangeWhoDialog by remember { mutableStateOf(false) }
+    var selectedCompleterId by remember { mutableStateOf(task.completedBy) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -411,11 +428,45 @@ private fun TaskDetailContent(
 
         if (isCompletedToday && task.lastCompletedDate != null) {
             item {
-                Text(
-                    text = "Completado: ${formatDateTime(task.lastCompletedDate!!)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                val completer = task.completedBy?.let { memberMap[it] }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Hecha por: ${completer?.displayName ?: "Alguien del hogar"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Completado: ${formatDateTime(task.lastCompletedDate!!)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (reassignState is TaskActionState.Error) {
+                            Text(
+                                text = "⚠️ ${reassignState.message}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    TextButton(onClick = {
+                        selectedCompleterId = task.completedBy
+                        showChangeWhoDialog = true
+                    }) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Cambiar quién la hizo",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Cambiar")
+                    }
+                }
             }
         }
 
@@ -691,6 +742,60 @@ private fun TaskDetailContent(
         }
 
         item { Spacer(modifier = Modifier.height(32.dp)) }
+    }
+
+    // ── Diálogo: cambiar quién ha hecho la tarea ──
+    if (showChangeWhoDialog) {
+        val members = memberMap.values.toList()
+        AlertDialog(
+            onDismissRequest = { showChangeWhoDialog = false },
+            title = { Text("¿Quién ha hecho la tarea?") },
+            text = {
+                Column {
+                    Text(
+                        text = "Los puntos se moverán a la persona que elijas.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    members.forEach { member ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { selectedCompleterId = member.id }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = selectedCompleterId == member.id,
+                                onClick = { selectedCompleterId = member.id }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = member.displayName,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showChangeWhoDialog = false
+                        selectedCompleterId?.let { onChangeCompletedBy(it) }
+                    },
+                    enabled = selectedCompleterId != null && selectedCompleterId != task.completedBy
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showChangeWhoDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
 

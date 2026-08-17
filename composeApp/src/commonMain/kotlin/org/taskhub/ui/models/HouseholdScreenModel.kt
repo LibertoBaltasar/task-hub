@@ -49,13 +49,13 @@ class HouseholdScreenModel(
             try {
                 val household = repo.joinHousehold(inviteCode)
 
-                // Check if current user is already a member
-                val localId = repo.getLocalId()
-                if (localId != null && repo.isMember(household.id, localId)) {
-                    householdStore.saveHousehold(household.id, household.name, household.inviteCode)
+                householdStore.saveHousehold(household.id, household.name, household.inviteCode)
+
+                // Si ya somos miembros (con cualquiera de nuestras identidades),
+                // no volvemos a crear perfil: navegamos directo al hogar.
+                if (repo.isCurrentUserMember(household.id)) {
                     _uiState.value = HouseholdUiState.AlreadyMember(household)
                 } else {
-                    householdStore.saveHousehold(household.id, household.name, household.inviteCode)
                     _uiState.value = HouseholdUiState.Success(household)
                 }
                 authManager.syncHouseholdsToCloud()

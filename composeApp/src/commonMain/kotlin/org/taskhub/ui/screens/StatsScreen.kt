@@ -49,42 +49,6 @@ data class StatsScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val model = koinScreenModel<TaskScreenModel>()
-        val repo = koinInject<FirestoreRepository>()
-        val listState by model.listState.collectAsState()
-
-        var statsData by remember { mutableStateOf<MemberStatsData?>(null) }
-        var achievements by remember { mutableStateOf<List<Achievement>>(emptyList()) }
-        var isLoading by remember { mutableStateOf(true) }
-        var errorMessage by remember { mutableStateOf<String?>(null) }
-        val coroutineScope = rememberCoroutineScope()
-
-        // ── Función de carga extraíble para poder reintentar ──
-        suspend fun loadStats() {
-            isLoading = true
-            try {
-                // Load all data — including taskHistory for accurate stats
-                val tasks = repo.getTasks(householdId)
-                val assignments = repo.getAllAssignments(householdId)
-                val history = repo.getTaskHistory(householdId)
-                val members = repo.getMembers(householdId)
-                val member = members.find { it.id == memberId }
-
-                if (member != null) {
-                    statsData = computeStats(tasks, assignments, history, member)
-                    val unlocked = repo.getMemberAchievements(householdId, memberId)
-                    achievements = AchievementChecker.getAchievementsWithStatus(unlocked)
-                }
-                errorMessage = null
-            } catch (e: Exception) {
-                errorMessage = e.message ?: "Error al cargar estadísticas"
-            }
-            isLoading = false
-        }
-
-        LaunchedEffect(householdId, memberId) {
-            loadStats()
-        }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -97,7 +61,51 @@ data class StatsScreen(
                     onBack = { navigator.pop() }
                 )
 
-                when {
+                StatsBody(householdId, memberId)
+            }
+        }
+    }
+}
+
+/** Contenido reutilizable de estadísticas (sin barra superior), para la pantalla combinada. */
+@Composable
+internal fun StatsBody(householdId: String, memberId: String) {
+    val repo = koinInject<FirestoreRepository>()
+
+    var statsData by remember { mutableStateOf<MemberStatsData?>(null) }
+    var achievements by remember { mutableStateOf<List<Achievement>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // ── Función de carga extraíble para poder reintentar ──
+    suspend fun loadStats() {
+        isLoading = true
+        try {
+            // Load all data — including taskHistory for accurate stats
+            val tasks = repo.getTasks(householdId)
+            val assignments = repo.getAllAssignments(householdId)
+            val history = repo.getTaskHistory(householdId)
+            val members = repo.getMembers(householdId)
+            val member = members.find { it.id == memberId }
+
+            if (member != null) {
+                statsData = computeStats(tasks, assignments, history, member)
+                val unlocked = repo.getMemberAchievements(householdId, memberId)
+                achievements = AchievementChecker.getAchievementsWithStatus(unlocked)
+            }
+            errorMessage = null
+        } catch (e: Exception) {
+            errorMessage = e.message ?: "Error al cargar estadísticas"
+        }
+        isLoading = false
+    }
+
+    LaunchedEffect(householdId, memberId) {
+        loadStats()
+    }
+
+    when {
                     isLoading -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -189,9 +197,6 @@ data class StatsScreen(
                         }
                     }
                 }
-            }
-        }
-    }
 }
 
 // ── Data model ──────────────────────────────────────────────

@@ -22,6 +22,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.json.Json
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.UserProfile
 import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
@@ -194,6 +195,21 @@ class FirestoreRepository(
      */
     fun getLocalId(): String? =
         cachedLocalId ?: settingsStore.getGoogleUid() ?: settingsStore.getAnonymousUid()
+
+    /**
+     * Todas las identidades posibles del usuario actual, sin duplicados:
+     * UID de Google (si ha iniciado sesión), UID anónimo persistido y el UID
+     * activo en esta sesión. Sirve para resolver "¿este miembro soy yo?" con
+     * independencia de en qué momento se creó el miembro (antes o después de
+     * vincular Google), lo que evita duplicados al unirse y perfiles que no
+     * se borran al salir.
+     */
+    fun currentUserIdentities(): List<String> =
+        listOfNotNull(
+            settingsStore.getGoogleUid(),
+            settingsStore.getAnonymousUid(),
+            cachedLocalId
+        ).distinct()
 
     /**
      * Inicia sesión con Google: intercambia un Google idToken por un token de
@@ -414,20 +430,24 @@ class FirestoreRepository(
      * pero sí comprueba si el hogar queda vacío.
      */
     suspend fun leaveHousehold(householdId: String, currentUserId: String?): Boolean {
-        if (currentUserId != null) {
-            val members = try {
-                getMembers(householdId)
-            } catch (_: Exception) {
-                emptyList()
-            }
-            members.filter { it.userId == currentUserId }.forEach { member ->
-                try {
-                    client.delete("$baseUrl/households/$householdId/members/${member.id}") {
-                        withAuth()
-                    }
-                } catch (_: Exception) {
-                    // No crítico: si el doc ya no existe, seguimos.
+        // Resolver TODAS las identidades del usuario (Google + anónimo), para que
+        // el miembro se borre aunque se haya creado antes de vincular Google.
+        val identities = (currentUserIdentities() + listOfNotNull(currentUserId)).distinct()
+
+        val members = try {
+            getMembers(householdId)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        // Borrado real de los miembros que nos pertenecen.
+        val deleted = members.filter { it.userId != null && it.userId in identities }
+        deleted.forEach { member ->
+            try {
+                client.delete("$baseUrl/households/$householdId/members/${member.id}") {
+                    withAuth()
                 }
+            } catch (_: Exception) {
+                // No crítico: si el doc ya no existe, seguimos.
             }
         }
 
@@ -462,16 +482,22 @@ class FirestoreRepository(
     // ────────────────────────────────────────────────────────
 
     /**
-     * Check if a user (localId) is already a member of the given household.
+     * Check if any of the given [userIds] (identidades del usuario) ya es
+     * miembro del hogar. Acepta una lista porque un mismo usuario puede tener
+     * UID anónimo y UID de Google, y el miembro pudo crearse con cualquiera.
      */
-    suspend fun isMember(householdId: String, localId: String): Boolean {
+    suspend fun isMember(householdId: String, userIds: List<String>): Boolean {
         return try {
             val members = getMembers(householdId)
-            members.any { it.userId == localId }
+            members.any { it.userId != null && it.userId in userIds }
         } catch (_: Exception) {
             false
         }
     }
+
+    /** ¿El usuario actual (Google o anónimo) ya es miembro de este hogar? */
+    suspend fun isCurrentUserMember(householdId: String): Boolean =
+        isMember(householdId, currentUserIdentities())
 
     // ────────────────────────────────────────────────────────
     //  Members (subcollection under households/{id})
@@ -484,7 +510,9 @@ class FirestoreRepository(
                 tryAuthOrApiKey()
             }.body()
 
-            val members = response.documents.map { toMemberResponse(it, householdId) }
+            val members = response.documents
+                .map { toMemberResponse(it, householdId) }
+                .filter { it.leftAt == 0L }  // ocultar miembros que abandonaron (soft-delete)
             taskCache.cacheMembers(householdId, members)
             members
         } catch (e: Exception) {
@@ -501,6 +529,17 @@ class FirestoreRepository(
         userId: String? = null,
         inviteCode: String? = null
     ): MemberResponse {
+        // Deduplicación: si este usuario ya es miembro del hogar, devolvemos el
+        // miembro existente en lugar de crear un duplicado (p. ej. al re-unirse).
+        if (userId != null) {
+            val existing = try {
+                getMembers(householdId).firstOrNull { it.userId == userId }
+            } catch (_: Exception) {
+                null
+            }
+            if (existing != null) return existing
+        }
+
         val now = Clock.System.now().toEpochMilliseconds()
 
         val fields = mutableMapOf<String, FirestoreValue>(
@@ -549,6 +588,16 @@ class FirestoreRepository(
             }
 
         val id = extractDocId(response.name)
+
+        // Reclamar el perfil global del usuario (base del "perfilado creciente").
+        if (userId != null) {
+            try {
+                upsertUserProfile(userId = userId, displayName = displayName, avatarUrl = avatarUrl)
+            } catch (_: Exception) {
+                // No crítico: el perfil se puede reclamar más tarde.
+            }
+        }
+
         return MemberResponse(id, householdId, displayName, avatarUrl, role, 0, now,
             userId = userId,
             currentStreak = 0, bestStreak = 0, lastStreakDate = 0)
@@ -577,8 +626,9 @@ class FirestoreRepository(
             emptyList()
         }
 
-        // 1. Miembro vinculado al usuario autenticado actual
-        members.firstOrNull { localId != null && it.userId == localId }?.let { return it.id }
+        // 1. Miembro vinculado a cualquiera de las identidades del usuario
+        val identities = currentUserIdentities()
+        members.firstOrNull { it.userId != null && it.userId in identities }?.let { return it.id }
 
         // 2. Fallback: primer miembro existente
         if (members.isNotEmpty()) return members.first().id
@@ -618,6 +668,70 @@ class FirestoreRepository(
         }
 
         return true
+    }
+
+    /**
+     * Edita el rol de un miembro ("admin" | "child"). Permite reasignar el rol
+     * sin recrear el miembro (parte del "perfilado" estable por usuario).
+     */
+    suspend fun updateMemberRole(householdId: String, memberId: String, role: String) {
+        val fields = mapOf(
+            "role" to FirestoreValue(stringValue = role)
+        )
+        client.patch("$baseUrl/households/$householdId/members/$memberId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "role")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  User profile (perfilado global, colección users/{userId})
+    // ────────────────────────────────────────────────────────
+
+    /** Lee el perfil global de un usuario, o null si aún no existe. */
+    suspend fun getUserProfile(userId: String): UserProfile? {
+        return try {
+            val response: FirestoreDocumentResponse = client.get("$baseUrl/users/$userId") {
+                tryAuthOrApiKey()
+            }.body()
+            val f = response.fields
+            UserProfile(
+                id = userId,
+                displayName = f["displayName"]?.stringValue ?: "",
+                avatarUrl = f["avatarUrl"]?.stringValue,
+                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
+                updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Crea o actualiza el perfil global de un usuario (upsert vía PATCH).
+     * Base del "perfilado creciente": añadir foto/bio/etc. luego = añadir campos
+     * aquí y en [UserProfile], sin tocar la membresía por hogar.
+     */
+    suspend fun upsertUserProfile(userId: String, displayName: String, avatarUrl: String? = null) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val fields = mutableMapOf<String, FirestoreValue>(
+            "displayName" to FirestoreValue(stringValue = displayName),
+            "updatedAt" to FirestoreValue(integerValue = now.toString())
+        )
+        if (avatarUrl != null) {
+            fields["avatarUrl"] = FirestoreValue(stringValue = avatarUrl)
+        } else {
+            fields["avatarUrl"] = FirestoreValue(nullValue = "NULL_VALUE")
+        }
+
+        client.patch("$baseUrl/users/$userId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", fields.keys.joinToString(","))
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
     }
 
     /** Update member streak fields. Requires auth (write). */
@@ -859,14 +973,17 @@ class FirestoreRepository(
     ) {
         val now = Clock.System.now().toEpochMilliseconds()
 
-        // 1. Update lastCompletedDate on the task
+        // 1. Update lastCompletedDate + completedBy on the task.
+        //    completedBy registra QUIÉN marcó hecho (quien recibe los puntos),
+        //    al margen de quién esté asignado.
         val fields = mapOf(
-            "lastCompletedDate" to FirestoreValue(integerValue = now.toString())
+            "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
+            "completedBy" to FirestoreValue(stringValue = memberId)
         )
 
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "lastCompletedDate")
+            parameter("updateMask.fieldPaths", "lastCompletedDate,completedBy")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -893,17 +1010,26 @@ class FirestoreRepository(
     suspend fun revertTaskCompletion(
         householdId: String,
         taskId: String,
-        previousLastCompletedDate: Long?
+        previousLastCompletedDate: Long?,
+        previousCompletedBy: String? = null
     ) {
-        val value = if (previousLastCompletedDate != null) {
+        val lcdValue = if (previousLastCompletedDate != null) {
             FirestoreValue(integerValue = previousLastCompletedDate.toString())
         } else {
             FirestoreValue(nullValue = "NULL_VALUE")
         }
-        val fields = mapOf("lastCompletedDate" to value)
+        val cbValue = if (previousCompletedBy != null) {
+            FirestoreValue(stringValue = previousCompletedBy)
+        } else {
+            FirestoreValue(nullValue = "NULL_VALUE")
+        }
+        val fields = mapOf(
+            "lastCompletedDate" to lcdValue,
+            "completedBy" to cbValue
+        )
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "lastCompletedDate")
+            parameter("updateMask.fieldPaths", "lastCompletedDate,completedBy")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -955,6 +1081,78 @@ class FirestoreRepository(
             }
         } catch (_: Exception) {
             emptyList() // No taskHistory subcollection yet
+        }
+    }
+
+    /**
+     * Reasigna quién ha hecho una tarea ya completada (corrección de errores).
+     *
+     * Transfiere los puntos: resta los puntos al miembro anterior (completedBy)
+     * y se los suma al nuevo, manteniendo coherentes totalPoints, completedBy
+     * y el registro de historial correspondiente. Si la tarea no estaba
+     * completada (completedBy null), solo fija el nuevo miembro sin transferir.
+     */
+    suspend fun reassignTaskCompletion(
+        householdId: String,
+        taskId: String,
+        taskPoints: Int,
+        newMemberId: String
+    ) {
+        val tasks = getTasks(householdId)
+        val task = tasks.find { it.id == taskId } ?: return
+        val oldMemberId = task.completedBy
+        val completedAt = task.lastCompletedDate ?: Clock.System.now().toEpochMilliseconds()
+
+        // 1. Transferir puntos SOLO si había un completer previo registrado.
+        //    (quien marca hecho recibe los puntos; al corregir se mueven de la
+        //    persona anterior a la nueva). Si completedBy era null (tarea legacy
+        //    completada antes de registrar quién), fijamos el nuevo sin tocar
+        //    puntos para no duplicarlos.
+        if (oldMemberId != null && oldMemberId != newMemberId) {
+            addMemberPoints(householdId, oldMemberId, -taskPoints)
+            addMemberPoints(householdId, newMemberId, taskPoints)
+        }
+
+        // 2. Actualizar completedBy en la tarea.
+        val fields = mapOf("completedBy" to FirestoreValue(stringValue = newMemberId))
+        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "completedBy")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+
+        // 3. Reasignar el registro de historial de esa compleción para que las
+        //    estadísticas (StatsScreen) sigan coherentes.
+        if (oldMemberId != null && oldMemberId != newMemberId) {
+            updateTaskHistoryMember(householdId, taskId, completedAt, newMemberId)
+        }
+    }
+
+    /**
+     * Actualiza el memberId del registro de historial de una compleción concreta
+     * (identificada por taskId + completedAt). Se usa al corregir quién hizo una
+     * tarea. No-op si no existe el registro.
+     */
+    private suspend fun updateTaskHistoryMember(
+        householdId: String,
+        taskId: String,
+        completedAt: Long,
+        newMemberId: String
+    ) {
+        val history = try {
+            getTaskHistory(householdId)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val record = history.firstOrNull { it.taskId == taskId && it.completedAt == completedAt }
+            ?: return
+        val fields = mapOf("memberId" to FirestoreValue(stringValue = newMemberId))
+        client.patch("$baseUrl/households/$householdId/taskHistory/${record.id}") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "memberId")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
         }
     }
 
@@ -1017,6 +1215,24 @@ class FirestoreRepository(
         }.body()
 
         return response.documents.map { toTaskAssignmentResponse(it, taskId) }
+    }
+
+    /** Borra todas las asignaciones de una tarea (para reasignar al editar). */
+    suspend fun deleteAssignments(householdId: String, taskId: String) {
+        val assignments = try {
+            getAssignments(householdId, taskId)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        assignments.forEach { assignment ->
+            try {
+                client.delete("$baseUrl/households/$householdId/tasks/$taskId/assignments/${assignment.id}") {
+                    withAuth()
+                }
+            } catch (_: Exception) {
+                // No crítico: si ya no existe, seguimos.
+            }
+        }
     }
 
     /** Get all assignments across all tasks for a household. */
@@ -1219,7 +1435,8 @@ class FirestoreRepository(
         penaltyValue: Int,
         penaltyInterval: String,
         penaltyMax: Int,
-        assignmentRotation: List<org.taskhub.network.models.AssignmentSlot> = emptyList()
+        assignmentRotation: List<org.taskhub.network.models.AssignmentSlot> = emptyList(),
+        dueDate: Long = 0
     ) {
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -1228,6 +1445,7 @@ class FirestoreRepository(
             "description" to FirestoreValue(stringValue = description),
             "points" to FirestoreValue(integerValue = points.toString()),
             "frequency" to FirestoreValue(stringValue = frequency),
+            "dueDate" to FirestoreValue(integerValue = dueDate.toString()),
             "updatedAt" to FirestoreValue(integerValue = now.toString())
         )
 
@@ -1372,6 +1590,7 @@ class FirestoreRepository(
             penaltyMax = f["penaltyMax"]?.integerValue?.toIntOrNull() ?: 0,
             dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
             lastCompletedDate = f["lastCompletedDate"]?.integerValue?.toLongOrNull(),
+            completedBy = f["completedBy"]?.stringValue,
             assignmentRotation = f["assignmentRotation"]?.arrayValue?.values
                 ?.mapNotNull { slotValue ->
                     val sf = slotValue.mapValue?.fields ?: return@mapNotNull null
@@ -1720,7 +1939,8 @@ class FirestoreRepository(
             userId = f["userId"]?.stringValue,
             currentStreak = f["currentStreak"]?.integerValue?.toIntOrNull() ?: 0,
             bestStreak = f["bestStreak"]?.integerValue?.toIntOrNull() ?: 0,
-            lastStreakDate = f["lastStreakDate"]?.integerValue?.toLongOrNull() ?: 0L
+            lastStreakDate = f["lastStreakDate"]?.integerValue?.toLongOrNull() ?: 0L,
+            leftAt = f["leftAt"]?.integerValue?.toLongOrNull() ?: 0L
         )
     }
 

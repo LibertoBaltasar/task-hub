@@ -34,28 +34,6 @@ data class RewardListScreen(val householdId: String) : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val memberModel = koinScreenModel<MemberScreenModel>()
-        val rewardState by memberModel.rewardState.collectAsState()
-        val memberState by memberModel.uiState.collectAsState()
-
-        // Determine if current user is admin
-        var isAdmin by remember { mutableStateOf(false) }
-        var currentMemberId by remember { mutableStateOf("") }
-
-        LaunchedEffect(householdId) {
-            memberModel.loadRewards(householdId)
-            memberModel.loadMembers(householdId)
-        }
-
-        val localId = koinInject<org.taskhub.network.FirestoreRepository>().getLocalId()
-
-        LaunchedEffect(memberState) {
-            if (memberState is MemberUiState.Success) {
-                val members = (memberState as MemberUiState.Success).members
-                val myMember = members.find { it.userId == localId }
-                isAdmin = myMember?.role == "admin"
-                currentMemberId = myMember?.id ?: ""
-            }
-        }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -65,118 +43,155 @@ data class RewardListScreen(val householdId: String) : Screen {
                 // Top bar
                 TaskHubTopBar(
                     title = "Recompensas",
-                    onBack = { navigator.pop() },
-                    actions = {
-                        if (isAdmin) {
-                            TextButton(
-                                onClick = {
-                                    navigator.push(CreateRewardScreen(householdId))
-                                },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.primary
-                                )
-                            ) {
-                                Text(
-                                    "+ Nueva",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
+                    onBack = { navigator.pop() }
                 )
 
-                when (val rState = rewardState) {
-                    is RewardUiState.Loading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Teal600)
-                        }
-                    }
+                RewardsBody(householdId, memberModel)
+            }
+        }
+    }
+}
 
-                    is RewardUiState.Success -> {
-                        if (rState.rewards.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "🎁",
-                                        style = MaterialTheme.typography.displayLarge
-                                    )
-                                    Spacer(Modifier.height(16.dp))
-                                    Text(
-                                        text = "No hay recompensas aún",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        text = if (isAdmin) "Crea la primera recompensa con +" else "El admin aún no ha creado recompensas",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        } else {
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(2),
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                items(rState.rewards) { reward ->
-                                    RewardCard(
-                                        reward = reward,
-                                        isAdmin = isAdmin,
-                                        onDelete = {
-                                            memberModel.deleteReward(householdId, reward.id)
-                                        },
-                                        onRedeem = {
-                                            if (currentMemberId.isNotEmpty()) {
-                                                navigator.push(
-                                                    MemberRewardScreen(
-                                                        householdId = householdId,
-                                                        memberId = currentMemberId,
-                                                        reward = reward
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
+/** Contenido reutilizable de recompensas (sin barra superior), para la pantalla combinada. */
+@Composable
+internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
+    val navigator = LocalNavigator.currentOrThrow
+    val rewardState by memberModel.rewardState.collectAsState()
+    val memberState by memberModel.uiState.collectAsState()
 
-                    is RewardUiState.Error -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "❌ ${rState.message}",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                                Spacer(Modifier.height(16.dp))
-                                Button(onClick = { memberModel.loadRewards(householdId) }) {
-                                    Text("Reintentar")
-                                }
-                            }
-                        }
-                    }
+    // Determine if current user is admin
+    var isAdmin by remember { mutableStateOf(false) }
+    var currentMemberId by remember { mutableStateOf("") }
 
-                    is RewardUiState.Idle -> {}
+    LaunchedEffect(householdId) {
+        memberModel.loadRewards(householdId)
+        memberModel.loadMembers(householdId)
+    }
+
+    val localId = koinInject<org.taskhub.network.FirestoreRepository>().getLocalId()
+
+    LaunchedEffect(memberState) {
+        if (memberState is MemberUiState.Success) {
+            val members = (memberState as MemberUiState.Success).members
+            val myMember = members.find { it.userId == localId }
+            isAdmin = myMember?.role == "admin"
+            currentMemberId = myMember?.id ?: ""
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Acción de crear (solo admins)
+        if (isAdmin) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = { navigator.push(CreateRewardScreen(householdId)) },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        "+ Nueva",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
+        }
+
+        when (val rState = rewardState) {
+            is RewardUiState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = Teal600)
+                }
+            }
+
+            is RewardUiState.Success -> {
+                if (rState.rewards.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "🎁",
+                                style = MaterialTheme.typography.displayLarge
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            Text(
+                                text = "No hay recompensas aún",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text = if (isAdmin) "Crea la primera recompensa con +" else "El admin aún no ha creado recompensas",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(rState.rewards) { reward ->
+                            RewardCard(
+                                reward = reward,
+                                isAdmin = isAdmin,
+                                onDelete = {
+                                    memberModel.deleteReward(householdId, reward.id)
+                                },
+                                onRedeem = {
+                                    if (currentMemberId.isNotEmpty()) {
+                                        navigator.push(
+                                            MemberRewardScreen(
+                                                householdId = householdId,
+                                                memberId = currentMemberId,
+                                                reward = reward
+                                            )
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            is RewardUiState.Error -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "❌ ${rState.message}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = { memberModel.loadRewards(householdId) }) {
+                            Text("Reintentar")
+                        }
+                    }
+                }
+            }
+
+            is RewardUiState.Idle -> {}
         }
     }
 }

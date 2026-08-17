@@ -149,6 +149,12 @@ class TaskScreenModel(
     private val _actionState = MutableStateFlow<TaskActionState>(TaskActionState.Idle)
     val actionState: StateFlow<TaskActionState> = _actionState.asStateFlow()
 
+    // Estado específico para "cambiar quién hizo la tarea". Separado de
+    // actionState para no disparar la navegación de vuelta (navigator.pop)
+    // que sí disparan completar/eliminar.
+    private val _reassignState = MutableStateFlow<TaskActionState>(TaskActionState.Idle)
+    val reassignState: StateFlow<TaskActionState> = _reassignState.asStateFlow()
+
     // Filter & sort state
     private val _filter = MutableStateFlow(TaskFilter.PENDING)
     val filter: StateFlow<TaskFilter> = _filter.asStateFlow()
@@ -315,7 +321,8 @@ class TaskScreenModel(
     data class UndoState(
         val householdId: String,
         val taskId: String,
-        val previousLastCompletedDate: Long?
+        val previousLastCompletedDate: Long?,
+        val previousCompletedBy: String? = null
     )
 
     private val _undoState = MutableStateFlow<UndoState?>(null)
@@ -339,7 +346,8 @@ class TaskScreenModel(
 
                 // Save undo info BEFORE completing
                 val previousLcd = task.lastCompletedDate
-                _undoState.value = UndoState(householdId, taskId, previousLcd)
+                val previousCompletedBy = task.completedBy
+                _undoState.value = UndoState(householdId, taskId, previousLcd, previousCompletedBy)
 
                 repo.completeTask(
                     householdId = householdId,
@@ -378,7 +386,12 @@ class TaskScreenModel(
         screenModelScope.launch {
             try {
                 // Revert lastCompletedDate on the task
-                repo.revertTaskCompletion(state.householdId, state.taskId, state.previousLastCompletedDate)
+                repo.revertTaskCompletion(
+                    state.householdId,
+                    state.taskId,
+                    state.previousLastCompletedDate,
+                    state.previousCompletedBy
+                )
             } catch (_: Exception) {
                 // Non-critical — task stays completed
             }
@@ -387,6 +400,38 @@ class TaskScreenModel(
 
     fun clearUndoState() {
         _undoState.value = null
+    }
+
+    // ── Reasignar quién completó (corrección de errores) ─────
+
+    /**
+     * Cambia quién ha hecho una tarea ya completada. Transfiere los puntos del
+     * miembro anterior al nuevo (coherente con "quien marca hecho recibe los
+     * puntos") y refresca el detalle al terminar.
+     */
+    fun reassignTaskCompletion(
+        householdId: String,
+        taskId: String,
+        taskPoints: Int,
+        newMemberId: String
+    ) {
+        screenModelScope.launch {
+            _reassignState.value = TaskActionState.Loading
+            try {
+                repo.reassignTaskCompletion(
+                    householdId = householdId,
+                    taskId = taskId,
+                    taskPoints = taskPoints,
+                    newMemberId = newMemberId
+                )
+                _reassignState.value = TaskActionState.Success
+                loadTaskDetail(householdId, taskId)
+            } catch (e: Exception) {
+                _reassignState.value = TaskActionState.Error(
+                    e.message ?: "Error al cambiar quién hizo la tarea"
+                )
+            }
+        }
     }
 
     // ── Complete assignment (existing, keeps working) ────────
@@ -483,7 +528,10 @@ class TaskScreenModel(
         penaltyValue: Int,
         penaltyInterval: String,
         penaltyMax: Int,
-        assignmentRotation: List<AssignmentSlot> = emptyList()
+        assignmentRotation: List<AssignmentSlot> = emptyList(),
+        memberIds: List<String> = emptyList(),
+        mandatory: Boolean = false,
+        dueDate: Long = 0
     ) {
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
@@ -502,8 +550,30 @@ class TaskScreenModel(
                     penaltyValue = penaltyValue,
                     penaltyInterval = penaltyInterval,
                     penaltyMax = penaltyMax,
-                    assignmentRotation = assignmentRotation
+                    assignmentRotation = assignmentRotation,
+                    dueDate = dueDate
                 )
+
+                // Sincronizar asignaciones: borrar las existentes y reasignar.
+                // Si no se seleccionó a nadie, se asigna a todos (misma semántica
+                // que al crear).
+                repo.deleteAssignments(householdId, taskId)
+                val membersToAssign = if (memberIds.isNotEmpty()) {
+                    memberIds
+                } else {
+                    repo.getMembers(householdId).map { it.id }
+                }
+                if (membersToAssign.isNotEmpty()) {
+                    repo.assignTask(
+                        householdId = householdId,
+                        taskId = taskId,
+                        memberIds = membersToAssign,
+                        mandatory = mandatory,
+                        dueDate = dueDate,
+                        taskTitle = title
+                    )
+                }
+
                 _actionState.value = TaskActionState.Success
                 // Refresh detail
                 loadTaskDetail(householdId, taskId)

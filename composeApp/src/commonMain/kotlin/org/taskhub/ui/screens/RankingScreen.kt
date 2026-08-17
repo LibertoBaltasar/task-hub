@@ -27,31 +27,6 @@ data class RankingScreen(val householdId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val repo = koinInject<FirestoreRepository>()
-
-        var members by remember { mutableStateOf<List<MemberResponse>>(emptyList()) }
-        var isLoading by remember { mutableStateOf(true) }
-        var errorMessage by remember { mutableStateOf<String?>(null) }
-        val coroutineScope = rememberCoroutineScope()
-
-        // ── Función de carga extraíble para poder reintentar ──
-        suspend fun loadRanking() {
-            isLoading = true
-            try {
-                val all = repo.getMembers(householdId)
-                // Sort by totalPoints descending, filter out members with leftAt
-                members = all
-                    .sortedByDescending { it.totalPoints }
-                errorMessage = null
-            } catch (e: Exception) {
-                errorMessage = e.message ?: "Error al cargar miembros"
-            }
-            isLoading = false
-        }
-
-        LaunchedEffect(householdId) {
-            loadRanking()
-        }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -64,56 +39,87 @@ data class RankingScreen(val householdId: String) : Screen {
                     onBack = { navigator.pop() }
                 )
 
-                when {
-                    isLoading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Teal600)
-                        }
-                    }
-                    errorMessage != null -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("❌ $errorMessage", color = MaterialTheme.colorScheme.error)
-                                Spacer(Modifier.height(16.dp))
-                                Button(onClick = { coroutineScope.launch { loadRanking() } }) { Text("Reintentar") }
-                            }
-                        }
-                    }
-                    members.isEmpty() -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "No hay miembros aún",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            itemsIndexed(members) { index, member ->
-                                RankingRow(
-                                    position = index + 1,
-                                    member = member
-                                )
-                            }
-                            item { Spacer(Modifier.height(16.dp)) }
-                        }
-                    }
+                RankingBody(householdId)
+            }
+        }
+    }
+}
+
+/** Contenido reutilizable del ranking (sin barra superior), para la pantalla combinada. */
+@Composable
+internal fun RankingBody(householdId: String) {
+    val repo = koinInject<FirestoreRepository>()
+
+    var members by remember { mutableStateOf<List<MemberResponse>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // ── Función de carga extraíble para poder reintentar ──
+    suspend fun loadRanking() {
+        isLoading = true
+        try {
+            val all = repo.getMembers(householdId)
+            // Sort by totalPoints descending (getMembers ya filtra miembros que abandonaron)
+            members = all.sortedByDescending { it.totalPoints }
+            errorMessage = null
+        } catch (e: Exception) {
+            errorMessage = e.message ?: "Error al cargar miembros"
+        }
+        isLoading = false
+    }
+
+    LaunchedEffect(householdId) {
+        loadRanking()
+    }
+
+    when {
+        isLoading -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Teal600)
+            }
+        }
+        errorMessage != null -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("❌ $errorMessage", color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(16.dp))
+                    Button(onClick = { coroutineScope.launch { loadRanking() } }) { Text("Reintentar") }
                 }
+            }
+        }
+        members.isEmpty() -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "No hay miembros aún",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+        else -> {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                itemsIndexed(members) { index, member ->
+                    RankingRow(
+                        position = index + 1,
+                        member = member
+                    )
+                }
+                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
@@ -215,7 +221,7 @@ private fun RankingRow(
                     color = Coral700
                 )
                 Text(
-                    text = "${member.currentStreak}🔥",
+                    text = "🔥 ${member.currentStreak}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

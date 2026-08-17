@@ -3,22 +3,29 @@ package org.taskhub.ui.screens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
+import org.koin.compose.koinInject
+import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.AssignmentSlot
+import org.taskhub.network.models.Subtask
 import org.taskhub.ui.models.TaskActionState
 import org.taskhub.ui.models.TaskScreenModel
 import org.taskhub.ui.models.MemberScreenModel
@@ -35,11 +42,13 @@ data class EditTaskScreen(
     val task: TaskResponse
 ) : Screen {
 
+    @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val taskModel = koinScreenModel<TaskScreenModel>()
         val memberModel = koinScreenModel<MemberScreenModel>()
+        val repo = koinInject<FirestoreRepository>()
         val actionState by taskModel.actionState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
 
@@ -59,11 +68,21 @@ data class EditTaskScreen(
         var recurrenceDays by remember { mutableStateOf(task.recurrenceDays.toSet()) }
         var tags by remember { mutableStateOf(task.tags) }
         var tagsText by remember { mutableStateOf("") }
+        // Checklist (subtareas) — editable desde "Editar tarea"
+        var subtasks by remember { mutableStateOf(task.subtasks) }
+        var subtaskText by remember { mutableStateOf("") }
         var hasPenalty by remember { mutableStateOf(task.penaltyMode != null) }
         var penaltyMode by remember { mutableStateOf(task.penaltyMode ?: "fixed") }
         var penaltyValue by remember { mutableStateOf(if (task.penaltyValue > 0) task.penaltyValue.toString() else "") }
         var penaltyInterval by remember { mutableStateOf(task.penaltyInterval) }
         var penaltyMax by remember { mutableStateOf(if (task.penaltyMax > 0) task.penaltyMax.toString() else "") }
+
+        // Obligatoria + fecha límite (se precargan de la tarea y sus asignaciones)
+        var mandatory by remember { mutableStateOf(false) }
+        var hasDeadline by remember { mutableStateOf(task.dueDate > 0) }
+        var deadlineDay by remember { mutableStateOf("") }
+        var deadlineTime by remember { mutableStateOf("12:00") }
+        var showDatePicker by remember { mutableStateOf(false) }
 
         // Assignment state
         var selectedMembers by remember { mutableStateOf(setOf<String>()) }
@@ -77,10 +96,60 @@ data class EditTaskScreen(
             )
         }
 
+        // Precargar fecha límite y asignaciones existentes (para poder editarlas)
+        LaunchedEffect(Unit) {
+            if (task.dueDate > 0) {
+                val dt = Instant.fromEpochMilliseconds(task.dueDate)
+                    .toLocalDateTime(TimeZone.currentSystemDefault())
+                deadlineDay = "${dt.year}-${dt.monthNumber.toString().padStart(2, '0')}-${dt.dayOfMonth.toString().padStart(2, '0')}"
+                deadlineTime = "${dt.hour.toString().padStart(2, '0')}:${dt.minute.toString().padStart(2, '0')}"
+            }
+            try {
+                val assignments = repo.getAssignments(householdId, task.id)
+                if (assignments.isNotEmpty()) {
+                    selectedMembers = assignments.map { it.memberId }.toSet()
+                    mandatory = assignments.firstOrNull()?.mandatory ?: false
+                }
+            } catch (_: Exception) {
+                // Sin asignaciones → todo vacío
+            }
+        }
+
         // Handle success — navigate back and refresh detail
         LaunchedEffect(actionState) {
             if (actionState is TaskActionState.Success) {
                 navigator.pop()
+            }
+        }
+
+        // ── DatePicker para la fecha límite ──
+        if (showDatePicker) {
+            val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+            val initialMillis = if (deadlineDay.isValidDateFormat()) {
+                val parts = deadlineDay.split("-")
+                LocalDate(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
+                    .atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
+            } else {
+                today.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds()
+            }
+            val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val date = Instant.fromEpochMilliseconds(millis)
+                                .toLocalDateTime(TimeZone.UTC).date
+                            deadlineDay = "${date.year}-${date.monthNumber.toString().padStart(2, '0')}-${date.dayOfMonth.toString().padStart(2, '0')}"
+                        }
+                        showDatePicker = false
+                    }) { Text("Aceptar") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
             }
         }
 
@@ -100,6 +169,9 @@ data class EditTaskScreen(
                                     val points = pointsText.toIntOrNull() ?: 10
                                     val pValue = penaltyValue.toIntOrNull() ?: 0
                                     val pMax = penaltyMax.toIntOrNull() ?: 0
+                                    val dueDate = if (hasDeadline && deadlineDay.isNotBlank()) {
+                                        parseDeadline(deadlineDay, deadlineTime)
+                                    } else 0L
 
                                     // Build assignment rotation from rotation slots
                                     val rotation: List<AssignmentSlot> = if (hasRotation) {
@@ -121,11 +193,15 @@ data class EditTaskScreen(
                                         frequency = frequency,
                                         recurrenceDays = recurrenceDays.toList().sorted(),
                                         tags = tags,
+                                        subtasks = subtasks,
                                         penaltyMode = if (hasPenalty) penaltyMode else null,
                                         penaltyValue = pValue,
                                         penaltyInterval = penaltyInterval,
                                         penaltyMax = pMax,
-                                        assignmentRotation = rotation
+                                        assignmentRotation = rotation,
+                                        memberIds = selectedMembers.toList(),
+                                        mandatory = mandatory,
+                                        dueDate = dueDate
                                     )
                                 },
                                 enabled = actionState !is TaskActionState.Loading && title.isNotBlank(),
@@ -195,6 +271,79 @@ data class EditTaskScreen(
                         )
                     }
 
+                    // ── Checklist (subtareas) ──
+                    item {
+                        Text(
+                            text = "✅ Checklist",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = subtaskText,
+                                onValueChange = { subtaskText = it },
+                                label = { Text("Añadir ítem") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            Button(
+                                onClick = {
+                                    val text = subtaskText.trim()
+                                    if (text.isNotBlank()) {
+                                        val id = kotlin.random.Random.nextLong().toString(36)
+                                        subtasks = subtasks + Subtask(id = id, text = text, completed = false)
+                                        subtaskText = ""
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                            ) {
+                                Text("+")
+                            }
+                        }
+                    }
+
+                    if (subtasks.isNotEmpty()) {
+                        items(subtasks) { st ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = st.completed,
+                                    onCheckedChange = { checked ->
+                                        subtasks = subtasks.map {
+                                            if (it.id == st.id) it.copy(completed = checked) else it
+                                        }
+                                    },
+                                    colors = CheckboxDefaults.colors(checkedColor = Teal600)
+                                )
+                                Text(
+                                    text = st.text,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(start = 4.dp),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                TextButton(
+                                    onClick = { subtasks = subtasks.filter { it.id != st.id } },
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    )
+                                ) {
+                                    Text("✕")
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         OutlinedTextField(
                             value = description,
@@ -234,9 +383,10 @@ data class EditTaskScreen(
                     }
 
                     item {
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val freqs = listOf(
                                 "once" to "Una vez",
@@ -334,9 +484,10 @@ data class EditTaskScreen(
 
                     if (tags.isNotEmpty()) {
                         item {
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 tags.forEach { tag ->
                                     InputChip(
@@ -352,37 +503,18 @@ data class EditTaskScreen(
                         }
                     }
 
-                    // Predefined tags
+                    // Predefined tags (FlowRow: los chips hacen wrap en vez de comprimirse)
                     item {
                         val predefinedTags = listOf(
                             "limpieza", "cocina", "compras", "mascotas",
                             "mantenimiento", "niños", "exterior", "administración", "otro"
                         )
-                        Row(
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            predefinedTags.take(6).forEach { tag ->
-                                FilterChip(
-                                    selected = tag in tags,
-                                    onClick = {
-                                        tags = if (tag in tags) tags - tag else tags + tag
-                                    },
-                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
-                                )
-                            }
-                        }
-                    }
-                    item {
-                        val predefinedTags = listOf(
-                            "limpieza", "cocina", "compras", "mascotas",
-                            "mantenimiento", "niños", "exterior", "administración", "otro"
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            predefinedTags.drop(6).forEach { tag ->
+                            predefinedTags.forEach { tag ->
                                 FilterChip(
                                     selected = tag in tags,
                                     onClick = {
@@ -464,7 +596,8 @@ data class EditTaskScreen(
                         ) {
                             Text(
                                 text = "🔄 Rotación semanal (diferente persona cada día)",
-                                style = MaterialTheme.typography.bodyLarge
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f)
                             )
                             Switch(
                                 checked = hasRotation,
@@ -552,6 +685,87 @@ data class EditTaskScreen(
                             }
 
                             else -> {}
+                        }
+                    }
+
+                    // Obligatoria
+                    if (selectedMembers.isNotEmpty()) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "🔒 Obligatoria (no rechazable)",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Switch(
+                                    checked = mandatory,
+                                    onCheckedChange = { mandatory = it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedTrackColor = Coral500
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    // ── Fecha límite ──
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "⏰ Fecha límite",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Switch(
+                                checked = hasDeadline,
+                                onCheckedChange = {
+                                    hasDeadline = it
+                                    if (it && deadlineDay.isBlank()) {
+                                        val now = Clock.System.now()
+                                        val local = now.toLocalDateTime(TimeZone.currentSystemDefault())
+                                        deadlineDay = "${local.year}-${local.monthNumber.toString().padStart(2, '0')}-${local.dayOfMonth.toString().padStart(2, '0')}"
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    if (hasDeadline) {
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showDatePicker = true },
+                                    modifier = Modifier.weight(1f).height(56.dp)
+                                ) {
+                                    Icon(Icons.Default.DateRange, contentDescription = null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = if (deadlineDay.isBlank()) "Elegir fecha" else deadlineDay,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                OutlinedTextField(
+                                    value = deadlineTime,
+                                    onValueChange = { deadlineTime = it },
+                                    label = { Text("Hora (HH:MM)") },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    isError = !deadlineTime.isValidTimeFormat()
+                                )
+                            }
                         }
                     }
 

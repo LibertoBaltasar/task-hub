@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,6 +74,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -270,7 +273,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         }
                     }
 
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.height(16.dp))
 
                     // Create button
                     val cost = costText.toIntOrNull() ?: 0

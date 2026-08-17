@@ -17,6 +17,8 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.koin.compose.koinInject
+import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -45,6 +47,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val memberModel = koinScreenModel<MemberScreenModel>()
         val notificationModel = koinScreenModel<NotificationScreenModel>()
+        val repo = koinInject<FirestoreRepository>()
         val householdState by householdModel.uiState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
         val notificationUnreadCount by notificationModel.unreadCount.collectAsState()
@@ -65,6 +68,10 @@ data class HouseholdScreen(val householdId: String) : Screen {
         var showSettings by remember { mutableStateOf(false) }
         val appSettings = LocalAppSettings.current
 
+        // Miembros desplegable + rol actual del usuario
+        var membersExpanded by remember { mutableStateOf(false) }
+        var isAdmin by remember { mutableStateOf(false) }
+
         LaunchedEffect(householdId) {
             householdModel.loadHousehold(householdId)
             memberModel.loadMembers(householdId)
@@ -74,7 +81,12 @@ data class HouseholdScreen(val householdId: String) : Screen {
         var memberId by remember { mutableStateOf("") }
         LaunchedEffect(memberState) {
             if (memberState is MemberUiState.Success) {
-                memberId = (memberState as MemberUiState.Success).members.firstOrNull()?.id ?: ""
+                val members = (memberState as MemberUiState.Success).members
+                memberId = members.firstOrNull()?.id ?: ""
+                // Determinar si el usuario actual es admin (por su identidad)
+                val localId = repo.getLocalId()
+                val myMember = members.firstOrNull { it.userId == localId } ?: members.firstOrNull()
+                isAdmin = myMember?.role == "admin"
             }
         }
         LaunchedEffect(householdId, memberId) {
@@ -420,7 +432,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
 
-                                // Navigation to tasks + stats + ranking
+                                // Navigation: Ver Tareas + Calendario
                                 item {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -429,8 +441,8 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                         Button(
                                             onClick = {
                                                 val mState = memberState
-                                                val memberId = if (mState is MemberUiState.Success) mState.members.firstOrNull()?.id else null
-                                                navigator.push(TaskListScreen(householdId, memberId))
+                                                val mid = if (mState is MemberUiState.Success) mState.members.firstOrNull()?.id else null
+                                                navigator.push(TaskListScreen(householdId, mid))
                                             },
                                             modifier = Modifier.weight(1f),
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
@@ -446,15 +458,15 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                         Button(
                                             onClick = {
                                                 val mState = memberState
-                                                val memberId = (mState as? MemberUiState.Success)?.members?.firstOrNull()?.id ?: return@Button
-                                                navigator.push(StatsScreen(householdId, memberId))
+                                                val mid = (mState as? MemberUiState.Success)?.members?.firstOrNull()?.id
+                                                navigator.push(CalendarScreen(householdId, mid))
                                             },
                                             modifier = Modifier.weight(1f),
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                             shape = MaterialTheme.shapes.large
                                         ) {
                                             Text(
-                                                text = "Estadísticas",
+                                                text = "Calendario",
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -462,62 +474,32 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
 
-                                // Ranking button
-                                item {
-                                    Button(
-                                        onClick = { navigator.push(RankingScreen(householdId)) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                                        shape = MaterialTheme.shapes.large
-                                    ) {
-                                        Text(
-                                            text = "Ranking",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                // Rewards button
-                                item {
-                                    Button(
-                                        onClick = { navigator.push(RewardListScreen(householdId)) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                        shape = MaterialTheme.shapes.large
-                                    ) {
-                                        Text(
-                                            text = "Recompensas",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                // Calendar button
+                                // Estadísticas + ranking + recompensas (pantalla combinada)
                                 item {
                                     Button(
                                         onClick = {
                                             val mState = memberState
-                                            val memberId = (mState as? MemberUiState.Success)?.members?.firstOrNull()?.id
-                                            navigator.push(CalendarScreen(householdId, memberId))
+                                            val mid = (mState as? MemberUiState.Success)?.members?.firstOrNull()?.id ?: ""
+                                            navigator.push(ExploreScreen(householdId, mid))
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         shape = MaterialTheme.shapes.large
                                     ) {
                                         Text(
-                                            text = "Calendario",
+                                            text = "Estadísticas, ranking y recompensas",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
                                 }
 
-                                // Members header
+                                // Members header (desplegable)
                                 item {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { membersExpanded = !membersExpanded },
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
@@ -540,67 +522,90 @@ data class HouseholdScreen(val householdId: String) : Screen {
 
                                             else -> {}
                                         }
+
+                                        Text(
+                                            text = if (membersExpanded) "▲" else "▼",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
                                     }
                                 }
 
-                                // Members list
-                                when (val mState = memberState) {
-                                    is MemberUiState.Loading -> {
-                                        item {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(100.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                CircularProgressIndicator(color = Teal600)
+                                // Members list (desplegable)
+                                if (membersExpanded) {
+                                    when (val mState = memberState) {
+                                        is MemberUiState.Loading -> {
+                                            item {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(100.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    CircularProgressIndicator(color = Teal600)
+                                                }
                                             }
                                         }
-                                    }
 
-                                    is MemberUiState.Success -> {
-                                        if (mState.members.isEmpty()) {
+                                        is MemberUiState.Success -> {
+                                            if (mState.members.isEmpty()) {
+                                                item {
+                                                    Card(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                                        )
+                                                    ) {
+                                                        Text(
+                                                            text = "No hay miembros aún. ¡Invita a alguien!",
+                                                            modifier = Modifier.padding(24.dp),
+                                                            style = MaterialTheme.typography.bodyLarge,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            textAlign = TextAlign.Center
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                items(mState.members) { member ->
+                                                    MemberCard(
+                                                        member = member,
+                                                        isAdmin = isAdmin,
+                                                        onRoleChange = { newRole ->
+                                                            memberModel.updateMemberRole(householdId, member.id, newRole)
+                                                        },
+                                                        onCreateTask = {
+                                                            navigator.push(
+                                                                CreateTaskScreen(
+                                                                    householdId = householdId,
+                                                                    createdBy = memberId,
+                                                                    preselectedMemberId = member.id
+                                                                )
+                                                            )
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        is MemberUiState.Error -> {
                                             item {
                                                 Card(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     colors = CardDefaults.cardColors(
-                                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                                        containerColor = MaterialTheme.colorScheme.errorContainer
                                                     )
                                                 ) {
                                                     Text(
-                                                        text = "No hay miembros aún. ¡Invita a alguien!",
-                                                        modifier = Modifier.padding(24.dp),
-                                                        style = MaterialTheme.typography.bodyLarge,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        textAlign = TextAlign.Center
+                                                        text = "Error: ${mState.message}",
+                                                        modifier = Modifier.padding(16.dp),
+                                                        color = MaterialTheme.colorScheme.onErrorContainer
                                                     )
                                                 }
                                             }
-                                        } else {
-                                            items(mState.members) { member ->
-                                                MemberCard(member)
-                                            }
                                         }
-                                    }
 
-                                    is MemberUiState.Error -> {
-                                        item {
-                                            Card(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                colors = CardDefaults.cardColors(
-                                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                                )
-                                            ) {
-                                                Text(
-                                                    text = "Error: ${mState.message}",
-                                                    modifier = Modifier.padding(16.dp),
-                                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                                )
-                                            }
-                                        }
+                                        is MemberUiState.Idle -> {}
                                     }
-
-                                    is MemberUiState.Idle -> {}
                                 }
 
                                 // Salir (desvincularse) del hogar
@@ -659,7 +664,12 @@ data class HouseholdScreen(val householdId: String) : Screen {
 }
 
 @Composable
-private fun MemberCard(member: MemberResponse) {
+private fun MemberCard(
+    member: MemberResponse,
+    isAdmin: Boolean,
+    onRoleChange: (String) -> Unit,
+    onCreateTask: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -667,46 +677,90 @@ private fun MemberCard(member: MemberResponse) {
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Avatar placeholder
-            Surface(
-                modifier = Modifier.size(48.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = if (member.role == "admin") Coral100 else Teal100
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                // Avatar
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = if (member.role == "admin") Coral100 else Teal100
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = if (member.role == "admin") "👑" else "🧒",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (member.role == "admin") "👑 Admin" else "🧒 Niño/a",
-                        style = MaterialTheme.typography.titleMedium
+                        text = member.displayName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = if (member.role == "admin") "Administrador" else "Niño/a",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = member.displayName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = if (member.role == "admin") "Administrador" else "Niño/a",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                // Points badge
+                PointsBadge(
+                    text = "${member.totalPoints} pts",
+                    modifier = Modifier
                 )
             }
 
-            // Points badge
-            PointsBadge(
-                text = "${member.totalPoints} pts",
+            // Acciones: editar rol (solo admins) + crear tarea
+            Row(
                 modifier = Modifier
-            )
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isAdmin) {
+                    var roleMenuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(onClick = { roleMenuExpanded = true }) {
+                            Text(if (member.role == "admin") "👑 Admin" else "🧒 Niño/a")
+                        }
+                        DropdownMenu(
+                            expanded = roleMenuExpanded,
+                            onDismissRequest = { roleMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("👑 Admin") },
+                                onClick = {
+                                    roleMenuExpanded = false
+                                    if (member.role != "admin") onRoleChange("admin")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("🧒 Niño/a") },
+                                onClick = {
+                                    roleMenuExpanded = false
+                                    if (member.role != "child") onRoleChange("child")
+                                }
+                            )
+                        }
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = onCreateTask,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("+ Tarea")
+                }
+            }
         }
     }
 }

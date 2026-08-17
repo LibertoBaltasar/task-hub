@@ -31,7 +31,7 @@ data class CreateProfileScreen(val householdId: String) : Screen {
         val memberState by memberModel.uiState.collectAsState()
 
         var displayName by remember { mutableStateOf("") }
-        var role by remember { mutableStateOf("child") }
+        var role by remember { mutableStateOf("admin") }
         val focusManager = LocalFocusManager.current
 
         LaunchedEffect(Unit) {
