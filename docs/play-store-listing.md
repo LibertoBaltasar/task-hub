@@ -82,7 +82,7 @@ Free, in Spanish and English. No self-hosted server: your data, protected.
 | Categoría | Productividad |
 | Precio | Gratis |
 | Email de contacto | `liberto.baltasar@gmail.com` |
-| Web | `https://libertobaltasar.github.io/task-hub/` (o la que elijas) |
+| Web | `https://libertobaltasar.github.io/task-hub/` |
 | Clasificación IARC | Todas las edades (Everyone) |
 | Diseñada para familias / niños | ❌ NO marcar (ver guía de publicación §2.3) |
 
@@ -92,4 +92,4 @@ Free, in Spanish and English. No self-hosted server: your data, protected.
 
 - ✅ Email configurado (`liberto.baltasar@gmail.com`).
 - ✅ Fecha de la política fijada (18-ago-2026).
-- Publicar la política (GitHub Pages) y pegar su URL en Play Console.
+- ✅ Política publicada y verificada: `https://libertobaltasar.github.io/task-hub/privacy.html` — pega esta URL en Play Console (Configuración → Privacidad de la app → Política de privacidad).
