@@ -89,6 +89,7 @@ class GoogleAuthManager(
             val result = repo.signInWithGoogle(googleIdToken)
             settingsStore.setGoogleAuth(result.uid, result.email)
             restoreHouseholds(result.uid)
+            repointPersonalHousehold()
             syncHouseholdsToCloud()
             _state.value = GoogleAuthState.SignedIn(result.email)
         } catch (e: Exception) {
@@ -117,9 +118,52 @@ class GoogleAuthManager(
     }
 
     /**
+     * Restaura los hogares compartidos desde la nube (users/{uid}) y re-apunta el
+     * espacio Personal. Debe llamarse al arrancar la app si hay sesión de Google
+     * persistida, para que los hogares creados/unidos en OTRO dispositivo con la
+     * misma cuenta aparezcan sin re-loguearse (antes `restoreHouseholds` solo se
+     * ejecutaba en el login explícito).
+     *
+     * Es aditivo (unión) y tolerante a fallos: no lanza excepciones. Es `suspend`
+     * para que App.kt pueda esperarla ANTES de mostrar HomeScreen (que lee la
+     * lista de hogares una sola vez y no reacciona a cambios).
+     */
+    suspend fun restoreFromCloudOnStartup() {
+        val uid = settingsStore.getGoogleUid() ?: return
+        try {
+            restoreHouseholds(uid)
+        } catch (_: Exception) {
+            // No crítico: se reintenta en el próximo arranque/login.
+        }
+        try {
+            repointPersonalHousehold()
+        } catch (_: Exception) {
+            // No crítico.
+        }
+    }
+
+    /**
+     * Re-apunta el espacio Personal a la identidad de Google para que sea
+     * interdispositivo: con el UID estable de Google, todos los dispositivos
+     * resuelven el mismo documento `personal_{uid}` (vía
+     * [FirestoreRepository.getOrCreatePersonalHousehold]). Si el usuario venía
+     * del modo anónimo, su espacio Personal por-dispositivo se sustituye por el
+     * compartido; las tareas del anónimo quedan en el hogar antiguo (no migran).
+     */
+    private suspend fun repointPersonalHousehold() {
+        try {
+            val personal = repo.getOrCreatePersonalHousehold()
+            householdStore.replacePersonalHousehold(personal.id)
+        } catch (_: Exception) {
+            // Offline/transitorio: App.kt lo reintenta en el próximo arranque.
+        }
+    }
+
+    /**
      * Sincroniza los hogares compartidos del usuario con Firestore (users/{uid}).
      * Solo se sincroniza si hay sesión de Google iniciada. Ignora el espacio
-     * Personal (es por-dispositivo y se recrea solo).
+     * Personal: no se guarda aquí, se resuelve de forma determinista
+     * (personal_{uid}) desde [FirestoreRepository.getOrCreatePersonalHousehold].
      */
     fun syncHouseholdsToCloud() {
         val uid = settingsStore.getGoogleUid() ?: return

@@ -96,6 +96,18 @@ class HouseholdStore(private val settings: Settings) {
         settings.putString(KEY_PERSONAL_HOUSEHOLD_ID, id)
     }
 
+    /**
+     * Reemplaza el espacio Personal guardado por el ID indicado, eliminando
+     * cualquier entrada `isPersonal` previa (p. ej. el espacio por-dispositivo
+     * creado antes de vincular Google). Mantiene el listado sin duplicados.
+     */
+    fun replacePersonalHousehold(id: String) {
+        val current = getSavedHouseholds().filterNot { it.isPersonal }.toMutableList()
+        current.add(SavedHousehold(id = id, name = "Personal", inviteCode = "", isPersonal = true))
+        settings.putString(KEY_SAVED_HOUSEHOLDS, json.encodeToString(current))
+        savePersonalHousehold(id)
+    }
+
     companion object {
         private const val KEY_SAVED_HOUSEHOLDS = "taskhub_saved_households"
         private const val KEY_PERSONAL_HOUSEHOLD_ID = "taskhub_personal_household_id"

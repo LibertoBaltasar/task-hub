@@ -21,6 +21,7 @@ import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.AppSettingsState
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.screens.HomeScreen
 import org.taskhub.ui.screens.SplashScreen
 import org.taskhub.ui.theme.TaskHubTheme
@@ -90,38 +91,34 @@ fun App() {
             CompositionLocalProvider(LocalAppSettings provides appSettings) {
                 val householdStore = koinInject<HouseholdStore>()
                 val repo = koinInject<FirestoreRepository>()
+                val authManager = koinInject<GoogleAuthManager>()
 
                 var initialScreen by remember { mutableStateOf<Screen?>(null) }
 
                 LaunchedEffect(Unit) {
-                    // ── Auto-crear espacio Personal si no existe ──────
-                    // Fuente primaria: la clave dedicada. Si falla, derivar
-                    // del listado guardado (isPersonal), que es más fiable.
-                    var personalId = householdStore.getPersonalHouseholdId()
-                        ?: householdStore.getSavedHouseholds()
-                            .firstOrNull { it.isPersonal }?.id
-                    if (personalId == null) {
-                        try {
-                            val personal = repo.createHousehold("Personal", isPersonal = true)
-                            householdStore.savePersonalHousehold(personal.id)
-                            householdStore.saveHousehold(
-                                householdId = personal.id,
-                                householdName = "Personal",
-                                inviteCode = "",
-                                isPersonal = true
-                            )
-                            personalId = personal.id
-                        } catch (_: Exception) {
-                            // Sin conexión: crear solo localmente como placeholder
-                            personalId = "personal-offline"
-                            householdStore.savePersonalHousehold(personalId)
-                            householdStore.saveHousehold(
-                                householdId = personalId,
-                                householdName = "Personal",
-                                inviteCode = "",
-                                isPersonal = true
-                            )
-                        }
+                    // ── Resolver/crear el espacio Personal (interdispositivo) ──
+                    // El ID es determinista (personal_{uid}), de modo que con la
+                    // misma cuenta de Google todos los dispositivos apuntan al
+                    // MISMO hogar. En modo anónimo sigue siendo por-dispositivo.
+                    var personalId: String? = null
+                    try {
+                        val personal = repo.getOrCreatePersonalHousehold()
+                        householdStore.replacePersonalHousehold(personal.id)
+                        personalId = personal.id
+                    } catch (_: Exception) {
+                        // Sin conexión: recurrir al guardado local o a un placeholder.
+                        personalId = householdStore.getPersonalHouseholdId()
+                            ?: householdStore.getSavedHouseholds()
+                                .firstOrNull { it.isPersonal }?.id
+                            ?: "personal-offline".also {
+                                householdStore.savePersonalHousehold(it)
+                                householdStore.saveHousehold(
+                                    householdId = it,
+                                    householdName = "Personal",
+                                    inviteCode = "",
+                                    isPersonal = true
+                                )
+                            }
                     }
 
                     // ── Asegurar que el espacio Personal tenga un miembro "Yo" ──
@@ -133,6 +130,11 @@ fun App() {
                             // No crítico: si falla (offline), se reintenta al reabrir
                         }
                     }
+
+                    // ── Restaurar hogares compartidos desde la nube ──
+                    // Cubre hogares creados/unidos en OTRO dispositivo con la
+                    // misma cuenta de Google (antes solo se restauraban al re-loguearse).
+                    authManager.restoreFromCloudOnStartup()
 
                     // ── Ir siempre a HomeScreen ───────────────────────
                     initialScreen = HomeScreen()

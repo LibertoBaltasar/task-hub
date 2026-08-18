@@ -371,6 +371,62 @@ class FirestoreRepository(
     }
 
     /**
+     * Obtiene (o crea) el espacio Personal del usuario actual con un ID DETERMINISTA
+     * derivado de su identidad estable: `personal_{uid}`, donde `uid` es el UID de
+     * Google si hay sesión iniciada, o el UID anónimo persistido en caso contrario.
+     *
+     * Esto hace el espacio Personal interdispositivo: con la misma cuenta de Google,
+     * todos los dispositivos resuelven el MISMO documento `households/personal_{uid}`,
+     * así que tareas/miembros/puntos se comparten automáticamente. En modo anónimo
+     * (sin cuenta) sigue siendo por-dispositivo, como antes.
+     */
+    suspend fun getOrCreatePersonalHousehold(): HouseholdResponse {
+        ensureAuth()
+        val uid = getLocalId() ?: throw IllegalStateException("No autenticado")
+        val personalId = personalHouseholdId(uid)
+
+        // 1) Si ya existe (lo creó este u otro dispositivo con la misma cuenta),
+        //    devolverlo tal cual y refrescar la caché local.
+        val existing = try {
+            getHousehold(personalId)
+        } catch (_: Exception) {
+            null
+        }
+        if (existing != null) return existing
+
+        // 2) No existe → crearlo en el ID determinista.
+        val now = Clock.System.now().toEpochMilliseconds()
+        val fields = mapOf(
+            "name" to FirestoreValue(stringValue = "Personal"),
+            "inviteCode" to FirestoreValue(stringValue = "PERSONAL"),
+            "isPersonal" to FirestoreValue(booleanValue = true),
+            "ownerId" to FirestoreValue(stringValue = uid),
+            "createdAt" to FirestoreValue(integerValue = now.toString()),
+            "updatedAt" to FirestoreValue(integerValue = now.toString())
+        )
+        val response: FirestoreDocumentResponse = client.post("$baseUrl/households") {
+            withAuth()
+            parameter("documentId", personalId)
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }.body()
+
+        val household = HouseholdResponse(
+            id = extractDocId(response.name),
+            name = "Personal",
+            inviteCode = "PERSONAL",
+            createdAt = now,
+            updatedAt = now,
+            isPersonal = true
+        )
+        taskCache.cacheHousehold(household)
+        return household
+    }
+
+    /** ID determinista del espacio Personal para una identidad (UID) dada. */
+    fun personalHouseholdId(uid: String): String = "personal_$uid"
+
+    /**
      * Escribe invites/{code} → { householdId }. Las reglas de Firestore permiten
      * resolverlo por código (get) pero no listar la colección, de modo que el
      * código actúa como secreto compartido fuera de banda.
