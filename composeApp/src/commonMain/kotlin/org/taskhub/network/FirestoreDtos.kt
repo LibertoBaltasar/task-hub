@@ -1,6 +1,15 @@
 package org.taskhub.network
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.jsonPrimitive
 
 // ── Firestore REST API Value types ─────────────────────────
 // Firestore REST API uses typed wrappers for field values
@@ -98,10 +107,27 @@ data class FirebaseAuthRequest(
     val returnSecureToken: Boolean = true
 )
 
+/** Serializer que acepta tanto string como número para expiresIn. */
+@OptIn(ExperimentalSerializationApi::class)
+object StringOrNumberSerializer : KSerializer<String?> {
+    override val descriptor = PrimitiveSerialDescriptor("StringOrNumber", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: String?) {
+        if (value != null) encoder.encodeString(value)
+        else encoder.encodeNull()
+    }
+
+    override fun deserialize(decoder: Decoder): String? {
+        val el = (decoder as JsonDecoder).decodeJsonElement()
+        return if (el is JsonNull) null else el.jsonPrimitive.content
+    }
+}
+
 @Serializable
 data class FirebaseAuthResponse(
     val idToken: String? = null,
     val refreshToken: String? = null,
+    @Serializable(with = StringOrNumberSerializer::class)
     val expiresIn: String? = null,
     val localId: String? = null,
     val email: String? = null,
