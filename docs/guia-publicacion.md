@@ -1,6 +1,6 @@
 # Task Hub — Guía de publicación
 
-> Última revisión: 18-ago-2026 · Estado verificado: Android **0.7.11** (versionCode 118)
+> Última revisión: 18-ago-2026 · Estado verificado: Android **0.7.13** (versionCode 120)
 
 Guía paso a paso para llevar Task Hub de *internal testing* a **producción pública** en Google Play, con lo que ya tienes y lo que falta. Asume el estado real del repo, no la spec antigua (`docs/specs.md` aún describe un backend Ktor que ya no existe: la app usa Firestore REST directo).
 
@@ -14,9 +14,9 @@ Guía paso a paso para llevar Task Hub de *internal testing* a **producción pú
 | Pipeline release | ✅ `.github/workflows/release.yml` → AAB firmado → track `internal`/`alpha`/`production` |
 | Firestore rules | ✅ `firestore.rules` v2 (acceso por miembro/propietario, auth obligatoria) |
 | Auth | ✅ Anónima + Google Sign-In |
-| AdMob | ⚠️ Integrado, pero **¿IDs de producción o de test?** Verificar antes de producción |
+| AdMob | ⚠️ Integrado, con **IDs de test** (`ca-app-pub-3940256099942544…`). Correcto para closed testing; **cambiar a IDs reales antes de producción** |
 | Crashlytics | ✅ Integrado |
-| Analytics | ❌ **No está.** Necesario para medir el marketing (añadirlo es 5 min) |
+| Analytics | ✅ **Integrado** (Firebase Analytics). Eventos custom: `household_created`, `household_joined`, `invite_code_shared`, `task_completed` |
 | iOS | ⚠️ Targets en código, **no publicable** (necesitas macOS + cuenta Apple) |
 | Desktop | ⚠️ Compila (JVM), distribución secundaria opcional |
 | Política de privacidad | ❌ No existe. **Requisito obligatorio** de Play Console |
