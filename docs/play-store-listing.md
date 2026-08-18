@@ -1,7 +1,6 @@
 # Task Hub — Borradores del listado de Google Play (ES + EN)
 
-> Copia-pega directo a Play Console. Reemplaza `[EMAIL]` y revisa los textos antes de publicar.
-> Última revisión: 18-ago-2026
+> Copia-pega directo a Play Console. Email configurado. Última revisión: 18-ago-2026
 
 ---
 
@@ -82,7 +81,7 @@ Free, in Spanish and English. No self-hosted server: your data, protected.
 |---|---|
 | Categoría | Productividad |
 | Precio | Gratis |
-| Email de contacto | `[EMAIL]` |
+| Email de contacto | `liberto.baltasar@gmail.com` |
 | Web | `https://libertobaltasar.github.io/task-hub/` (o la que elijas) |
 | Clasificación IARC | Todas las edades (Everyone) |
 | Diseñada para familias / niños | ❌ NO marcar (ver guía de publicación §2.3) |
@@ -91,6 +90,6 @@ Free, in Spanish and English. No self-hosted server: your data, protected.
 
 ## Aviso pendiente antes de publicar
 
-- **`[EMAIL]`** — email de soporte/privacidad (obligatorio en Play Console y en la política).
-- **`[FECHA]`** en `docs/privacy.html` — fecha de entrada en vigor de la política.
+- ✅ Email configurado (`liberto.baltasar@gmail.com`).
+- ✅ Fecha de la política fijada (18-ago-2026).
 - Publicar la política (GitHub Pages) y pegar su URL en Play Console.
