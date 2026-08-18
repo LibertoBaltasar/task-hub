@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "278503294422-tbv17icj6op12gm4ftj36qmp4mttmjkl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "org.taskhub",
+            "certificate_hash": "0eaa9fd93d9e0ee48d3f15668c9ea6114797830e"
+          }
+        },
+        {
           "client_id": "278503294422-v5cido6u1im8g9bbd5isin388tvbiti7.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
