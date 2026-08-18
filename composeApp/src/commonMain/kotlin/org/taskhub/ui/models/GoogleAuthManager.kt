@@ -55,9 +55,19 @@ class GoogleAuthManager(
         // Observa el resultado del flujo nativo de Google Sign-In
         scope.launch {
             GoogleSignInResultHolder.result.collect { token ->
-                if (token != null) {
-                    handleGoogleToken(token)
-                    GoogleSignInResultHolder.reset()
+                when {
+                    // null = en curso (aún no resuelto); no hacer nada.
+                    token == null -> Unit
+                    // "" = cancelado / sin token → volver a Anonymous para no
+                    // quedarse colgado en "Conectando con Google...".
+                    token.isEmpty() -> {
+                        GoogleSignInResultHolder.reset()
+                        _state.value = GoogleAuthState.Anonymous
+                    }
+                    else -> {
+                        handleGoogleToken(token)
+                        GoogleSignInResultHolder.reset()
+                    }
                 }
             }
         }

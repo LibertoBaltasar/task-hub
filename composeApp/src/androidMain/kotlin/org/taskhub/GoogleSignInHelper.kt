@@ -70,7 +70,7 @@ object GoogleSignInHelper {
 
     private fun handleSignInResult(resultCode: Int, data: Intent?) {
         if (data == null) {
-            GoogleSignInResultHolder.setResult(null)
+            GoogleSignInResultHolder.setResult("")   // cancelado por el usuario
             return
         }
 
@@ -78,17 +78,13 @@ object GoogleSignInHelper {
             val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             val account = task.getResult(ApiException::class.java)
 
-            if (account != null) {
-                // idToken can be used as Bearer token for Calendar API when
-                // the calendar scope was requested in the sign-in options
-                val idToken = account.idToken
-                GoogleSignInResultHolder.setResult(idToken)
-            } else {
-                GoogleSignInResultHolder.setResult(null)
-            }
+            // "" (vacío) = "sin token" (cancelado/error). Un null NO re-emite en el
+            // StateFlow (null→null no es un cambio), lo que dejaba GoogleAuthManager
+            // colgado en "Conectando con Google..." para siempre.
+            GoogleSignInResultHolder.setResult(account?.idToken ?: "")
         } catch (e: ApiException) {
-            // User cancelled or error
-            GoogleSignInResultHolder.setResult(null)
+            // Usuario canceló o error
+            GoogleSignInResultHolder.setResult("")
         }
     }
 }

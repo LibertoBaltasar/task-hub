@@ -138,8 +138,8 @@ data class FirebaseAuthResponse(
 @Serializable
 data class SignInWithIdpRequest(
     val postBody: String,
-    val requestUri: String = "http://localhost",
-    val returnSecureToken: Boolean = true
+    val requestUri: String,
+    val returnSecureToken: Boolean
 )
 
 /** Respuesta del endpoint securetoken.googleapis.com/v1/token (refresh token). */
