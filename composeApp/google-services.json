@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "278503294422-pe6c2mckq5pt13pqnh1p0g0ghnhkinuc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "org.taskhub",
+            "certificate_hash": "8673d9e1eeb93148768678706cad0f678c06f80e"
+          }
+        },
+        {
           "client_id": "278503294422-v5cido6u1im8g9bbd5isin388tvbiti7.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
