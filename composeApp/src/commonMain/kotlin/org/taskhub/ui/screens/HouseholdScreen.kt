@@ -38,6 +38,7 @@ import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.theme.*
 import org.taskhub.platform.QrCodeImage
 import org.taskhub.platform.shareText
+import org.taskhub.platform.logAnalyticsEvent
 
 data class HouseholdScreen(val householdId: String) : Screen {
 
@@ -156,6 +157,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                 confirmButton = {
                     Button(
                         onClick = {
+                            logAnalyticsEvent("invite_code_shared")
                             shareText(
                                 "Únete a mi hogar en Task Hub: $inviteCode. " +
                                     "Descárgala en: https://play.google.com/store/apps/details?id=org.taskhub",

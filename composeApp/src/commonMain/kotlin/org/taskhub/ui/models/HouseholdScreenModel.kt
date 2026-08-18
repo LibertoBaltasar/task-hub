@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.storage.HouseholdStore
+import org.taskhub.platform.logAnalyticsEvent
 
 sealed class HouseholdUiState {
     data object Idle : HouseholdUiState()
@@ -34,6 +35,7 @@ class HouseholdScreenModel(
                 val household = repo.createHousehold(name)
                 householdStore.saveHousehold(household.id, household.name, household.inviteCode)
                 authManager.syncHouseholdsToCloud()
+                logAnalyticsEvent("household_created")
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
@@ -56,6 +58,7 @@ class HouseholdScreenModel(
                 if (repo.isCurrentUserMember(household.id)) {
                     _uiState.value = HouseholdUiState.AlreadyMember(household)
                 } else {
+                    logAnalyticsEvent("household_joined")
                     _uiState.value = HouseholdUiState.Success(household)
                 }
                 authManager.syncHouseholdsToCloud()

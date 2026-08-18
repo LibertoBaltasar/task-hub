@@ -17,6 +17,7 @@ import org.taskhub.network.models.Subtask
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.DebugFlags
 import org.taskhub.platform.AdController
+import org.taskhub.platform.logAnalyticsEvent
 import kotlinx.datetime.*
 
 /**
@@ -366,6 +367,9 @@ class TaskScreenModel(
                 } catch (_: Exception) { }
 
                 _actionState.value = TaskActionState.Success
+
+                // Registrar el evento (métrica clave de engagement/racha)
+                logAnalyticsEvent("task_completed")
 
                 // Mostrar interstitial tras completar una tarea con éxito
                 // (respeta el cooldown interno; no-op en plataformas sin AdMob)

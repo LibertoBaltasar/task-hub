@@ -12,6 +12,7 @@ logback = "1.5.12"
 multiplatform-settings = "1.2.0"
 androidx-activity-compose = "1.9.3"
 firebase-crashlytics = "19.4.0"
+firebase-analytics = "22.1.0"
 google-services = "4.4.2"
 crashlytics = "3.0.7"
 
@@ -60,6 +61,7 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 
 # Firebase
 firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics-ktx", version.ref = "firebase-crashlytics" }
+firebase-analytics = { module = "com.google.firebase:firebase-analytics-ktx", version.ref = "firebase-analytics" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

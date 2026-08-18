@@ -91,6 +91,9 @@ kotlin {
             // Firebase Crashlytics — reporte de crashes
             implementation(libs.firebase.crashlytics)
 
+            // Firebase Analytics — eventos y métricas para el marketing
+            implementation(libs.firebase.analytics)
+
             // AdMob — anuncios (interstitial + banner preparado)
             implementation("com.google.android.gms:play-services-ads:23.5.0")
 
