@@ -159,7 +159,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         onClick = {
                             logAnalyticsEvent("invite_code_shared")
                             shareText(
-                                "Únete a mi hogar en Task Hub: $inviteCode. " +
+                                "Únete a mi espacio en Task Hub: $inviteCode. " +
                                     "Descárgala en: https://play.google.com/store/apps/details?id=org.taskhub",
                                 "Invitación a Task Hub"
                             )
@@ -180,7 +180,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         if (showConfirmDialog1) {
             AlertDialog(
                 onDismissRequest = { showConfirmDialog1 = false },
-                title = { Text("Eliminar hogar") },
+                title = { Text("Eliminar espacio") },
                 text = {
                     Text("¿Eliminar '$householdName'? Esta acción no se puede deshacer.")
                 },
@@ -236,11 +236,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
         if (showLeaveDialog) {
             AlertDialog(
                 onDismissRequest = { showLeaveDialog = false },
-                title = { Text("Salir del hogar") },
+                title = { Text("Salir del espacio") },
                 text = {
                     Text(
                         "¿Desvincularte de '$householdName'? Dejarás de verlo en tu " +
-                            "dispositivo. Si eres el último miembro, el hogar se eliminará."
+                            "dispositivo. Si eres el último miembro, el espacio se eliminará."
                     )
                 },
                 confirmButton = {
@@ -336,7 +336,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                             )
                         } else {
                             IconButton(onClick = { showConfirmDialog1 = true }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Eliminar hogar")
+                                Icon(Icons.Default.Delete, contentDescription = "Eliminar espacio")
                             }
                         }
                     }
@@ -387,7 +387,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
                                             Text(
-                                                text = "🏠",
+                                                text = "👥",
                                                 style = MaterialTheme.typography.displaySmall
                                             )
 
@@ -618,7 +618,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                         shape = MaterialTheme.shapes.large
                                     ) {
                                         Text(
-                                            text = "🚪 Salir del hogar",
+                                            text = "🚪 Salir del espacio",
                                             style = MaterialTheme.typography.titleMedium,
                                             color = MaterialTheme.colorScheme.error
                                         )

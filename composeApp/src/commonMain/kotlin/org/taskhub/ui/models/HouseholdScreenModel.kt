@@ -39,7 +39,7 @@ class HouseholdScreenModel(
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
-                    e.message ?: "Error al crear el hogar"
+                    e.message ?: "Error al crear el espacio"
                 )
             }
         }
@@ -78,7 +78,7 @@ class HouseholdScreenModel(
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
-                    e.message ?: "Error al cargar el hogar"
+                    e.message ?: "Error al cargar el espacio"
                 )
             }
         }
@@ -100,7 +100,7 @@ class HouseholdScreenModel(
                 authManager.syncHouseholdsToCloud()
                 onSuccess()
             } catch (e: Exception) {
-                onError(e.message ?: "Error al eliminar el hogar")
+                onError(e.message ?: "Error al eliminar el espacio")
             }
         }
     }
@@ -119,7 +119,7 @@ class HouseholdScreenModel(
                 authManager.syncHouseholdsToCloud()
                 onSuccess()
             } catch (e: Exception) {
-                onError(e.message ?: "Error al eliminar los hogares")
+                onError(e.message ?: "Error al eliminar los espacios")
             }
         }
     }
@@ -136,7 +136,7 @@ class HouseholdScreenModel(
                 authManager.syncHouseholdsToCloud()
                 onSuccess()
             } catch (e: Exception) {
-                onError(e.message ?: "Error al salir del hogar")
+                onError(e.message ?: "Error al salir del espacio")
             }
         }
     }

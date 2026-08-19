@@ -84,7 +84,7 @@ class WelcomeScreen : Screen {
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = "🏠",
+                        text = "👥",
                         style = MaterialTheme.typography.displayLarge
                     )
 

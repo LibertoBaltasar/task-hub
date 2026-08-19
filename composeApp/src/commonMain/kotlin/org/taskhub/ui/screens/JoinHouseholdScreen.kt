@@ -71,7 +71,7 @@ class JoinHouseholdScreen : Screen {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TaskHubTopBar(
-                    title = "Unirse a un hogar",
+                    title = "Unirse a un espacio",
                     onBack = { navigator.pop() }
                 )
                 Column(
@@ -97,7 +97,7 @@ class JoinHouseholdScreen : Screen {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Unirse a un hogar",
+                    text = "Unirse a un espacio",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -202,7 +202,7 @@ class JoinHouseholdScreen : Screen {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Rol en el hogar:",
+                        text = "Rol en el espacio:",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.align(Alignment.Start)
                     )
@@ -248,7 +248,7 @@ class JoinHouseholdScreen : Screen {
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text("Entrar al hogar", style = MaterialTheme.typography.titleMedium)
+                            Text("Entrar al espacio", style = MaterialTheme.typography.titleMedium)
                         }
                     }
 

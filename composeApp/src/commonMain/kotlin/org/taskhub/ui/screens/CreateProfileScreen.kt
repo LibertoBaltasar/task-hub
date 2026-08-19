@@ -99,9 +99,9 @@ data class CreateProfileScreen(val householdId: String) : Screen {
 
                 Text(
                     text = if (householdName != null) {
-                        "Crea tu perfil para el hogar \"$householdName\""
+                        "Crea tu perfil para el espacio \"$householdName\""
                     } else {
-                        "Crea tu perfil para este hogar"
+                        "Crea tu perfil para este espacio"
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -126,7 +126,7 @@ data class CreateProfileScreen(val householdId: String) : Screen {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Rol en el hogar:",
+                    text = "Rol en el espacio:",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.align(Alignment.Start)
                 )

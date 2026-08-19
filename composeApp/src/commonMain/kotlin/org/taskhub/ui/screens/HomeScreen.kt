@@ -105,7 +105,7 @@ class HomeScreen : Screen {
                 text = {
                     Column {
                         Text(
-                            "Inicia sesión con Google para que tus tareas y hogares se " +
+                            "Inicia sesión con Google para que tus tareas y espacios se " +
                                 "guarden en la nube. Así no los pierdes si cambias de móvil o reinstalas."
                         )
                         if (authState is GoogleAuthState.SigningIn) {
@@ -188,7 +188,7 @@ class HomeScreen : Screen {
                                 containerColor = MaterialTheme.colorScheme.secondary,
                                 contentColor = MaterialTheme.colorScheme.onSecondary,
                                 icon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                                text = { Text("Crear hogar", fontWeight = FontWeight.SemiBold) }
+                                text = { Text("Crear espacio", fontWeight = FontWeight.SemiBold) }
                             )
                             Spacer(Modifier.height(12.dp))
                             ExtendedFloatingActionButton(
@@ -199,7 +199,7 @@ class HomeScreen : Screen {
                                 containerColor = MaterialTheme.colorScheme.tertiary,
                                 contentColor = MaterialTheme.colorScheme.onTertiary,
                                 icon = { Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                                text = { Text("Unirse a hogar", fontWeight = FontWeight.SemiBold) }
+                                text = { Text("Unirse a espacio", fontWeight = FontWeight.SemiBold) }
                             )
                             Spacer(Modifier.height(12.dp))
                         }
@@ -211,7 +211,7 @@ class HomeScreen : Screen {
                         if (showFabMenu) {
                             Icon(Icons.Default.Close, "Cerrar")
                         } else {
-                            Icon(Icons.Default.Add, "Añadir hogar")
+                            Icon(Icons.Default.Add, "Añadir espacio")
                         }
                     }
                 }
@@ -260,7 +260,7 @@ class HomeScreen : Screen {
                     if (shared.isNotEmpty()) {
                         item(key = "shared_header") {
                             Text(
-                                "Mis hogares",
+                                "Mis espacios",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)

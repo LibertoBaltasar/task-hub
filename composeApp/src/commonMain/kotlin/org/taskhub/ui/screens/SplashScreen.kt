@@ -65,7 +65,7 @@ fun SplashScreen(onFinished: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Organiza tu hogar, comparte las tareas",
+                text = "Organiza tu espacio, comparte las tareas",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
                 color = Color.White.copy(alpha = 0.8f),

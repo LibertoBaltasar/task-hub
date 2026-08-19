@@ -46,7 +46,7 @@ class CreateHouseholdScreen : Screen {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TaskHubTopBar(
-                    title = "Crear nuevo hogar",
+                    title = "Crear nuevo espacio",
                     onBack = { navigator.pop() }
                 )
                 Column(
@@ -58,14 +58,14 @@ class CreateHouseholdScreen : Screen {
                     Spacer(modifier = Modifier.height(32.dp))
 
                 Text(
-                    text = "🏠",
+                    text = "👥",
                     style = MaterialTheme.typography.displayMedium
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Crear nuevo hogar",
+                    text = "Crear nuevo espacio",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -73,7 +73,7 @@ class CreateHouseholdScreen : Screen {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Dale un nombre a tu hogar para empezar",
+                    text = "Dale un nombre a tu espacio para empezar",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -83,8 +83,8 @@ class CreateHouseholdScreen : Screen {
                 OutlinedTextField(
                     value = householdName,
                     onValueChange = { householdName = it },
-                    label = { Text("Nombre del hogar") },
-                    placeholder = { Text("Ej: Casa López") },
+                    label = { Text("Nombre del espacio") },
+                    placeholder = { Text("Ej: Mi equipo") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -114,7 +114,7 @@ class CreateHouseholdScreen : Screen {
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Crear hogar", style = MaterialTheme.typography.titleMedium)
+                        Text("Crear espacio", style = MaterialTheme.typography.titleMedium)
                     }
                 }
 

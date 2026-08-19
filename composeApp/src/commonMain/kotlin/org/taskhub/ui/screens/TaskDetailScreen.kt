@@ -436,7 +436,7 @@ private fun TaskDetailContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Hecha por: ${completer?.displayName ?: "Alguien del hogar"}",
+                            text = "Hecha por: ${completer?.displayName ?: "Alguien del espacio"}",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary

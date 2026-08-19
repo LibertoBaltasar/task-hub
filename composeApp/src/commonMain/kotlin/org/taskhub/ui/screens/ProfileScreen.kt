@@ -134,9 +134,9 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Crear nuevo hogar")
+                        Icon(Icons.Default.Add, contentDescription = "Crear nuevo espacio")
                         Spacer(Modifier.width(8.dp))
-                        Text("Crear nuevo hogar")
+                        Text("Crear nuevo espacio")
                     }
                 }
 
@@ -145,9 +145,9 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         onClick = { navigator.push(JoinHouseholdScreen()) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Home, contentDescription = "Unirse a un hogar")
+                        Icon(Icons.Default.Home, contentDescription = "Unirse a un espacio")
                         Spacer(Modifier.width(8.dp))
-                        Text("Unirse a un hogar")
+                        Text("Unirse a un espacio")
                     }
                 }
 
@@ -216,7 +216,7 @@ private fun HouseholdProfileCard(
             if (onNavigate != null) {
                 Icon(
                     Icons.Default.ArrowBack,
-                    contentDescription = "Ir al hogar",
+                    contentDescription = "Ir al espacio",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                 )
