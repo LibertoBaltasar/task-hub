@@ -20,6 +20,13 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.koin.compose.koinInject
+import org.taskhub.platform.ImagePicker
+import org.taskhub.platform.ImagePickerResultHolder
+import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.models.AvatarUploadState
 import org.taskhub.ui.models.ProfileScreenModel
 import org.taskhub.ui.models.ProfileUiState
 import org.taskhub.ui.models.ProfileSaveState
@@ -42,9 +49,14 @@ class EditProfileScreen : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<ProfileScreenModel>()
+        val imagePicker = koinInject<ImagePicker>()
         val profileState by model.myProfileState.collectAsState()
         val saveState by model.saveState.collectAsState()
+        val avatarUploadState by model.avatarUploadState.collectAsState()
+        val avatarPickResult by ImagePickerResultHolder.result.collectAsState()
         val focusManager = LocalFocusManager.current
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         // Form fields — filled from loaded profile
         var displayName by remember { mutableStateOf("") }
@@ -79,6 +91,15 @@ class EditProfileScreen : Screen {
             if (saveState is ProfileSaveState.Saved) {
                 model.clearSaveState()
                 navigator.pop()
+            }
+        }
+
+        // Recibir la foto elegida en galería/cámara (ver ImagePickerResultHolder) y subirla
+        LaunchedEffect(avatarPickResult) {
+            val bytes = avatarPickResult
+            if (bytes != null) {
+                if (bytes.isNotEmpty()) model.uploadAvatarPhoto(bytes)
+                ImagePickerResultHolder.reset()
             }
         }
 
@@ -132,12 +153,63 @@ class EditProfileScreen : Screen {
                             .padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        // ── Avatar preview ──
-                        Text(
-                            text = if (avatarEmoji.isNotEmpty()) avatarEmoji else "👤",
-                            style = MaterialTheme.typography.displayLarge,
+                        // ── Avatar preview: foto > emoji > inicial ──
+                        val currentAvatarUrl = (state as? ProfileUiState.Success)?.profile?.avatarUrl
+                        UserAvatar(
+                            avatarUrl = currentAvatarUrl,
+                            fallbackEmoji = avatarEmoji,
+                            displayName = displayName,
+                            contentDescription = s("profile_avatar_content_desc"),
+                            size = 96.dp,
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         )
+
+                        // ── Botones de foto (galería / cámara) ──
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { imagePicker.pickFromGallery() },
+                                modifier = Modifier.weight(1f),
+                                enabled = avatarUploadState !is AvatarUploadState.Uploading
+                            ) {
+                                Text(s("profile_photo_choose"))
+                            }
+                            OutlinedButton(
+                                onClick = { imagePicker.takePhoto() },
+                                modifier = Modifier.weight(1f),
+                                enabled = avatarUploadState !is AvatarUploadState.Uploading
+                            ) {
+                                Text(s("profile_photo_take"))
+                            }
+                        }
+
+                        if (avatarUploadState is AvatarUploadState.Uploading) {
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterHorizontally),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Teal600
+                                )
+                                Text(
+                                    s("profile_photo_uploading"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (avatarUploadState is AvatarUploadState.Error) {
+                            Text(
+                                "❌ ${(avatarUploadState as AvatarUploadState.Error).message}",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
+                        }
 
                         Text(
                             text = "Elige tu avatar",

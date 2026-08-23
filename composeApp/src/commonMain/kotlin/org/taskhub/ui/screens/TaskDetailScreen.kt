@@ -28,6 +28,7 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.theme.*
 
 // ────────────────────────────────────────────────────────────
@@ -828,18 +829,14 @@ private fun AssignmentCard(
             // Member avatar/info
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        modifier = Modifier.size(32.dp),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        color = if (member?.role == "admin") Coral100 else Teal100
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = if (member?.role == "admin") "👑" else "🧒",
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
+                    UserAvatar(
+                        avatarUrl = member?.avatarUrl,
+                        fallbackEmoji = if (member?.role == "admin") "👑" else "🧒",
+                        displayName = member?.displayName ?: "",
+                        contentDescription = member?.displayName ?: "",
+                        size = 32.dp,
+                        backgroundColor = if (member?.role == "admin") Coral100 else Teal100
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = if (member?.role == "admin") "Admin" else "Niño/a",

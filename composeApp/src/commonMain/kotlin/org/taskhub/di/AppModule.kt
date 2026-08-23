@@ -8,6 +8,7 @@ import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.createNotificationScheduler
 import org.taskhub.platform.createAdController
+import org.taskhub.platform.createImagePicker
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
@@ -50,6 +51,9 @@ val appModule: Module = module {
 
     // Platform ad controller (AdMob interstitial / banner)
     single { createAdController() }
+
+    // Platform image picker (foto de avatar: galería / cámara)
+    single { createImagePicker() }
 
     // ScreenModels (Voyager — each screen gets its own instance via factory)
     factory { HomeScreenModel(repo = get(), householdStore = get()) }

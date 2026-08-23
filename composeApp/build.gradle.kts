@@ -68,6 +68,9 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.datetime)
             implementation(libs.multiplatform.settings)
+
+            implementation(libs.coil.compose)
+            implementation(libs.coil.network.ktor3)
         }
 
         androidMain.dependencies {

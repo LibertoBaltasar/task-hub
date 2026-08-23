@@ -47,12 +47,20 @@ import kotlin.random.Random
 class FirestoreRepository(
     private val projectId: String = "task-hub-62f98",
     private val apiKey: String = DEFAULT_API_KEY,
+    /**
+     * Bucket de Firebase Cloud Storage. Los proyectos creados a partir de
+     * finales de 2024 usan el dominio `.firebasestorage.app`; proyectos más
+     * antiguos usan `.appspot.com`. Verificar en Firebase Console → Storage →
+     * el nombre exacto del bucket si las subidas de avatar fallan con 404.
+     */
+    private val storageBucket: String = "$projectId.firebasestorage.app",
     private val taskCache: TaskCache,
     private val settingsStore: SettingsStore
 ) {
     private val baseUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
     private val authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
     private val secureTokenUrl = "https://securetoken.googleapis.com/v1/token"
+    private val storageBaseUrl = "https://firebasestorage.googleapis.com/v0/b/$storageBucket/o"
 
     // ── Auth state (in-memory, regenerated on app restart — fine for anonymous) ──
     @Volatile
@@ -254,7 +262,8 @@ class FirestoreRepository(
         return GoogleSignInResult(
             uid = localId,
             email = response.email,
-            displayName = response.displayName
+            displayName = response.displayName,
+            photoUrl = response.photoUrl
         )
     }
 
@@ -262,7 +271,9 @@ class FirestoreRepository(
     data class GoogleSignInResult(
         val uid: String,
         val email: String? = null,
-        val displayName: String? = null
+        val displayName: String? = null,
+        /** Foto de perfil de la cuenta de Google, si Firebase Auth la expone. */
+        val photoUrl: String? = null
     )
 
     /**
@@ -801,6 +812,38 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+    }
+
+    /**
+     * Sube una foto de avatar a Firebase Cloud Storage vía REST (sin SDK, coherente
+     * con el resto de la arquitectura) y devuelve la URL pública de descarga.
+     *
+     * Usa un upload simple (`uploadType=media`), adecuado para imágenes ya
+     * comprimidas/re-escaladas en cliente (unos cientos de KB, no el original de
+     * varios MP). Reutiliza el mismo idToken (Google o anónimo) que el resto de
+     * llamadas autenticadas. El objeto se guarda en `avatars/{userId}.jpg`,
+     * sobrescribiendo la foto anterior del usuario.
+     *
+     * Requiere que el bucket de Storage tenga reglas que permitan escritura a
+     * usuarios autenticados (mismo modelo que Firestore) — no se despliegan aquí.
+     */
+    suspend fun uploadAvatarPhoto(userId: String, jpegBytes: ByteArray): String {
+        val objectPath = "avatars/$userId.jpg"
+        val response: FirebaseStorageUploadResponse = client.post(storageBaseUrl) {
+            withAuth()
+            parameter("uploadType", "media")
+            parameter("name", objectPath)
+            contentType(ContentType.Image.JPEG)
+            setBody(jpegBytes)
+        }.body()
+
+        val token = response.downloadTokens
+            ?: throw IllegalStateException(
+                "La subida del avatar no devolvió downloadTokens. Verifica que Firebase " +
+                "Storage esté habilitado y que el bucket ($storageBucket) sea correcto."
+            )
+        val encodedPath = objectPath.split("/").joinToString("%2F") { it.encodeURLParameter() }
+        return "$storageBaseUrl/$encodedPath?alt=media&token=$token"
     }
 
     /** Update member streak fields. Requires auth (write). */

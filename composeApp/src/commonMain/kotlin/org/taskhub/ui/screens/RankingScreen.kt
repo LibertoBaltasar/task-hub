@@ -19,6 +19,7 @@ import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -183,18 +184,13 @@ private fun RankingRow(
             Spacer(Modifier.width(12.dp))
 
             // Avatar
-            Surface(
-                modifier = Modifier.size(40.dp),
-                shape = CircleShape,
-                color = if (member.role == "admin") Coral100 else Teal100
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = if (member.role == "admin") "👑" else "🧒",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-            }
+            UserAvatar(
+                avatarUrl = member.avatarUrl,
+                fallbackEmoji = if (member.role == "admin") "👑" else "🧒",
+                displayName = member.displayName,
+                contentDescription = member.displayName,
+                backgroundColor = if (member.role == "admin") Coral100 else Teal100
+            )
 
             Spacer(Modifier.width(12.dp))
 

@@ -93,6 +93,12 @@ object AppStrings {
             "delete_multiple_title" to "Eliminar %d espacio(s)",
             "delete_multiple_confirm" to "¿Eliminar %s? Esta acción no se puede deshacer.",
             "delete_multiple_sure" to "Se perderán todas las tareas y miembros de %s.",
+
+            // Profile photo
+            "profile_photo_choose" to "📷 Elegir foto",
+            "profile_photo_take" to "🤳 Hacer foto",
+            "profile_photo_uploading" to "Subiendo foto…",
+            "profile_avatar_content_desc" to "Foto de perfil",
         ),
         "en" to mapOf(
             // Settings
@@ -180,6 +186,12 @@ object AppStrings {
             "delete_multiple_title" to "Delete %d space(s)",
             "delete_multiple_confirm" to "Delete %s? This action cannot be undone.",
             "delete_multiple_sure" to "All tasks and members of %s will be lost.",
+
+            // Profile photo
+            "profile_photo_choose" to "📷 Choose photo",
+            "profile_photo_take" to "🤳 Take photo",
+            "profile_photo_uploading" to "Uploading photo…",
+            "profile_avatar_content_desc" to "Profile photo",
         )
     )
 

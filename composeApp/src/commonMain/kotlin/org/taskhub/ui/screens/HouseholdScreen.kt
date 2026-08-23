@@ -30,6 +30,7 @@ import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
@@ -695,18 +696,14 @@ private fun MemberCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Avatar
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = if (member.role == "admin") Coral100 else Teal100
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = if (member.role == "admin") "👑" else "🧒",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                }
+                UserAvatar(
+                    avatarUrl = member.avatarUrl,
+                    fallbackEmoji = if (member.role == "admin") "👑" else "🧒",
+                    displayName = member.displayName,
+                    contentDescription = member.displayName,
+                    size = 48.dp,
+                    backgroundColor = if (member.role == "admin") Coral100 else Teal100
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 

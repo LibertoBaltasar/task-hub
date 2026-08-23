@@ -101,11 +101,36 @@ class GoogleAuthManager(
             restoreHouseholds(result.uid)
             repointPersonalHousehold()
             syncHouseholdsToCloud()
+            syncGoogleAvatar(result)
             _state.value = GoogleAuthState.SignedIn(result.email)
         } catch (e: Exception) {
             _state.value = GoogleAuthState.Error(
                 e.message ?: "Error al iniciar sesión con Google"
             )
+        }
+    }
+
+    /**
+     * Guarda la foto de perfil de Google como avatarUrl del perfil global, solo
+     * si el usuario todavía no tiene una foto propia (para no pisar una subida
+     * a mano en EditProfileScreen con la foto de Google en cada login).
+     */
+    private suspend fun syncGoogleAvatar(result: FirestoreRepository.GoogleSignInResult) {
+        val photoUrl = result.photoUrl ?: return
+        try {
+            val existing = repo.getUserProfile(result.uid)
+            if (!existing?.avatarUrl.isNullOrBlank()) return
+            repo.upsertUserProfile(
+                userId = result.uid,
+                displayName = existing?.displayName?.ifBlank { result.displayName ?: "" }
+                    ?: (result.displayName ?: ""),
+                avatarUrl = photoUrl,
+                avatarEmoji = existing?.avatarEmoji ?: "",
+                bio = existing?.bio ?: "",
+                status = existing?.status ?: ""
+            )
+        } catch (_: Exception) {
+            // No crítico: se reintenta en el próximo login.
         }
     }
 

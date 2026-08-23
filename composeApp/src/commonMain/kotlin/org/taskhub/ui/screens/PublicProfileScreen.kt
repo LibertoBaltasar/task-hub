@@ -18,6 +18,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.UserProfile
+import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.models.ProfileScreenModel
 import org.taskhub.ui.models.ProfileUiState
 import org.taskhub.ui.theme.*
@@ -73,6 +74,7 @@ data class PublicProfileScreen(
                     PublicProfileContent(
                         padding = padding,
                         displayName = member.displayName,
+                        avatarUrl = member.avatarUrl,
                         avatarEmoji = "",
                         bio = "",
                         status = "",
@@ -88,6 +90,7 @@ data class PublicProfileScreen(
                     PublicProfileContent(
                         padding = padding,
                         displayName = profile.displayName.ifBlank { member.displayName },
+                        avatarUrl = profile.avatarUrl ?: member.avatarUrl,
                         avatarEmoji = profile.avatarEmoji,
                         bio = profile.bio,
                         status = profile.status,
@@ -118,6 +121,7 @@ data class PublicProfileScreen(
 private fun PublicProfileContent(
     padding: PaddingValues,
     displayName: String,
+    avatarUrl: String?,
     avatarEmoji: String,
     bio: String,
     status: String,
@@ -136,20 +140,14 @@ private fun PublicProfileContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // ── Avatar grande ──
-        Surface(
-            modifier = Modifier.size(100.dp),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = if (role == "admin") Coral100 else Teal100
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = if (avatarEmoji.isNotEmpty()) avatarEmoji
-                           else if (role == "admin") "👑"
-                           else "🧒",
-                    style = MaterialTheme.typography.displayMedium
-                )
-            }
-        }
+        UserAvatar(
+            avatarUrl = avatarUrl,
+            fallbackEmoji = avatarEmoji.ifEmpty { if (role == "admin") "👑" else "🧒" },
+            displayName = displayName,
+            contentDescription = displayName,
+            size = 100.dp,
+            backgroundColor = if (role == "admin") Coral100 else Teal100
+        )
 
         // ── Nombre ──
         Text(
