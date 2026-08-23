@@ -32,6 +32,22 @@ sealed class RewardActionState {
     data class Error(val message: String) : RewardActionState()
 }
 
+sealed class AppreciateActionState {
+    data object Idle : AppreciateActionState()
+    data object Loading : AppreciateActionState()
+    data class Success(val remaining: Int) : AppreciateActionState()
+    /** [messageKey] es una clave de [org.taskhub.ui.i18n.AppStrings], no un mensaje ya traducido. */
+    data class Error(val messageKey: String) : AppreciateActionState()
+}
+
+sealed class DonateActionState {
+    data object Idle : DonateActionState()
+    data object Loading : DonateActionState()
+    data class Success(val donorNewTotal: Int) : DonateActionState()
+    /** [messageKey] es una clave de [org.taskhub.ui.i18n.AppStrings], no un mensaje ya traducido. */
+    data class Error(val messageKey: String) : DonateActionState()
+}
+
 class MemberScreenModel(
     private val repo: FirestoreRepository
 ) : ScreenModel {
@@ -195,5 +211,65 @@ class MemberScreenModel(
 
     fun clearRewardAction() {
         _rewardActionState.value = RewardActionState.Idle
+    }
+
+    // ── Agradecer / Donar ──────────────────────────────────
+
+    private val _appreciateActionState = MutableStateFlow<AppreciateActionState>(AppreciateActionState.Idle)
+    val appreciateActionState: StateFlow<AppreciateActionState> = _appreciateActionState.asStateFlow()
+
+    private val _donateActionState = MutableStateFlow<DonateActionState>(DonateActionState.Idle)
+    val donateActionState: StateFlow<DonateActionState> = _donateActionState.asStateFlow()
+
+    fun appreciateMember(householdId: String, fromMemberId: String, toMemberId: String, amount: Int) {
+        screenModelScope.launch {
+            _appreciateActionState.value = AppreciateActionState.Loading
+            when (val result = repo.appreciateMember(householdId, fromMemberId, toMemberId, amount)) {
+                is FirestoreRepository.AppreciateResult.Ok -> {
+                    loadMembers(householdId)
+                    _appreciateActionState.value = AppreciateActionState.Success(result.remaining)
+                }
+                is FirestoreRepository.AppreciateResult.Error -> {
+                    _appreciateActionState.value = AppreciateActionState.Error(appreciateErrorKey(result.reason))
+                }
+            }
+        }
+    }
+
+    fun donatePoints(householdId: String, fromMemberId: String, toMemberId: String, amount: Int) {
+        screenModelScope.launch {
+            _donateActionState.value = DonateActionState.Loading
+            when (val result = repo.donatePoints(householdId, fromMemberId, toMemberId, amount)) {
+                is FirestoreRepository.DonateResult.Ok -> {
+                    loadMembers(householdId)
+                    _donateActionState.value = DonateActionState.Success(result.donorNewTotal)
+                }
+                is FirestoreRepository.DonateResult.Error -> {
+                    _donateActionState.value = DonateActionState.Error(donateErrorKey(result.reason))
+                }
+            }
+        }
+    }
+
+    fun clearAppreciateAction() {
+        _appreciateActionState.value = AppreciateActionState.Idle
+    }
+
+    fun clearDonateAction() {
+        _donateActionState.value = DonateActionState.Idle
+    }
+
+    private fun appreciateErrorKey(reason: FirestoreRepository.AppreciateErrorReason): String = when (reason) {
+        FirestoreRepository.AppreciateErrorReason.SELF -> "transfer_error_self"
+        FirestoreRepository.AppreciateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
+        FirestoreRepository.AppreciateErrorReason.LIMIT_EXCEEDED -> "appreciate_error_limit"
+        FirestoreRepository.AppreciateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
+    }
+
+    private fun donateErrorKey(reason: FirestoreRepository.DonateErrorReason): String = when (reason) {
+        FirestoreRepository.DonateErrorReason.SELF -> "transfer_error_self"
+        FirestoreRepository.DonateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
+        FirestoreRepository.DonateErrorReason.INSUFFICIENT_BALANCE -> "donate_error_insufficient_balance"
+        FirestoreRepository.DonateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
     }
 }

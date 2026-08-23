@@ -15,6 +15,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlinx.datetime.todayIn
 import kotlinx.datetime.toInstant
@@ -609,7 +610,9 @@ class FirestoreRepository(
             "joinedAt" to FirestoreValue(integerValue = now.toString()),
             "currentStreak" to FirestoreValue(integerValue = "0"),
             "bestStreak" to FirestoreValue(integerValue = "0"),
-            "lastStreakDate" to FirestoreValue(integerValue = "0")
+            "lastStreakDate" to FirestoreValue(integerValue = "0"),
+            "appreciationGiven" to FirestoreValue(integerValue = "0"),
+            "appreciationWeekStart" to FirestoreValue(integerValue = "0")
         )
         if (avatarUrl != null) {
             fields["avatarUrl"] = FirestoreValue(stringValue = avatarUrl)
@@ -847,6 +850,128 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  Appreciation ("agradecer" — acuñación con tope semanal) & donations
+    // ────────────────────────────────────────────────────────
+
+    sealed class AppreciateResult {
+        data class Ok(val remaining: Int, val receptorNewTotal: Int) : AppreciateResult()
+        data class Error(val reason: AppreciateErrorReason) : AppreciateResult()
+    }
+
+    enum class AppreciateErrorReason { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED, MEMBER_NOT_FOUND }
+
+    sealed class DonateResult {
+        data class Ok(val donorNewTotal: Int, val receptorNewTotal: Int) : DonateResult()
+        data class Error(val reason: DonateErrorReason) : DonateResult()
+    }
+
+    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND }
+
+    private data class AppreciationBudget(val given: Int, val weekStart: Long, val remaining: Int)
+
+    private fun currentAppreciationBudget(member: MemberResponse, now: Long): AppreciationBudget {
+        val weekExpired = now >= member.appreciationWeekStart + WEEK_MILLIS
+        val given = if (weekExpired) 0 else member.appreciationGiven
+        val weekStart = if (weekExpired) mondayStartOfWeek(now) else member.appreciationWeekStart
+        val remaining = (WEEKLY_APPRECIATION_BUDGET - given).coerceAtLeast(0)
+        return AppreciationBudget(given, weekStart, remaining)
+    }
+
+    /** Epoch millis del lunes 00:00 hora local de la semana que contiene [epochMs]. */
+    private fun mondayStartOfWeek(epochMs: Long): Long {
+        val tz = TimeZone.currentSystemDefault()
+        val date = kotlinx.datetime.Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(tz).date
+        val daysSinceMonday = date.dayOfWeek.ordinal // MONDAY=0 .. SUNDAY=6
+        val monday = date.minus(daysSinceMonday, DateTimeUnit.DAY)
+        return LocalDateTime(monday.year, monday.monthNumber, monday.dayOfMonth, 0, 0, 0)
+            .toInstant(tz).toEpochMilliseconds()
+    }
+
+    /**
+     * Puntos que [member] aún puede DAR agradeciendo esta semana (0..50), sin mutar nada.
+     * Útil para que la UI muestre el presupuesto restante antes de abrir el diálogo.
+     */
+    fun appreciationRemaining(member: MemberResponse, now: Long = Clock.System.now().toEpochMilliseconds()): Int =
+        currentAppreciationBudget(member, now).remaining
+
+    /**
+     * "Agradecer": acuña [amount] puntos para [toMemberId] sin restárselos a [fromMemberId].
+     * Cada miembro puede DAR como máximo 50 puntos por semana (lunes-domingo); al superar el
+     * tope semanal, o al agradecerse a sí mismo, devuelve un [AppreciateResult.Error] tipado
+     * en vez de lanzar una excepción.
+     */
+    suspend fun appreciateMember(
+        householdId: String,
+        fromMemberId: String,
+        toMemberId: String,
+        amount: Int
+    ): AppreciateResult {
+        if (fromMemberId == toMemberId) return AppreciateResult.Error(AppreciateErrorReason.SELF)
+        if (amount < 1) return AppreciateResult.Error(AppreciateErrorReason.INVALID_AMOUNT)
+
+        val members = getMembers(householdId)
+        val fromMember = members.find { it.id == fromMemberId }
+            ?: return AppreciateResult.Error(AppreciateErrorReason.MEMBER_NOT_FOUND)
+        val toMember = members.find { it.id == toMemberId }
+            ?: return AppreciateResult.Error(AppreciateErrorReason.MEMBER_NOT_FOUND)
+
+        val now = Clock.System.now().toEpochMilliseconds()
+        val budget = currentAppreciationBudget(fromMember, now)
+        if (amount > budget.remaining) return AppreciateResult.Error(AppreciateErrorReason.LIMIT_EXCEEDED)
+
+        // Acuñar: el receptor gana puntos sin que se le resten al que agradece.
+        addMemberPoints(householdId, toMemberId, amount)
+
+        val newGiven = budget.given + amount
+        val fields = mapOf(
+            "appreciationGiven" to FirestoreValue(integerValue = newGiven.toString()),
+            "appreciationWeekStart" to FirestoreValue(integerValue = budget.weekStart.toString())
+        )
+        client.patch("$baseUrl/households/$householdId/members/$fromMemberId") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "appreciationGiven,appreciationWeekStart")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+
+        return AppreciateResult.Ok(
+            remaining = WEEKLY_APPRECIATION_BUDGET - newGiven,
+            receptorNewTotal = toMember.totalPoints + amount
+        )
+    }
+
+    /**
+     * "Donar": transfiere [amount] puntos reales del saldo de [fromMemberId] a [toMemberId].
+     * Sin tope semanal (no es acuñación), pero no permite donarse a sí mismo ni donar más
+     * del saldo actual del donante.
+     */
+    suspend fun donatePoints(
+        householdId: String,
+        fromMemberId: String,
+        toMemberId: String,
+        amount: Int
+    ): DonateResult {
+        if (fromMemberId == toMemberId) return DonateResult.Error(DonateErrorReason.SELF)
+        if (amount < 1) return DonateResult.Error(DonateErrorReason.INVALID_AMOUNT)
+
+        val members = getMembers(householdId)
+        val fromMember = members.find { it.id == fromMemberId }
+            ?: return DonateResult.Error(DonateErrorReason.MEMBER_NOT_FOUND)
+        val toMember = members.find { it.id == toMemberId }
+            ?: return DonateResult.Error(DonateErrorReason.MEMBER_NOT_FOUND)
+
+        if (amount > fromMember.totalPoints) return DonateResult.Error(DonateErrorReason.INSUFFICIENT_BALANCE)
+
+        addMemberPoints(householdId, toMemberId, amount)
+        addMemberPoints(householdId, fromMemberId, -amount)
+
+        return DonateResult.Ok(
+            donorNewTotal = fromMember.totalPoints - amount,
+            receptorNewTotal = toMember.totalPoints + amount
+        )
     }
 
     /** Get member's unlocked achievement IDs. */
@@ -1747,6 +1872,57 @@ class FirestoreRepository(
     }
 
     // ────────────────────────────────────────────────────────
+    //  Messages (subcollection under households/{id})
+    // ────────────────────────────────────────────────────────
+
+    /** Send a chat message to a household. */
+    suspend fun sendMessage(
+        householdId: String,
+        memberId: String,
+        authorName: String,
+        text: String
+    ): org.taskhub.network.models.MessageResponse {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val fields = mapOf(
+            "memberId" to FirestoreValue(stringValue = memberId),
+            "authorName" to FirestoreValue(stringValue = authorName),
+            "text" to FirestoreValue(stringValue = text),
+            "createdAt" to FirestoreValue(integerValue = now.toString())
+        )
+
+        val response: FirestoreDocumentResponse = client.post(
+            "$baseUrl/households/$householdId/messages"
+        ) {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }.body()
+
+        val id = extractDocId(response.name)
+        return org.taskhub.network.models.MessageResponse(id, memberId, authorName, text, now)
+    }
+
+    /** List chat messages for a household, oldest first. */
+    suspend fun getMessages(householdId: String): List<org.taskhub.network.models.MessageResponse> {
+        val response: FirestoreListResponse = client.get(
+            "$baseUrl/households/$householdId/messages"
+        ) {
+            tryAuthOrApiKey()
+        }.body()
+
+        return response.documents.map { doc ->
+            val f = doc.fields
+            org.taskhub.network.models.MessageResponse(
+                id = extractDocId(doc.name),
+                memberId = f["memberId"]?.stringValue ?: "",
+                authorName = f["authorName"]?.stringValue ?: "",
+                text = f["text"]?.stringValue ?: "",
+                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
+            )
+        }.sortedBy { it.createdAt }
+    }
+
+    // ────────────────────────────────────────────────────────
     //  Notifications (subcollection under households/{id})
     // ────────────────────────────────────────────────────────
 
@@ -2012,7 +2188,9 @@ class FirestoreRepository(
             currentStreak = f["currentStreak"]?.integerValue?.toIntOrNull() ?: 0,
             bestStreak = f["bestStreak"]?.integerValue?.toIntOrNull() ?: 0,
             lastStreakDate = f["lastStreakDate"]?.integerValue?.toLongOrNull() ?: 0L,
-            leftAt = f["leftAt"]?.integerValue?.toLongOrNull() ?: 0L
+            leftAt = f["leftAt"]?.integerValue?.toLongOrNull() ?: 0L,
+            appreciationGiven = f["appreciationGiven"]?.integerValue?.toIntOrNull() ?: 0,
+            appreciationWeekStart = f["appreciationWeekStart"]?.integerValue?.toLongOrNull() ?: 0L
         )
     }
 
@@ -2030,5 +2208,9 @@ class FirestoreRepository(
          *       or inject it via build config / environment.
          */
         const val DEFAULT_API_KEY = "AIzaSyD5Xo11SqvysWRgEFv_91rBjYuFIq93lV8"
+
+        /** Tope semanal de puntos que un miembro puede DAR agradeciendo a otros. */
+        const val WEEKLY_APPRECIATION_BUDGET = 50
+        private const val WEEK_MILLIS = 7L * 24 * 60 * 60 * 1000
     }
 }

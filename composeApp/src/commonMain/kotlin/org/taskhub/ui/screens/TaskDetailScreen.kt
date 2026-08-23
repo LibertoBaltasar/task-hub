@@ -147,8 +147,8 @@ data class TaskDetailScreen(
                             isGoogleLinked = isGoogleLinked,
                             calendarActionState = calendarActionState,
                             onCommentTextChange = { model.setNewCommentText(it) },
-                            onAddComment = { authorName ->
-                                model.addComment(householdId, taskId, authorName)
+                            onAddComment = {
+                                model.addComment(householdId, taskId)
                             },
                             onCompleteTask = {
                                 model.completeTask(
@@ -227,7 +227,7 @@ private fun TaskDetailContent(
     isGoogleLinked: Boolean = false,
     calendarActionState: TaskScreenModel.CalendarActionState = TaskScreenModel.CalendarActionState.Idle,
     onCommentTextChange: (String) -> Unit,
-    onAddComment: (String) -> Unit,
+    onAddComment: () -> Unit,
     onCompleteTask: () -> Unit,
     onComplete: (String, TaskAssignmentResponse) -> Unit,
     onChangeCompletedBy: (String) -> Unit,
@@ -632,10 +632,7 @@ private fun TaskDetailContent(
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(
-                    onClick = {
-                        // Use a default author name since we don't track login state
-                        onAddComment("Usuario")
-                    },
+                    onClick = onAddComment,
                     enabled = newCommentText.isNotBlank()
                 ) {
                     Text(

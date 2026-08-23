@@ -96,6 +96,35 @@ object AppStrings {
 
             // Profile photo
             "profile_avatar_content_desc" to "Foto de perfil",
+
+            // Chat / Messages
+            "messages_title" to "💬 Mensajes",
+            "messages_send" to "Enviar",
+            "messages_hint" to "Escribe un mensaje…",
+            "messages_empty" to "Aún no hay mensajes. ¡Escribe el primero!",
+            "messages_error_loading" to "Error al cargar los mensajes",
+            "messages_error_sending" to "Error al enviar el mensaje",
+            "messages_refresh" to "Actualizar mensajes",
+
+            // Agradecer / Donar puntos entre miembros
+            "appreciate_action" to "👍 Agradecer",
+            "donate_action" to "🎁 Donar",
+            "appreciate_dialog_title" to "Agradecer a",
+            "donate_dialog_title" to "Donar a",
+            "appreciate_dialog_remaining_label" to "Presupuesto restante esta semana",
+            "donate_dialog_balance_label" to "Tu saldo actual",
+            "transfer_amount_label" to "Puntos a enviar",
+            "transfer_confirm" to "Confirmar",
+            "transfer_cancel" to "Cancelar",
+            "transfer_points_suffix" to "pts",
+            "appreciate_success" to "¡Agradecimiento enviado!",
+            "donate_success" to "¡Donación enviada!",
+            "appreciate_no_budget" to "Sin presupuesto para agradecer esta semana",
+            "transfer_error_self" to "No puedes hacerlo contigo mismo",
+            "transfer_error_invalid_amount" to "Importe inválido",
+            "transfer_error_member_not_found" to "Miembro no encontrado",
+            "appreciate_error_limit" to "Límite semanal alcanzado",
+            "donate_error_insufficient_balance" to "Saldo insuficiente",
         ),
         "en" to mapOf(
             // Settings
@@ -186,6 +215,35 @@ object AppStrings {
 
             // Profile photo
             "profile_avatar_content_desc" to "Profile photo",
+
+            // Chat / Messages
+            "messages_title" to "💬 Messages",
+            "messages_send" to "Send",
+            "messages_hint" to "Write a message…",
+            "messages_empty" to "No messages yet. Write the first one!",
+            "messages_error_loading" to "Error loading messages",
+            "messages_error_sending" to "Error sending message",
+            "messages_refresh" to "Refresh messages",
+
+            // Appreciate / Donate points between members
+            "appreciate_action" to "👍 Thank",
+            "donate_action" to "🎁 Donate",
+            "appreciate_dialog_title" to "Thank",
+            "donate_dialog_title" to "Donate to",
+            "appreciate_dialog_remaining_label" to "Remaining budget this week",
+            "donate_dialog_balance_label" to "Your current balance",
+            "transfer_amount_label" to "Points to send",
+            "transfer_confirm" to "Confirm",
+            "transfer_cancel" to "Cancel",
+            "transfer_points_suffix" to "pts",
+            "appreciate_success" to "Thanks sent!",
+            "donate_success" to "Donation sent!",
+            "appreciate_no_budget" to "No budget left to thank anyone this week",
+            "transfer_error_self" to "You can't do this to yourself",
+            "transfer_error_invalid_amount" to "Invalid amount",
+            "transfer_error_member_not_found" to "Member not found",
+            "appreciate_error_limit" to "Weekly limit reached",
+            "donate_error_insufficient_balance" to "Insufficient balance",
         )
     )
 

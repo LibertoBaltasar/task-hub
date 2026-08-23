@@ -51,7 +51,11 @@ data class MemberResponse(
     /** Último día de racha registrado (epoch millis). 0 = sin racha. */
     val lastStreakDate: Long = 0,
     /** Epoch millis en que el miembro abandonó el hogar (soft-delete). 0 = activo. */
-    val leftAt: Long = 0
+    val leftAt: Long = 0,
+    /** Puntos ya DADOS agradeciendo a otros durante la semana de [appreciationWeekStart]. */
+    val appreciationGiven: Int = 0,
+    /** Epoch millis del lunes 00:00 local de la semana a la que corresponde [appreciationGiven]. */
+    val appreciationWeekStart: Long = 0
 )
 
 /**
@@ -180,6 +184,17 @@ data class TaskAssignmentResponse(
 @Serializable
 data class CommentResponse(
     val id: String,
+    val authorName: String,
+    val text: String,
+    val createdAt: Long = 0
+)
+
+// ── Message DTO ────────────────────────────────────────────
+
+@Serializable
+data class MessageResponse(
+    val id: String,
+    val memberId: String,
     val authorName: String,
     val text: String,
     val createdAt: Long = 0

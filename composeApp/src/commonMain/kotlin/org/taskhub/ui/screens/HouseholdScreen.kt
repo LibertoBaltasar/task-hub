@@ -13,16 +13,23 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.lazy.rememberLazyListState
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.MessageResponse
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
@@ -31,10 +38,14 @@ import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.models.AppreciateActionState
+import org.taskhub.ui.models.DonateActionState
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
+import org.taskhub.ui.models.MessagesUiState
 import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.theme.*
 import org.taskhub.platform.QrCodeImage
@@ -74,6 +85,12 @@ data class HouseholdScreen(val householdId: String) : Screen {
         var membersExpanded by remember { mutableStateOf(false) }
         var isAdmin by remember { mutableStateOf(false) }
 
+        // Agradecer / Donar puntos entre miembros
+        var appreciateTarget by remember { mutableStateOf<MemberResponse?>(null) }
+        var donateTarget by remember { mutableStateOf<MemberResponse?>(null) }
+        val appreciateActionState by memberModel.appreciateActionState.collectAsState()
+        val donateActionState by memberModel.donateActionState.collectAsState()
+
         LaunchedEffect(householdId) {
             householdModel.loadHousehold(householdId)
             memberModel.loadMembers(householdId)
@@ -98,6 +115,35 @@ data class HouseholdScreen(val householdId: String) : Screen {
                     kotlinx.coroutines.delay(30_000L)
                     notificationModel.refreshUnreadCount(householdId, memberId)
                 }
+            }
+        }
+
+        // ── Chat de mensajes ──
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+        var currentMemberId by remember { mutableStateOf("") }
+        LaunchedEffect(householdId) {
+            currentMemberId = repo.resolveCurrentMember(householdId)
+        }
+        val myMember = (memberState as? MemberUiState.Success)?.members?.firstOrNull { it.id == currentMemberId }
+
+        // Cierra los diálogos y limpia el estado de acción al completarse con éxito.
+        LaunchedEffect(appreciateActionState) {
+            if (appreciateActionState is AppreciateActionState.Success) {
+                appreciateTarget = null
+            }
+        }
+        LaunchedEffect(donateActionState) {
+            if (donateActionState is DonateActionState.Success) {
+                donateTarget = null
+            }
+        }
+        val messagesState by householdModel.messagesUiState.collectAsState()
+        val newMessageText by householdModel.newMessageText.collectAsState()
+        LaunchedEffect(householdId) {
+            householdModel.loadMessages(householdId)
+            while (true) {
+                kotlinx.coroutines.delay(20_000L)
+                householdModel.loadMessages(householdId)
             }
         }
 
@@ -266,6 +312,59 @@ data class HouseholdScreen(val householdId: String) : Screen {
                     TextButton(onClick = { showLeaveDialog = false }) {
                         Text("Cancelar")
                     }
+                }
+            )
+        }
+
+        // ── Agradecer dialog ──
+        appreciateTarget?.let { target ->
+            val remaining = myMember?.let { repo.appreciationRemaining(it) } ?: 0
+            TransferAmountDialog(
+                title = "${s("appreciate_dialog_title")} ${target.displayName}",
+                budgetLabel = s("appreciate_dialog_remaining_label"),
+                budget = remaining,
+                pointsSuffix = s("transfer_points_suffix"),
+                amountLabel = s("transfer_amount_label"),
+                confirmLabel = s("transfer_confirm"),
+                cancelLabel = s("transfer_cancel"),
+                errorText = (appreciateActionState as? AppreciateActionState.Error)?.let { s(it.messageKey) },
+                isLoading = appreciateActionState is AppreciateActionState.Loading,
+                emptyBudgetText = s("appreciate_no_budget"),
+                onConfirm = { amount ->
+                    val fromId = myMember?.id
+                    if (fromId != null) {
+                        memberModel.appreciateMember(householdId, fromId, target.id, amount)
+                    }
+                },
+                onDismiss = {
+                    appreciateTarget = null
+                    memberModel.clearAppreciateAction()
+                }
+            )
+        }
+
+        // ── Donar dialog ──
+        donateTarget?.let { target ->
+            val balance = myMember?.totalPoints ?: 0
+            TransferAmountDialog(
+                title = "${s("donate_dialog_title")} ${target.displayName}",
+                budgetLabel = s("donate_dialog_balance_label"),
+                budget = balance,
+                pointsSuffix = s("transfer_points_suffix"),
+                amountLabel = s("transfer_amount_label"),
+                confirmLabel = s("transfer_confirm"),
+                cancelLabel = s("transfer_cancel"),
+                errorText = (donateActionState as? DonateActionState.Error)?.let { s(it.messageKey) },
+                isLoading = donateActionState is DonateActionState.Loading,
+                onConfirm = { amount ->
+                    val fromId = myMember?.id
+                    if (fromId != null) {
+                        memberModel.donatePoints(householdId, fromId, target.id, amount)
+                    }
+                },
+                onDismiss = {
+                    donateTarget = null
+                    memberModel.clearDonateAction()
                 }
             )
         }
@@ -577,6 +676,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                                     MemberCard(
                                                         member = member,
                                                         isAdmin = isAdmin,
+                                                        isSelf = myMember?.id == member.id,
+                                                        canTransfer = myMember != null,
+                                                        s = s,
+                                                        onAppreciateClick = { appreciateTarget = member },
+                                                        onDonateClick = { donateTarget = member },
                                                         onRoleChange = { newRole ->
                                                             memberModel.updateMemberRole(householdId, member.id, newRole)
                                                         },
@@ -618,6 +722,18 @@ data class HouseholdScreen(val householdId: String) : Screen {
 
                                         is MemberUiState.Idle -> {}
                                     }
+                                }
+
+                                // Chat de mensajes
+                                item {
+                                    MessagesSection(
+                                        s = s,
+                                        messagesState = messagesState,
+                                        newMessageText = newMessageText,
+                                        onTextChange = householdModel::updateNewMessageText,
+                                        onSend = { householdModel.sendMessage(householdId, currentMemberId) },
+                                        onRefresh = { householdModel.loadMessages(householdId) }
+                                    )
                                 }
 
                                 // Salir (desvincularse) del hogar
@@ -679,9 +795,14 @@ data class HouseholdScreen(val householdId: String) : Screen {
 private fun MemberCard(
     member: MemberResponse,
     isAdmin: Boolean,
+    isSelf: Boolean,
+    canTransfer: Boolean,
+    s: (String) -> String,
     onRoleChange: (String) -> Unit,
     onCreateTask: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onAppreciateClick: () -> Unit,
+    onDonateClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -775,6 +896,247 @@ private fun MemberCard(
                     Text("+ Tarea")
                 }
             }
+
+            // Agradecer / Donar — ocultos sobre uno mismo
+            if (!isSelf && canTransfer) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onAppreciateClick,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(s("appreciate_action"))
+                    }
+                    OutlinedButton(
+                        onClick = onDonateClick,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(s("donate_action"))
+                    }
+                }
+            }
         }
     }
+}
+
+/**
+ * Diálogo de importe reutilizado por "Agradecer" y "Donar": ambos piden una
+ * cantidad de puntos con un tope visible ([budget], presupuesto semanal o
+ * saldo según el caso) y muestran el error de la última acción, si lo hay.
+ */
+@Composable
+private fun TransferAmountDialog(
+    title: String,
+    budgetLabel: String,
+    budget: Int,
+    pointsSuffix: String,
+    amountLabel: String,
+    confirmLabel: String,
+    cancelLabel: String,
+    errorText: String?,
+    isLoading: Boolean,
+    emptyBudgetText: String? = null,
+    onConfirm: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var amountText by remember { mutableStateOf("") }
+    val amount = amountText.toIntOrNull() ?: 0
+    val isValid = amount in 1..budget
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text(
+                    text = "$budgetLabel: $budget $pointsSuffix",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                if (budget <= 0 && emptyBudgetText != null) {
+                    Text(
+                        text = emptyBudgetText,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { amountText = it.filter(Char::isDigit) },
+                        label = { Text(amountLabel) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (errorText != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = errorText,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(amount) },
+                enabled = isValid && !isLoading
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(confirmLabel)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(cancelLabel) }
+        }
+    )
+}
+
+@Composable
+private fun MessagesSection(
+    s: (String) -> String,
+    messagesState: org.taskhub.ui.models.MessagesUiState,
+    newMessageText: String,
+    onTextChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = s("messages_title"),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onRefresh) {
+                    Icon(Icons.Filled.Refresh, contentDescription = s("messages_refresh"))
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            when (messagesState) {
+                is org.taskhub.ui.models.MessagesUiState.Loading,
+                org.taskhub.ui.models.MessagesUiState.Idle -> {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Teal600)
+                    }
+                }
+
+                is org.taskhub.ui.models.MessagesUiState.Error -> {
+                    Text(
+                        text = "❌ ${messagesState.message}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                }
+
+                is org.taskhub.ui.models.MessagesUiState.Success -> {
+                    val messages = messagesState.messages
+                    if (messages.isEmpty()) {
+                        Text(
+                            text = s("messages_empty"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+                        )
+                    } else {
+                        val listState = rememberLazyListState()
+                        LaunchedEffect(messages.size) {
+                            listState.animateScrollToItem(messages.size - 1)
+                        }
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxWidth().height(260.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(messages) { message -> MessageBubble(message) }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = newMessageText,
+                    onValueChange = onTextChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text(s("messages_hint")) },
+                    singleLine = true
+                )
+                IconButton(
+                    onClick = onSend,
+                    enabled = newMessageText.isNotBlank()
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = s("messages_send"))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MessageBubble(message: MessageResponse) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = message.authorName,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = formatMessageTime(message.createdAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            text = message.text,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+private fun formatMessageTime(epochMillis: Long): String {
+    if (epochMillis == 0L) return ""
+    val local = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
+    val day = local.dayOfMonth.toString().padStart(2, '0')
+    val month = local.monthNumber.toString().padStart(2, '0')
+    val hour = local.hour.toString().padStart(2, '0')
+    val min = local.minute.toString().padStart(2, '0')
+    return "$day/$month $hour:$min"
 }

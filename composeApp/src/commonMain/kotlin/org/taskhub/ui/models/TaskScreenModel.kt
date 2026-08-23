@@ -633,12 +633,13 @@ class TaskScreenModel(
         }
     }
 
-    fun addComment(householdId: String, taskId: String, authorName: String) {
+    fun addComment(householdId: String, taskId: String) {
         val text = _newCommentText.value.trim()
         if (text.isEmpty()) return
         screenModelScope.launch {
             _commentsState.value = CommentsUiState.Loading
             try {
+                val authorName = resolveCurrentMemberName(householdId)
                 repo.addComment(householdId, taskId, authorName, text)
                 _newCommentText.value = ""
                 // Reload comments
@@ -648,6 +649,17 @@ class TaskScreenModel(
                     e.message ?: "Error al añadir comentario"
                 )
             }
+        }
+    }
+
+    /** Resolves the display name of the current member, for use as comment author. */
+    private suspend fun resolveCurrentMemberName(householdId: String): String {
+        return try {
+            val memberId = _currentMemberId.value ?: repo.resolveCurrentMember(householdId)
+            val member = repo.getMembers(householdId).find { it.id == memberId }
+            member?.displayName?.takeIf { it.isNotBlank() } ?: "Miembro"
+        } catch (_: Exception) {
+            "Usuario"
         }
     }
 

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
+import org.taskhub.network.models.MessageResponse
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.platform.logAnalyticsEvent
 
@@ -17,6 +18,13 @@ sealed class HouseholdUiState {
     data class Success(val household: HouseholdResponse) : HouseholdUiState()
     data class AlreadyMember(val household: HouseholdResponse) : HouseholdUiState()
     data class Error(val message: String) : HouseholdUiState()
+}
+
+sealed class MessagesUiState {
+    data object Idle : MessagesUiState()
+    data object Loading : MessagesUiState()
+    data class Success(val messages: List<MessageResponse>) : MessagesUiState()
+    data class Error(val message: String) : MessagesUiState()
 }
 
 class HouseholdScreenModel(
@@ -142,4 +150,51 @@ class HouseholdScreenModel(
     }
 
     fun getLocalId(): String? = repo.getLocalId()
+
+    // ── Chat de mensajes ──
+
+    private val _messagesUiState = MutableStateFlow<MessagesUiState>(MessagesUiState.Idle)
+    val messagesUiState: StateFlow<MessagesUiState> = _messagesUiState.asStateFlow()
+
+    private val _newMessageText = MutableStateFlow("")
+    val newMessageText: StateFlow<String> = _newMessageText.asStateFlow()
+
+    fun updateNewMessageText(text: String) {
+        _newMessageText.value = text
+    }
+
+    fun loadMessages(householdId: String) {
+        screenModelScope.launch {
+            if (_messagesUiState.value !is MessagesUiState.Success) {
+                _messagesUiState.value = MessagesUiState.Loading
+            }
+            try {
+                val messages = repo.getMessages(householdId)
+                _messagesUiState.value = MessagesUiState.Success(messages)
+            } catch (e: Exception) {
+                _messagesUiState.value = MessagesUiState.Error(
+                    e.message ?: "Error al cargar mensajes"
+                )
+            }
+        }
+    }
+
+    fun sendMessage(householdId: String, memberId: String) {
+        val text = _newMessageText.value.trim()
+        if (text.isEmpty() || memberId.isEmpty()) return
+        screenModelScope.launch {
+            try {
+                val authorName = repo.getMembers(householdId)
+                    .firstOrNull { it.id == memberId }
+                    ?.displayName ?: ""
+                repo.sendMessage(householdId, memberId, authorName, text)
+                _newMessageText.value = ""
+                loadMessages(householdId)
+            } catch (e: Exception) {
+                _messagesUiState.value = MessagesUiState.Error(
+                    e.message ?: "Error al enviar mensaje"
+                )
+            }
+        }
+    }
 }
