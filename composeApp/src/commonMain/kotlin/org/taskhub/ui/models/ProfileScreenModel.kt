@@ -36,9 +36,6 @@ class ProfileScreenModel(
     private val _saveState = MutableStateFlow<ProfileSaveState>(ProfileSaveState.Idle)
     val saveState: StateFlow<ProfileSaveState> = _saveState.asStateFlow()
 
-    private val _avatarUploadState = MutableStateFlow<AvatarUploadState>(AvatarUploadState.Idle)
-    val avatarUploadState: StateFlow<AvatarUploadState> = _avatarUploadState.asStateFlow()
-
     /** Carga el perfil del usuario actual (para editar). */
     fun loadMyProfile() {
         val userId = repo.getLocalId() ?: run {
@@ -121,62 +118,15 @@ class ProfileScreenModel(
         }
     }
 
-    /**
-     * Sube una foto de avatar ([jpegBytes], ya comprimida en cliente) a Firebase
-     * Storage y persiste la URL resultante en el perfil global de inmediato
-     * (no espera al botón "Guardar perfil"), para que no se pierda si el
-     * usuario sale de la pantalla sin guardar el resto de campos.
-     */
-    fun uploadAvatarPhoto(jpegBytes: ByteArray) {
-        val userId = repo.getLocalId() ?: run {
-            _avatarUploadState.value = AvatarUploadState.Error("No estás autenticado")
-            return
-        }
-        val current = (_myProfileState.value as? ProfileUiState.Success)?.profile
-            ?: UserProfile(id = userId)
-        screenModelScope.launch {
-            _avatarUploadState.value = AvatarUploadState.Uploading
-            try {
-                val url = repo.uploadAvatarPhoto(userId, jpegBytes)
-                repo.upsertUserProfile(
-                    userId = userId,
-                    displayName = current.displayName,
-                    avatarUrl = url,
-                    avatarEmoji = current.avatarEmoji,
-                    bio = current.bio,
-                    status = current.status
-                )
-                _myProfileState.value = ProfileUiState.Success(current.copy(avatarUrl = url))
-                _avatarUploadState.value = AvatarUploadState.Idle
-            } catch (e: Exception) {
-                _avatarUploadState.value = AvatarUploadState.Error(
-                    e.message ?: "Error al subir la foto"
-                )
-            }
-        }
-    }
-
-    fun clearAvatarUploadError() {
-        _avatarUploadState.value = AvatarUploadState.Idle
-    }
-
     fun reset() {
         _myProfileState.value = ProfileUiState.Idle
         _otherProfileState.value = ProfileUiState.Idle
         _saveState.value = ProfileSaveState.Idle
-        _avatarUploadState.value = AvatarUploadState.Idle
     }
 
     fun clearSaveState() {
         _saveState.value = ProfileSaveState.Idle
     }
-}
-
-/** Estado de la subida de la foto de avatar. */
-sealed class AvatarUploadState {
-    data object Idle : AvatarUploadState()
-    data object Uploading : AvatarUploadState()
-    data class Error(val message: String) : AvatarUploadState()
 }
 
 /** Estado del guardado del perfil. */

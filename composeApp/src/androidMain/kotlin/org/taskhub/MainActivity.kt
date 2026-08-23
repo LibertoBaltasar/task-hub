@@ -79,9 +79,6 @@ class MainActivity : ComponentActivity() {
         // Registrar el launcher de Google Sign-In (requisito para el login con Google)
         GoogleSignInHelper.register(this)
 
-        // Registrar los launchers de galería/cámara para elegir foto de avatar
-        ImagePickerHelper.register(this)
-
         // Set debug mode from BuildConfig (false in release builds)
         DebugFlags.isEnabled = BuildConfig.DEBUG
 

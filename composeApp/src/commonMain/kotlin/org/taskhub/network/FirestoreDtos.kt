@@ -151,16 +151,6 @@ data class TokenRefreshResponse(
     val refresh_token: String? = null
 )
 
-// ── Firebase Cloud Storage (REST, sin SDK) ─────────────────
-
-/** Respuesta de un upload simple a Firebase Storage (`?uploadType=media`). */
-@Serializable
-data class FirebaseStorageUploadResponse(
-    val name: String? = null,
-    val bucket: String? = null,
-    val downloadTokens: String? = null
-)
-
 // ── RunQuery response (one element per result) ─────────────
 
 @Serializable
