@@ -67,6 +67,12 @@ data class UserProfile(
     val displayName: String = "",
     /** URL de la foto de perfil. null = sin foto todavía. */
     val avatarUrl: String? = null,
+    /** Emoji para el avatar rápido (alternativa sin foto). p.ej. "🧑", "👩", "🐱". */
+    val avatarEmoji: String = "",
+    /** Bio corta estilo "Papá, profe de mates y cocinero". */
+    val bio: String = "",
+    /** Estado tipo "🍳 Preparando la cena" o "📚 Estudiando". */
+    val status: String = "",
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 )

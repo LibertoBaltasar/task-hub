@@ -87,7 +87,8 @@ class HomeScreen : Screen {
                     SettingsSheet(
                         callbacks = SettingsCallbacks(
                             onExportCsv = { },
-                            onDismiss = { showSettings = false }
+                            onDismiss = { showSettings = false },
+                            onEditProfile = { navigator.push(EditProfileScreen()) }
                         )
                     )
                 }

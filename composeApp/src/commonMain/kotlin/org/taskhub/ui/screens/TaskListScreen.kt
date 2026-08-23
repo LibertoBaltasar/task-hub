@@ -125,7 +125,8 @@ data class TaskListScreen(
                     SettingsSheet(
                         callbacks = SettingsCallbacks(
                             onExportCsv = exportCsv,
-                            onDismiss = { showSettings = false }
+                            onDismiss = { showSettings = false },
+                            onEditProfile = { navigator.push(EditProfileScreen()) }
                         )
                     )
                 }

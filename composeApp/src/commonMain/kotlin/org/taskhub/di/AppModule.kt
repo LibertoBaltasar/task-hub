@@ -17,6 +17,7 @@ import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HomeScreenModel
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.NotificationScreenModel
+import org.taskhub.ui.models.ProfileScreenModel
 import org.taskhub.ui.models.TaskScreenModel
 
 val appModule: Module = module {
@@ -54,6 +55,7 @@ val appModule: Module = module {
     factory { HomeScreenModel(repo = get(), householdStore = get()) }
     factory { HouseholdScreenModel(repo = get(), householdStore = get(), authManager = get()) }
     factory { MemberScreenModel(repo = get()) }
+    factory { ProfileScreenModel(repo = get()) }
     factory { NotificationScreenModel(repo = get()) }
     factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarRepo = get(), adController = get()) }
 }

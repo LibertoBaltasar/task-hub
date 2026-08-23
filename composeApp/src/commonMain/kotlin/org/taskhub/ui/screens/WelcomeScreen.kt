@@ -53,7 +53,8 @@ class WelcomeScreen : Screen {
                     SettingsSheet(
                         callbacks = SettingsCallbacks(
                             onExportCsv = { /* No tasks to export on welcome screen */ },
-                            onDismiss = { showSettings = false }
+                            onDismiss = { showSettings = false },
+                            onEditProfile = { navigator.push(EditProfileScreen()) }
                         )
                     )
                 }

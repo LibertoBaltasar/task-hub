@@ -67,7 +67,8 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                     SettingsSheet(
                         callbacks = SettingsCallbacks(
                             onExportCsv = { },
-                            onDismiss = { showSettings = false }
+                            onDismiss = { showSettings = false },
+                            onEditProfile = { navigator.push(EditProfileScreen()) }
                         )
                     )
                 }

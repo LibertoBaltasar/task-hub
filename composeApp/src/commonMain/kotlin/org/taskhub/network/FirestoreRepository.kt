@@ -757,6 +757,9 @@ class FirestoreRepository(
                 id = userId,
                 displayName = f["displayName"]?.stringValue ?: "",
                 avatarUrl = f["avatarUrl"]?.stringValue,
+                avatarEmoji = f["avatarEmoji"]?.stringValue ?: "",
+                bio = f["bio"]?.stringValue ?: "",
+                status = f["status"]?.stringValue ?: "",
                 createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
                 updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
             )
@@ -770,7 +773,14 @@ class FirestoreRepository(
      * Base del "perfilado creciente": añadir foto/bio/etc. luego = añadir campos
      * aquí y en [UserProfile], sin tocar la membresía por hogar.
      */
-    suspend fun upsertUserProfile(userId: String, displayName: String, avatarUrl: String? = null) {
+    suspend fun upsertUserProfile(
+        userId: String,
+        displayName: String,
+        avatarUrl: String? = null,
+        avatarEmoji: String = "",
+        bio: String = "",
+        status: String = ""
+    ) {
         val now = Clock.System.now().toEpochMilliseconds()
         val fields = mutableMapOf<String, FirestoreValue>(
             "displayName" to FirestoreValue(stringValue = displayName),
@@ -781,6 +791,9 @@ class FirestoreRepository(
         } else {
             fields["avatarUrl"] = FirestoreValue(nullValue = "NULL_VALUE")
         }
+        fields["avatarEmoji"] = FirestoreValue(stringValue = avatarEmoji)
+        fields["bio"] = FirestoreValue(stringValue = bio)
+        fields["status"] = FirestoreValue(stringValue = status)
 
         client.patch("$baseUrl/users/$userId") {
             withAuth()

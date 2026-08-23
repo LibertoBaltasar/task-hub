@@ -24,7 +24,8 @@ import org.taskhub.platform.saveWidgetThemeToCache
  */
 data class SettingsCallbacks(
     val onExportCsv: () -> Unit,
-    val onDismiss: () -> Unit
+    val onDismiss: () -> Unit,
+    val onEditProfile: () -> Unit = {}
 )
 
 /**
@@ -137,6 +138,18 @@ fun SettingsSheet(
                         Text("Iniciar sesión con Google")
                     }
                 }
+            }
+
+            // Botón de editar perfil (dentro de la sección Cuenta)
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = {
+                    callbacks.onDismiss()
+                    callbacks.onEditProfile()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("✏️ Editar perfil")
             }
         }
 

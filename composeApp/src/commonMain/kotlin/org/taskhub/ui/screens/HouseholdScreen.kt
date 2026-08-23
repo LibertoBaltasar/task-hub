@@ -285,7 +285,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                     SettingsSheet(
                         callbacks = SettingsCallbacks(
                             onExportCsv = { /* CSV export available from task list */ },
-                            onDismiss = { showSettings = false }
+                            onDismiss = { showSettings = false },
+                            onEditProfile = {
+                                showSettings = false
+                                navigator.push(EditProfileScreen())
+                            }
                         )
                     )
                 }
@@ -583,6 +587,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                                                     preselectedMemberId = member.id
                                                                 )
                                                             )
+                                                        },
+                                                        onClick = {
+                                                            member.userId?.let { uid ->
+                                                                navigator.push(PublicProfileScreen(uid, member))
+                                                            }
                                                         }
                                                     )
                                                 }
@@ -670,7 +679,8 @@ private fun MemberCard(
     member: MemberResponse,
     isAdmin: Boolean,
     onRoleChange: (String) -> Unit,
-    onCreateTask: () -> Unit
+    onCreateTask: () -> Unit,
+    onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -700,7 +710,12 @@ private fun MemberCard(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
+                // Name + role — clickable to view public profile
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable(enabled = member.userId != null) { onClick() }
+                ) {
                     Text(
                         text = member.displayName,
                         style = MaterialTheme.typography.titleMedium,
