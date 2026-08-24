@@ -103,5 +103,8 @@ service cloud.firestore {
     match /households/{hid}/members/{mid}/achievements/{achid} {
       allow read, write: if isMember(hid) || isOwner(hid);
     }
+    match /households/{hid}/messages/{mid} {
+      allow read, write: if isMember(hid) || isOwner(hid);
+    }
   }
 }

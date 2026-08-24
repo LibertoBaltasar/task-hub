@@ -695,13 +695,21 @@ class FirestoreRepository(
         // 2. Fallback: primer miembro existente
         if (members.isNotEmpty()) return members.first().id
 
-        // 3. Sin miembros: crear uno "Yo" vinculado al usuario actual
-        return createMember(
-            householdId = householdId,
-            displayName = "Yo",
-            role = "admin",
-            userId = localId
-        ).id
+        // 3. Sin miembros: crear uno "Yo" vinculado al usuario actual.
+        // Si createMember falla (p. ej. Firestore devuelve una respuesta sin
+        // 'name', o la creación es rechazada por las reglas), no se propaga la
+        // excepción: se usa el localId como fallback para que abrir un hogar
+        // sin miembros nunca crashee la UI.
+        return try {
+            createMember(
+                householdId = householdId,
+                displayName = "Yo",
+                role = "admin",
+                userId = localId
+            ).id
+        } catch (_: Exception) {
+            localId ?: ""
+        }
     }
 
     /**

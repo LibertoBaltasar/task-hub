@@ -30,13 +30,18 @@ if r.status_code not in (200, 201):
 ruleset = r.json()["name"]
 print("ruleset:", ruleset)
 
-# 2) Publicar el release de cloud.firestore
-r2 = requests.post(
-    f"{BASE}/projects/{PROJECT}/releases",
+# 2) Publicar el release de cloud.firestore.
+#    El release ya existe desde el primer deploy → hay que ACTUALIZARLO con
+#    PATCH (incluyendo `name` en el body), NO crearlo con POST.
+r2 = requests.patch(
+    f"{BASE}/projects/{PROJECT}/releases/cloud.firestore",
     headers=H,
     json={
-        "name": f"projects/{PROJECT}/releases/cloud.firestore",
-        "rulesetName": ruleset,
+        "release": {
+            "name": f"projects/{PROJECT}/releases/cloud.firestore",
+            "rulesetName": ruleset,
+        },
+        "updateMask": "rulesetName",
     })
 print("publish status:", r2.status_code)
 print(r2.text[:500])
