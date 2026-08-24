@@ -40,6 +40,7 @@ import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.AppreciateActionState
+import org.taskhub.ui.models.CalendarSyncManager
 import org.taskhub.ui.models.DonateActionState
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
@@ -61,6 +62,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val memberModel = koinScreenModel<MemberScreenModel>()
         val notificationModel = koinScreenModel<NotificationScreenModel>()
         val repo = koinInject<FirestoreRepository>()
+        val calendarSync = koinInject<CalendarSyncManager>()
         val householdState by householdModel.uiState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
         val notificationUnreadCount by notificationModel.unreadCount.collectAsState()
@@ -94,6 +96,14 @@ data class HouseholdScreen(val householdId: String) : Screen {
         LaunchedEffect(householdId) {
             householdModel.loadHousehold(householdId)
             memberModel.loadMembers(householdId)
+        }
+
+        // Backfillea eventos de Calendar pendientes (best-effort, nunca bloquea la UI)
+        LaunchedEffect(householdState) {
+            val hState = householdState
+            if (hState is HouseholdUiState.Success) {
+                calendarSync.reconcile(householdId, hState.household.name, hState.household.isPersonal)
+            }
         }
 
         // Poll for notification unread count every 30 seconds

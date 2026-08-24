@@ -1,11 +1,16 @@
 package org.taskhub.storage
 
 import com.russhwolf.settings.Settings
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * Persists user settings: notifications, language, and theme preference.
  */
 class SettingsStore(private val settings: Settings) {
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     // ── Notifications ─────────────────────────────────────
 
@@ -141,6 +146,32 @@ class SettingsStore(private val settings: Settings) {
         settings.remove(KEY_ANON_UID)
     }
 
+    // ── Google Calendar sync (calendarId por hogar) ──────
+    //
+    // Puntero LOCAL a un calendario ya creado en Google (uno por hogar/espacio
+    // Personal, por-dispositivo). El calendario en sí vive en la cuenta de
+    // Google del usuario; esto solo evita crear uno nuevo cada vez. Limitación
+    // conocida: un segundo dispositivo crearía su propio calendario — aceptado
+    // para el MVP.
+
+    fun getCalendarId(householdId: String): String? = getCalendarIdMap()[householdId]
+
+    fun setCalendarId(householdId: String, calendarId: String) {
+        val map = getCalendarIdMap().toMutableMap()
+        map[householdId] = calendarId
+        settings.putString(KEY_CALENDAR_IDS, json.encodeToString(map))
+    }
+
+    private fun getCalendarIdMap(): Map<String, String> {
+        val raw = settings.getString(KEY_CALENDAR_IDS, "")
+        if (raw.isEmpty()) return emptyMap()
+        return try {
+            json.decodeFromString(raw)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
     companion object {
         private const val KEY_NOTIFICATIONS = "taskhub_notifications"
         private const val KEY_LANGUAGE = "taskhub_language"
@@ -155,5 +186,6 @@ class SettingsStore(private val settings: Settings) {
         private const val KEY_GOOGLE_PROMPT_SEEN = "taskhub_google_prompt_seen"
         private const val KEY_ANON_REFRESH_TOKEN = "taskhub_anon_refresh_token"
         private const val KEY_ANON_UID = "taskhub_anon_uid"
+        private const val KEY_CALENDAR_IDS = "taskhub_calendar_ids"
     }
 }

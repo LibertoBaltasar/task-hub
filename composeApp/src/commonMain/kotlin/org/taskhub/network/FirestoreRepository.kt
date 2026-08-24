@@ -1594,6 +1594,33 @@ class FirestoreRepository(
         )
     }
 
+    /**
+     * Vincula/desvincula el evento de Google Calendar de una asignación.
+     * `googleEventId = null` limpia el campo (p. ej. tras borrar el evento).
+     */
+    suspend fun updateAssignmentGoogleEventId(
+        householdId: String,
+        taskId: String,
+        assignmentId: String,
+        googleEventId: String?
+    ) {
+        val fields = mapOf(
+            "googleEventId" to if (googleEventId != null) {
+                FirestoreValue(stringValue = googleEventId)
+            } else {
+                FirestoreValue(nullValue = "NULL_VALUE")
+            }
+        )
+        client.patch(
+            "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
+        ) {
+            withAuth()
+            parameter("updateMask.fieldPaths", "googleEventId")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
     // ────────────────────────────────────────────────────────
     //  Penalty & Recurrence Logic
     // ────────────────────────────────────────────────────────
@@ -1909,7 +1936,8 @@ class FirestoreRepository(
             completedAt = f["completedAt"]?.integerValue?.toLongOrNull(),
             pointsAwarded = f["pointsAwarded"]?.integerValue?.toIntOrNull(),
             onTime = f["onTime"]?.booleanValue,
-            assignedAt = f["assignedAt"]?.integerValue?.toLongOrNull() ?: 0L
+            assignedAt = f["assignedAt"]?.integerValue?.toLongOrNull() ?: 0L,
+            googleEventId = f["googleEventId"]?.stringValue
         )
     }
 

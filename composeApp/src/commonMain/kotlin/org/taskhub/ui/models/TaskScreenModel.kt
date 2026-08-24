@@ -138,6 +138,7 @@ class TaskScreenModel(
     private val repo: FirestoreRepository,
     private val notificationScheduler: NotificationScheduler,
     private val calendarRepo: GoogleCalendarRepository,
+    private val calendarSync: CalendarSyncManager,
     private val adController: AdController
 ) : ScreenModel {
 
@@ -290,13 +291,14 @@ class TaskScreenModel(
                     repo.getMembers(householdId).map { it.id }
                 }
                 if (membersToAssign.isNotEmpty()) {
-                    repo.assignTask(
+                    val created = repo.assignTask(
                         householdId = householdId,
                         taskId = task.id,
                         memberIds = membersToAssign,
                         mandatory = mandatory,
                         dueDate = dueDate
                     )
+                    syncCalendarOnAssigned(householdId, created)
                 }
 
                 // Schedule reminder if task has a future deadline
@@ -361,6 +363,15 @@ class TaskScreenModel(
 
                 // Cancel any scheduled reminder for this task
                 notificationScheduler.cancelReminder(taskId)
+
+                // Tarea hecha → borrar el evento de Calendar vinculado, si lo hay
+                try {
+                    val myAssignment = repo.getAssignments(householdId, taskId)
+                        .find { it.memberId == memberId }
+                    if (myAssignment != null) {
+                        calendarSync.onTaskCompleted(householdId, myAssignment)
+                    }
+                } catch (_: Exception) { }
 
                 // Update streak for the current member
                 try {
@@ -459,6 +470,9 @@ class TaskScreenModel(
                     assignmentId = assignmentId,
                     assignment = assignment
                 )
+                try {
+                    calendarSync.onTaskCompleted(householdId, assignment)
+                } catch (_: Exception) { }
                 _actionState.value = TaskActionState.Success
 
                 // Refresh detail
@@ -565,6 +579,7 @@ class TaskScreenModel(
                 // Sincronizar asignaciones: borrar las existentes y reasignar.
                 // Si no se seleccionó a nadie, se asigna a todos (misma semántica
                 // que al crear).
+                syncCalendarOnUnassigned(householdId, taskId)
                 repo.deleteAssignments(householdId, taskId)
                 val membersToAssign = if (memberIds.isNotEmpty()) {
                     memberIds
@@ -572,7 +587,7 @@ class TaskScreenModel(
                     repo.getMembers(householdId).map { it.id }
                 }
                 if (membersToAssign.isNotEmpty()) {
-                    repo.assignTask(
+                    val created = repo.assignTask(
                         householdId = householdId,
                         taskId = taskId,
                         memberIds = membersToAssign,
@@ -580,6 +595,7 @@ class TaskScreenModel(
                         dueDate = dueDate,
                         taskTitle = title
                     )
+                    syncCalendarOnAssigned(householdId, created)
                 }
 
                 _actionState.value = TaskActionState.Success
@@ -599,6 +615,7 @@ class TaskScreenModel(
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
+                syncCalendarOnUnassigned(householdId, taskId)
                 repo.deleteTask(householdId, taskId)
                 _actionState.value = TaskActionState.Success
             } catch (e: Exception) {
@@ -868,5 +885,29 @@ class TaskScreenModel(
 
     fun resetCalendarActionState() {
         _calendarActionState.value = CalendarActionState.Idle
+    }
+
+    // ── Sync automático con Google Calendar (best-effort) ────
+
+    /** Tras asignar/reasignar: crea eventos para las asignaciones mías con fecha. */
+    private suspend fun syncCalendarOnAssigned(householdId: String, assignments: List<TaskAssignmentResponse>) {
+        try {
+            val household = repo.getHousehold(householdId)
+            calendarSync.onTaskAssigned(householdId, household.name, household.isPersonal, assignments)
+        } catch (_: Exception) {
+            // Best-effort: se reintenta en el próximo reconcile.
+        }
+    }
+
+    /** Antes de desasignar/borrar: borra los eventos de Calendar vinculados a las asignaciones actuales. */
+    private suspend fun syncCalendarOnUnassigned(householdId: String, taskId: String) {
+        try {
+            val assignments = repo.getAssignments(householdId, taskId)
+            for (assignment in assignments) {
+                calendarSync.onTaskUnassigned(householdId, assignment)
+            }
+        } catch (_: Exception) {
+            // Best-effort: el evento huérfano queda hasta el próximo reconcile.
+        }
     }
 }

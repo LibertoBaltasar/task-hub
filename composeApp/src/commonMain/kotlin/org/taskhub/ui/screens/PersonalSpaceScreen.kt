@@ -13,7 +13,9 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.koin.compose.koinInject
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.models.CalendarSyncManager
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.theme.Coral500
@@ -42,10 +44,16 @@ data class PersonalSpaceScreen(
         val navigator = LocalNavigator.currentOrThrow
         val memberModel = koinScreenModel<MemberScreenModel>()
         val memberState by memberModel.uiState.collectAsState()
+        val calendarSync = koinInject<CalendarSyncManager>()
 
         // Cargar el miembro "Yo" para pasarlo a las pantallas de tareas/calendario
         LaunchedEffect(householdId) {
             memberModel.loadMembers(householdId)
+        }
+
+        // Backfillea eventos de Calendar pendientes (best-effort, nunca bloquea la UI)
+        LaunchedEffect(householdId) {
+            calendarSync.reconcile(householdId, householdName = "Personal", isPersonal = true)
         }
 
         val memberId = (memberState as? MemberUiState.Success)?.members?.firstOrNull()?.id

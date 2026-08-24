@@ -183,7 +183,9 @@ data class TaskAssignmentResponse(
     val pointsAwarded: Int? = null,
     /** true = a tiempo, false = tarde, null = no completada aún. */
     val onTime: Boolean? = null,
-    val assignedAt: Long = 0
+    val assignedAt: Long = 0,
+    /** ID del evento en Google Calendar vinculado, o null si no está sincronizada. */
+    val googleEventId: String? = null
 )
 
 // ── Comments DTO ─────────────────────────────────────────

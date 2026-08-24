@@ -12,6 +12,7 @@ import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
 import org.taskhub.storage.ThemeStore
+import org.taskhub.ui.models.CalendarSyncManager
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HomeScreenModel
@@ -45,6 +46,9 @@ val appModule: Module = module {
     // Google login / auth manager (compartido entre HomeScreen y Ajustes)
     single { GoogleAuthManager(repo = get(), settingsStore = get(), householdStore = get()) }
 
+    // Orquesta la sincronización automática de tareas ↔ Google Calendar
+    single { CalendarSyncManager(repo = get(), calendarRepo = get(), settingsStore = get(), authManager = get()) }
+
     // Platform notification scheduler
     single { createNotificationScheduler() }
 
@@ -57,5 +61,5 @@ val appModule: Module = module {
     factory { MemberScreenModel(repo = get()) }
     factory { ProfileScreenModel(repo = get()) }
     factory { NotificationScreenModel(repo = get()) }
-    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarRepo = get(), adController = get()) }
+    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarRepo = get(), calendarSync = get(), adController = get()) }
 }
