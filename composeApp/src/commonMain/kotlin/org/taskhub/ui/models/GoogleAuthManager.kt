@@ -6,6 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.platform.GoogleSignInResultHolder
@@ -99,6 +100,23 @@ class GoogleAuthManager(
         val token = getGoogleCalendarAccessToken()
         settingsStore.setGoogleAccessToken(token)
         return token
+    }
+
+    /**
+     * Flujo completo de "vincular cuenta de Google Calendar" desde ajustes o
+     * desde el detalle de una tarea: si no hay sesión de Google, la inicia
+     * primero (abre el selector de cuenta y espera el resultado) y, una vez
+     * autenticado, pide el token de Calendar. Devuelve true si quedó vinculado.
+     */
+    suspend fun linkCalendar(): Boolean {
+        if (_state.value !is GoogleAuthState.SignedIn) {
+            signIn()
+            val result = state.first {
+                it is GoogleAuthState.SignedIn || it is GoogleAuthState.Anonymous || it is GoogleAuthState.Error
+            }
+            if (result !is GoogleAuthState.SignedIn) return false
+        }
+        return ensureCalendarAccessToken() != null
     }
 
     /**

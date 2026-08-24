@@ -74,6 +74,20 @@ class SettingsStore(private val settings: Settings) {
         }
     }
 
+    /** Interruptor del usuario para la sincronización automática con Calendar. */
+    fun isCalendarSyncEnabled(): Boolean =
+        settings.getBoolean(KEY_CALENDAR_SYNC_ENABLED, false)
+
+    fun setCalendarSyncEnabled(enabled: Boolean) =
+        settings.putBoolean(KEY_CALENDAR_SYNC_ENABLED, enabled)
+
+    /** Desvincula Calendar: borra el token, los calendarIds cacheados y desactiva el sync. */
+    fun unlinkGoogleCalendar() {
+        settings.remove(KEY_GOOGLE_ACCESS_TOKEN)
+        settings.remove(KEY_CALENDAR_IDS)
+        settings.putBoolean(KEY_CALENDAR_SYNC_ENABLED, false)
+    }
+
     // ── Google Auth (login) ──────────────────────────────
 
     fun isGoogleLoggedIn(): Boolean =
@@ -180,6 +194,7 @@ class SettingsStore(private val settings: Settings) {
         private const val KEY_SOUND_ENABLED = "taskhub_sound_enabled"
         private const val KEY_VIBRATION_ENABLED = "taskhub_vibration_enabled"
         private const val KEY_GOOGLE_ACCESS_TOKEN = "taskhub_google_token"
+        private const val KEY_CALENDAR_SYNC_ENABLED = "taskhub_calendar_sync_enabled"
         private const val KEY_GOOGLE_UID = "taskhub_google_uid"
         private const val KEY_GOOGLE_EMAIL = "taskhub_google_email"
         private const val KEY_GOOGLE_REFRESH_TOKEN = "taskhub_google_refresh_token"

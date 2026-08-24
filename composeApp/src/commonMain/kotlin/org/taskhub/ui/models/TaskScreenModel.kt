@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
-import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
@@ -137,7 +136,6 @@ enum class TaskSort {
 class TaskScreenModel(
     private val repo: FirestoreRepository,
     private val notificationScheduler: NotificationScheduler,
-    private val calendarRepo: GoogleCalendarRepository,
     private val calendarSync: CalendarSyncManager,
     private val adController: AdController
 ) : ScreenModel {
@@ -156,6 +154,12 @@ class TaskScreenModel(
     // que sí disparan completar/eliminar.
     private val _reassignState = MutableStateFlow<TaskActionState>(TaskActionState.Idle)
     val reassignState: StateFlow<TaskActionState> = _reassignState.asStateFlow()
+
+    // Asignación de la tarea del detalle actual que pertenece al usuario en
+    // sesión — base para el indicador de estado de sincronización con Calendar.
+    // Null mientras se resuelve o si la tarea no está asignada a este usuario.
+    private val _myAssignment = MutableStateFlow<TaskAssignmentResponse?>(null)
+    val myAssignment: StateFlow<TaskAssignmentResponse?> = _myAssignment.asStateFlow()
 
     // Filter & sort state
     private val _filter = MutableStateFlow(TaskFilter.PENDING)
@@ -490,6 +494,7 @@ class TaskScreenModel(
     fun loadTaskDetail(householdId: String, taskId: String) {
         screenModelScope.launch {
             _detailState.value = TaskDetailUiState.Loading
+            _myAssignment.value = null
             try {
                 val tasks = repo.getTasks(householdId)
                 val task = tasks.find { it.id == taskId }
@@ -499,6 +504,9 @@ class TaskScreenModel(
                 val members = repo.getMembers(householdId)
 
                 _detailState.value = TaskDetailUiState.Success(task, assignments, members)
+
+                val myMemberId = try { repo.resolveCurrentMember(householdId) } catch (_: Exception) { null }
+                _myAssignment.value = assignments.find { it.memberId == myMemberId }
             } catch (e: Exception) {
                 _detailState.value = TaskDetailUiState.Error(
                     e.message ?: "Error al cargar tarea"
@@ -858,28 +866,36 @@ class TaskScreenModel(
     val calendarActionState: StateFlow<CalendarActionState> = _calendarActionState.asStateFlow()
 
     /**
-     * Sends a task to Google Calendar using the stored access token.
-     * For "once" tasks, uses the task's dueDate. For recurring tasks, uses today.
-     *
-     * @param accessToken The Google OAuth access token (from SettingsStore).
-     * @param task The task to send.
+     * Sincroniza manualmente la asignación actual del usuario ("Sincronizar
+     * ahora" en el detalle de tarea) cuando tiene fecha pero aún no tiene
+     * evento en Calendar. Al terminar, recarga el detalle para que el estado
+     * de sincronización mostrado se actualice con el `googleEventId` nuevo (o
+     * con el flag "vinculado" si el token resultó revocado).
      */
-    fun sendToGoogleCalendar(accessToken: String, task: TaskResponse) {
+    fun syncTaskToCalendarNow(householdId: String, task: TaskResponse) {
+        val assignment = _myAssignment.value ?: return
         screenModelScope.launch {
             _calendarActionState.value = CalendarActionState.Sending
             try {
-                calendarRepo.createEvent(
-                    accessToken = accessToken,
-                    summary = task.title,
-                    description = task.description.ifBlank { "Tarea de Task Hub" },
-                    dueDateEpochMs = task.dueDate
+                val household = repo.getHousehold(householdId)
+                val synced = calendarSync.syncNow(
+                    householdId = householdId,
+                    householdName = household.name,
+                    isPersonal = household.isPersonal,
+                    assignment = assignment,
+                    task = task
                 )
-                _calendarActionState.value = CalendarActionState.Success
+                _calendarActionState.value = if (synced) {
+                    CalendarActionState.Success
+                } else {
+                    CalendarActionState.Error("No se pudo sincronizar con Google Calendar")
+                }
             } catch (e: Exception) {
                 _calendarActionState.value = CalendarActionState.Error(
-                    e.message ?: "Error al enviar a Google Calendar"
+                    e.message ?: "Error al sincronizar con Google Calendar"
                 )
             }
+            loadTaskDetail(householdId, task.id)
         }
     }
 

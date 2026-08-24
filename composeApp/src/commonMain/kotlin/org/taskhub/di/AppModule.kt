@@ -61,5 +61,5 @@ val appModule: Module = module {
     factory { MemberScreenModel(repo = get()) }
     factory { ProfileScreenModel(repo = get()) }
     factory { NotificationScreenModel(repo = get()) }
-    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarRepo = get(), calendarSync = get(), adController = get()) }
+    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarSync = get(), adController = get()) }
 }

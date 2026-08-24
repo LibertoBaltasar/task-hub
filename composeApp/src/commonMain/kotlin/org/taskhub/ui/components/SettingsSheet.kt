@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
@@ -150,6 +151,113 @@ fun SettingsSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("✏️ Editar perfil")
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ── Google Calendar ──────────────────────────────
+        SettingsSection(title = s("calendar_settings_title")) {
+            var isCalendarLinked by remember { mutableStateOf(settingsStore.hasGoogleLinked()) }
+            var isCalendarSyncEnabled by remember { mutableStateOf(settingsStore.isCalendarSyncEnabled()) }
+            var isLinkingCalendar by remember { mutableStateOf(false) }
+            val calendarScope = rememberCoroutineScope()
+
+            if (isCalendarLinked) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = s("calendar_sync_toggle_label"),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = s("calendar_sync_toggle_desc"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = isCalendarSyncEnabled,
+                        onCheckedChange = {
+                            isCalendarSyncEnabled = it
+                            settingsStore.setCalendarSyncEnabled(it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Teal600,
+                            checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = s("calendar_linked_as").replace("%s", settingsStore.getGoogleEmail() ?: "Google"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = s("calendar_independent_note"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = {
+                        settingsStore.unlinkGoogleCalendar()
+                        isCalendarLinked = false
+                        isCalendarSyncEnabled = false
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(s("calendar_unlink_button"))
+                }
+            } else {
+                Text(
+                    text = s("calendar_link_hint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = s("calendar_independent_note"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        isLinkingCalendar = true
+                        calendarScope.launch {
+                            val linked = authManager.linkCalendar()
+                            isLinkingCalendar = false
+                            if (linked) {
+                                isCalendarLinked = true
+                                isCalendarSyncEnabled = true
+                                settingsStore.setCalendarSyncEnabled(true)
+                            }
+                        }
+                    },
+                    enabled = !isLinkingCalendar,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    if (isLinkingCalendar) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(s("calendar_linking"))
+                    } else {
+                        Text(s("calendar_link_button"))
+                    }
+                }
             }
         }
 

@@ -23,12 +23,15 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
+import kotlinx.coroutines.launch
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.models.*
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 
 // ────────────────────────────────────────────────────────────
@@ -45,13 +48,19 @@ data class TaskDetailScreen(
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
         val settingsStore = koinInject<SettingsStore>()
+        val authManager = koinInject<GoogleAuthManager>()
+        val coroutineScope = rememberCoroutineScope()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
         val detailState by model.detailState.collectAsState()
         val actionState by model.actionState.collectAsState()
         val reassignState by model.reassignState.collectAsState()
         val calendarActionState by model.calendarActionState.collectAsState()
+        val myAssignment by model.myAssignment.collectAsState()
         val commentsState by model.commentsState.collectAsState()
         val newCommentText by model.newCommentText.collectAsState()
 
+        var isLinkingCalendar by remember { mutableStateOf(false) }
         var showDeleteDialog by remember { mutableStateOf(false) }
 
         LaunchedEffect(taskId) {
@@ -136,6 +145,7 @@ data class TaskDetailScreen(
                     is TaskDetailUiState.Success -> {
                         val memberMap = state.members.associateBy { it.id }
                         val isGoogleLinked = settingsStore.hasGoogleLinked()
+                        val isCalendarSyncEnabled = settingsStore.isCalendarSyncEnabled()
                         TaskDetailContent(
                             task = state.task,
                             assignments = state.assignments,
@@ -144,7 +154,11 @@ data class TaskDetailScreen(
                             reassignState = reassignState,
                             commentsState = commentsState,
                             newCommentText = newCommentText,
+                            s = s,
+                            myAssignment = myAssignment,
                             isGoogleLinked = isGoogleLinked,
+                            isCalendarSyncEnabled = isCalendarSyncEnabled,
+                            isLinkingCalendar = isLinkingCalendar,
                             calendarActionState = calendarActionState,
                             onCommentTextChange = { model.setNewCommentText(it) },
                             onAddComment = {
@@ -176,11 +190,21 @@ data class TaskDetailScreen(
                             onToggleSubtask = { subtaskId ->
                                 model.toggleSubtask(householdId, taskId, subtaskId)
                             },
-                            onSendToGoogleCalendar = {
-                                val token = settingsStore.getGoogleAccessToken()
-                                if (token != null) {
-                                    model.sendToGoogleCalendar(token, state.task)
+                            onSyncCalendarNow = {
+                                model.syncTaskToCalendarNow(householdId, state.task)
+                            },
+                            onLinkCalendar = {
+                                isLinkingCalendar = true
+                                coroutineScope.launch {
+                                    authManager.linkCalendar()
+                                    isLinkingCalendar = false
+                                    settingsStore.setCalendarSyncEnabled(true)
+                                    model.loadTaskDetail(householdId, taskId)
                                 }
+                            },
+                            onEnableCalendarSync = {
+                                settingsStore.setCalendarSyncEnabled(true)
+                                model.loadTaskDetail(householdId, taskId)
                             }
                         )
                     }
@@ -224,7 +248,11 @@ private fun TaskDetailContent(
     reassignState: TaskActionState = TaskActionState.Idle,
     commentsState: CommentsUiState,
     newCommentText: String,
+    s: (String) -> String = { it },
+    myAssignment: TaskAssignmentResponse? = null,
     isGoogleLinked: Boolean = false,
+    isCalendarSyncEnabled: Boolean = false,
+    isLinkingCalendar: Boolean = false,
     calendarActionState: TaskScreenModel.CalendarActionState = TaskScreenModel.CalendarActionState.Idle,
     onCommentTextChange: (String) -> Unit,
     onAddComment: () -> Unit,
@@ -232,7 +260,9 @@ private fun TaskDetailContent(
     onComplete: (String, TaskAssignmentResponse) -> Unit,
     onChangeCompletedBy: (String) -> Unit,
     onToggleSubtask: (String) -> Unit,
-    onSendToGoogleCalendar: (() -> Unit)? = null
+    onSyncCalendarNow: () -> Unit = {},
+    onLinkCalendar: () -> Unit = {},
+    onEnableCalendarSync: () -> Unit = {}
 ) {
     val now = Clock.System.now().toEpochMilliseconds()
     val pendingAssignments = assignments.filter { it.status == "assigned" }
@@ -481,28 +511,24 @@ private fun TaskDetailContent(
             }
         }
 
-        // ── Google Calendar button ──
-        if (isGoogleLinked && onSendToGoogleCalendar != null) {
-            item {
-                OutlinedButton(
-                    onClick = onSendToGoogleCalendar,
-                    enabled = calendarActionState !is TaskScreenModel.CalendarActionState.Sending,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.large
-                ) {
-                    if (calendarActionState is TaskScreenModel.CalendarActionState.Sending) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = Teal600,
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Enviando...")
-                    } else {
-                        Text("📅 Enviar a Google Calendar")
-                    }
-                }
+        // ── Google Calendar sync status ──
+        item {
+            val calendarStatus = when {
+                myAssignment == null || myAssignment.dueDate <= 0 -> CalendarSyncStatus.NoDueDate
+                myAssignment.googleEventId != null -> CalendarSyncStatus.Synced
+                !isGoogleLinked -> CalendarSyncStatus.NotLinked
+                !isCalendarSyncEnabled -> CalendarSyncStatus.SyncDisabled
+                else -> CalendarSyncStatus.Pending
             }
+            CalendarSyncStatusCard(
+                status = calendarStatus,
+                calendarActionState = calendarActionState,
+                isLinkingCalendar = isLinkingCalendar,
+                s = s,
+                onSyncNow = onSyncCalendarNow,
+                onLinkAccount = onLinkCalendar,
+                onEnableSync = onEnableCalendarSync
+            )
         }
 
         // ── Subtasks checklist ──
@@ -804,6 +830,115 @@ private fun TaskDetailContent(
                 }
             }
         )
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+//  CalendarSyncStatusCard
+// ────────────────────────────────────────────────────────────
+
+private enum class CalendarSyncStatus { NoDueDate, Synced, Pending, NotLinked, SyncDisabled }
+
+/**
+ * Indicador del estado de sincronización con Google Calendar de la
+ * asignación del usuario actual para esta tarea. Sustituye al antiguo botón
+ * manual "Enviar a Google Calendar" — ahora la sincronización es automática
+ * (ver [org.taskhub.ui.models.CalendarSyncManager]) y este componente solo
+ * informa y ofrece un backfill puntual ("Sincronizar ahora") cuando aplica.
+ */
+@Composable
+private fun CalendarSyncStatusCard(
+    status: CalendarSyncStatus,
+    calendarActionState: TaskScreenModel.CalendarActionState,
+    isLinkingCalendar: Boolean,
+    s: (String) -> String,
+    onSyncNow: () -> Unit,
+    onLinkAccount: () -> Unit,
+    onEnableSync: () -> Unit
+) {
+    if (status == CalendarSyncStatus.NoDueDate) {
+        Text(
+            text = s("calendar_status_no_due_date"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = when (status) {
+                        CalendarSyncStatus.Synced -> s("calendar_status_synced")
+                        CalendarSyncStatus.Pending -> s("calendar_status_pending")
+                        CalendarSyncStatus.NotLinked -> s("calendar_status_not_linked")
+                        CalendarSyncStatus.SyncDisabled -> s("calendar_status_sync_disabled")
+                        CalendarSyncStatus.NoDueDate -> ""
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (status == CalendarSyncStatus.Synced) Teal700
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                when (status) {
+                    CalendarSyncStatus.Pending -> {
+                        TextButton(
+                            onClick = onSyncNow,
+                            enabled = calendarActionState !is TaskScreenModel.CalendarActionState.Sending
+                        ) {
+                            if (calendarActionState is TaskScreenModel.CalendarActionState.Sending) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Teal600,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(s("calendar_status_syncing"))
+                            } else {
+                                Text(s("calendar_status_sync_now"))
+                            }
+                        }
+                    }
+                    CalendarSyncStatus.NotLinked -> {
+                        TextButton(onClick = onLinkAccount, enabled = !isLinkingCalendar) {
+                            if (isLinkingCalendar) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Teal600,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(s("calendar_status_link_cta"))
+                            }
+                        }
+                    }
+                    CalendarSyncStatus.SyncDisabled -> {
+                        TextButton(onClick = onEnableSync) {
+                            Text(s("calendar_status_enable_cta"))
+                        }
+                    }
+                    else -> {}
+                }
+            }
+
+            if (calendarActionState is TaskScreenModel.CalendarActionState.Error) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "⚠️ ${calendarActionState.message}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
     }
 }
 

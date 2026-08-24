@@ -59,6 +59,7 @@ class CalendarSyncManager(
         isPersonal: Boolean,
         assignments: List<TaskAssignmentResponse>
     ) {
+        if (!settingsStore.isCalendarSyncEnabled()) return
         try {
             val myMemberId = repo.resolveCurrentMember(householdId)
             val mine = assignments.filter { it.memberId == myMemberId && it.dueDate > 0 }
@@ -78,11 +79,13 @@ class CalendarSyncManager(
 
     /** Al desasignar/borrar una tarea: borra el evento vinculado (si lo hay) y limpia el campo. */
     suspend fun onTaskUnassigned(householdId: String, assignment: TaskAssignmentResponse) {
+        if (!settingsStore.isCalendarSyncEnabled()) return
         deleteEventForAssignment(householdId, assignment)
     }
 
     /** Al completar una tarea: el evento ya no tiene sentido, se borra igual que al desasignar. */
     suspend fun onTaskCompleted(householdId: String, assignment: TaskAssignmentResponse) {
+        if (!settingsStore.isCalendarSyncEnabled()) return
         deleteEventForAssignment(householdId, assignment)
     }
 
@@ -96,6 +99,7 @@ class CalendarSyncManager(
         taskTitle: String,
         taskDescription: String = ""
     ) {
+        if (!settingsStore.isCalendarSyncEnabled()) return
         try {
             val myMemberId = repo.resolveCurrentMember(householdId)
             if (assignment.memberId != myMemberId) return
@@ -141,6 +145,7 @@ class CalendarSyncManager(
      * vinculado cuando se crearon). Idempotente — no toca nada que ya esté bien.
      */
     suspend fun reconcile(householdId: String, householdName: String, isPersonal: Boolean) {
+        if (!settingsStore.isCalendarSyncEnabled()) return
         try {
             val myMemberId = repo.resolveCurrentMember(householdId)
             val assignments = repo.getAllAssignments(householdId)
@@ -161,6 +166,37 @@ class CalendarSyncManager(
             }
         } catch (_: Exception) {
             // Best-effort: se reintenta en el próximo reconcile.
+        }
+    }
+
+    /**
+     * Sincroniza una asignación concreta bajo demanda (botón "Sincronizar ahora"
+     * en el detalle de tarea). A diferencia del resto de métodos, ignora el
+     * interruptor de sincronización automática — es una acción explícita del
+     * usuario. Devuelve true si el evento quedó creado y enlazado.
+     */
+    suspend fun syncNow(
+        householdId: String,
+        householdName: String,
+        isPersonal: Boolean,
+        assignment: TaskAssignmentResponse,
+        task: org.taskhub.network.models.TaskResponse
+    ): Boolean {
+        if (assignment.dueDate <= 0) return false
+        val token = authManager.ensureCalendarAccessToken() ?: return false
+        val calendarId = ensureCalendarId(householdId, householdName, isPersonal, token) ?: return false
+        return try {
+            val event = calendarRepo.createEvent(
+                accessToken = token,
+                calendarId = calendarId,
+                summary = task.title,
+                description = task.description,
+                dueDateEpochMs = assignment.dueDate
+            )
+            repo.updateAssignmentGoogleEventId(householdId, assignment.taskId, assignment.id, event.id)
+            true
+        } catch (_: Exception) {
+            false
         }
     }
 
