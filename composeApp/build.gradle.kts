@@ -112,6 +112,11 @@ kotlin {
             implementation(libs.ktor.client.java)
             implementation(compose.desktop.currentOs)
         }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }
 

@@ -15,7 +15,9 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
+import org.taskhub.network.FirestoreRepository
 import org.taskhub.storage.HouseholdStore
+import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
@@ -31,11 +33,17 @@ class WelcomeScreen : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val householdStore = koinInject<HouseholdStore>()
-        val savedHouseholds = householdStore.getSavedHouseholds()
+        val repo = koinInject<FirestoreRepository>()
+        var savedHouseholds by remember { mutableStateOf<List<SavedHousehold>>(householdStore.getSavedHouseholds()) }
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var showSettings by remember { mutableStateOf(false) }
+
+        // Reconcilia contra Firestore para podar hogares "fantasma" (borrados o sin acceso).
+        LaunchedEffect(Unit) {
+            savedHouseholds = repo.reconcileHouseholds(householdStore)
+        }
 
         // Settings dialog
         if (showSettings) {

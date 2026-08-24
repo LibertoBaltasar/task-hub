@@ -765,11 +765,24 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     Text(
                                         text = "❌ ${hState.message}",
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.error
+                                        color = MaterialTheme.colorScheme.error,
+                                        textAlign = TextAlign.Center
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
-                                    Button(onClick = { householdModel.loadHousehold(householdId) }) {
-                                        Text("Reintentar")
+                                    if (hState.removable) {
+                                        Button(
+                                            onClick = {
+                                                householdModel.removeGhostHousehold(householdId)
+                                                navigator.replaceAll(HomeScreen())
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                        ) {
+                                            Text("Quitar de mis espacios")
+                                        }
+                                    } else {
+                                        Button(onClick = { householdModel.loadHousehold(householdId) }) {
+                                            Text("Reintentar")
+                                        }
                                     }
                                 }
                             }

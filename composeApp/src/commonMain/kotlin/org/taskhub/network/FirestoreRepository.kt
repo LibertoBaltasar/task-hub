@@ -6,6 +6,7 @@ import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.FormDataContent
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.datetime.Clock
@@ -31,6 +32,8 @@ import org.taskhub.network.models.NotificationResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.network.models.RewardRedemption
 import org.taskhub.network.models.Subtask
+import org.taskhub.storage.HouseholdStore
+import org.taskhub.storage.SavedHousehold
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
 import kotlin.random.Random
@@ -63,6 +66,12 @@ class FirestoreRepository(
     @Volatile
     private var cachedLocalId: String? = null  // anonymous user ID — persists across sessions via settings
 
+    /** Json tolerante usado solo para parsear el body de error de Firestore, no el de dominio. */
+    private val errorParsingJson = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     private val client = HttpClient {
         install(ContentNegotiation) {
             json(Json {
@@ -74,6 +83,28 @@ class FirestoreRepository(
         install(HttpTimeout) {
             connectTimeoutMillis = 15_000
             requestTimeoutMillis = 30_000
+        }
+        // Intercepta CUALQUIER respuesta de error (>=400) antes de que se parsee
+        // como documento — si no, un body de error de Firestore se convierte en
+        // un FirestoreDocumentResponse vacío (por ignoreUnknownKeys) y el fallo
+        // real (p.ej. PERMISSION_DENIED) queda enmascarado tras "missing document name".
+        HttpResponseValidator {
+            validateResponse { response ->
+                if (response.status.value >= 400) {
+                    val bodyText = runCatching { response.bodyAsText() }.getOrDefault("")
+                    val errorBody = runCatching {
+                        errorParsingJson.decodeFromString<FirestoreErrorEnvelope>(bodyText)
+                    }.getOrNull()?.error
+                    val message = errorBody?.message?.takeIf { it.isNotBlank() }
+                        ?: bodyText.takeIf { it.isNotBlank() }
+                        ?: "Firestore respondió ${response.status.value} sin más detalles"
+                    throw FirestoreException(
+                        statusCode = response.status.value,
+                        code = errorBody?.status,
+                        message = message
+                    )
+                }
+            }
         }
     }
 
@@ -357,7 +388,7 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }.body()
 
-        val id = extractDocId(response.name)
+        val id = extractDocId(response.name, "createHousehold")
 
         // Publicar el mapa código → hogar para poder unirse sin listar hogares.
         if (!isPersonal) {
@@ -416,7 +447,7 @@ class FirestoreRepository(
         }.body()
 
         val household = HouseholdResponse(
-            id = extractDocId(response.name),
+            id = extractDocId(response.name, "getOrCreatePersonalHousehold"),
             name = "Personal",
             inviteCode = "PERSONAL",
             createdAt = now,
@@ -445,7 +476,14 @@ class FirestoreRepository(
         }
     }
 
-    /** Get a household by id. Falls back to local cache if offline. */
+    /**
+     * Get a household by id. Falls back to local cache on network/5xx failures.
+     *
+     * A 404/403 from Firestore is a DEFINITIVE signal — the household was deleted
+     * or we lost access to it — so it must NOT fall back to the stale cache (that
+     * would keep showing a "ghost" household forever). Callers that need to prune
+     * local state should catch [FirestoreException] and check [FirestoreException.statusCode].
+     */
     suspend fun getHousehold(id: String): HouseholdResponse {
         return try {
             val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$id") {
@@ -455,8 +493,39 @@ class FirestoreRepository(
             val household = toHouseholdResponse(response, knownId = id)
             taskCache.cacheHousehold(household)
             household
+        } catch (e: FirestoreException) {
+            if (e.statusCode == 404 || e.statusCode == 403) throw e
+            taskCache.getCachedHousehold(id) ?: throw e
         } catch (e: Exception) {
             taskCache.getCachedHousehold(id) ?: throw e
+        }
+    }
+
+    /**
+     * Reconcilia los hogares guardados localmente en [store] contra Firestore
+     * (fuente de verdad). Poda (borra de [store]) los que ya no existen o a los
+     * que se perdió acceso (404/403 — señal inequívoca). Ante fallos de red o de
+     * servidor (5xx, timeouts, sin conexión) CONSERVA la entrada: no podar nunca
+     * por un fallo transitorio, solo por una confirmación explícita de Firestore.
+     *
+     * Devuelve la lista de hogares que sobreviven la reconciliación.
+     */
+    suspend fun reconcileHouseholds(store: HouseholdStore): List<SavedHousehold> {
+        val saved = store.getSavedHouseholds()
+        return saved.filter { h ->
+            try {
+                getHousehold(h.id)
+                true
+            } catch (e: FirestoreException) {
+                if (e.statusCode == 404 || e.statusCode == 403) {
+                    store.removeHousehold(h.id)
+                    false
+                } else {
+                    true // 5xx u otro error tipado de Firestore: no es inequívoco, conservar
+                }
+            } catch (_: Exception) {
+                true // red/timeout/etc: conservar
+            }
         }
     }
 
@@ -649,7 +718,7 @@ class FirestoreRepository(
                 }.body()
             }
 
-        val id = extractDocId(response.name)
+        val id = extractDocId(response.name, "createMember")
 
         // Reclamar el perfil global del usuario (base del "perfilado creciente").
         if (userId != null) {
@@ -871,6 +940,12 @@ class FirestoreRepository(
 
     enum class AppreciateErrorReason { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED, MEMBER_NOT_FOUND }
 
+    private fun PointsRules.AppreciateError.toRepoReason(): AppreciateErrorReason = when (this) {
+        PointsRules.AppreciateError.SELF -> AppreciateErrorReason.SELF
+        PointsRules.AppreciateError.INVALID_AMOUNT -> AppreciateErrorReason.INVALID_AMOUNT
+        PointsRules.AppreciateError.LIMIT_EXCEEDED -> AppreciateErrorReason.LIMIT_EXCEEDED
+    }
+
     sealed class DonateResult {
         data class Ok(val donorNewTotal: Int, val receptorNewTotal: Int) : DonateResult()
         data class Error(val reason: DonateErrorReason) : DonateResult()
@@ -878,25 +953,14 @@ class FirestoreRepository(
 
     enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND }
 
-    private data class AppreciationBudget(val given: Int, val weekStart: Long, val remaining: Int)
-
-    private fun currentAppreciationBudget(member: MemberResponse, now: Long): AppreciationBudget {
-        val weekExpired = now >= member.appreciationWeekStart + WEEK_MILLIS
-        val given = if (weekExpired) 0 else member.appreciationGiven
-        val weekStart = if (weekExpired) mondayStartOfWeek(now) else member.appreciationWeekStart
-        val remaining = (WEEKLY_APPRECIATION_BUDGET - given).coerceAtLeast(0)
-        return AppreciationBudget(given, weekStart, remaining)
+    private fun PointsRules.DonateError.toRepoReason(): DonateErrorReason = when (this) {
+        PointsRules.DonateError.SELF -> DonateErrorReason.SELF
+        PointsRules.DonateError.INVALID_AMOUNT -> DonateErrorReason.INVALID_AMOUNT
+        PointsRules.DonateError.INSUFFICIENT_BALANCE -> DonateErrorReason.INSUFFICIENT_BALANCE
     }
 
-    /** Epoch millis del lunes 00:00 hora local de la semana que contiene [epochMs]. */
-    private fun mondayStartOfWeek(epochMs: Long): Long {
-        val tz = TimeZone.currentSystemDefault()
-        val date = kotlinx.datetime.Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(tz).date
-        val daysSinceMonday = date.dayOfWeek.ordinal // MONDAY=0 .. SUNDAY=6
-        val monday = date.minus(daysSinceMonday, DateTimeUnit.DAY)
-        return LocalDateTime(monday.year, monday.monthNumber, monday.dayOfMonth, 0, 0, 0)
-            .toInstant(tz).toEpochMilliseconds()
-    }
+    private fun currentAppreciationBudget(member: MemberResponse, now: Long): PointsRules.AppreciationBudget =
+        PointsRules.currentAppreciationBudget(member.appreciationGiven, member.appreciationWeekStart, now)
 
     /**
      * Puntos que [member] aún puede DAR agradeciendo esta semana (0..50), sin mutar nada.
@@ -917,8 +981,9 @@ class FirestoreRepository(
         toMemberId: String,
         amount: Int
     ): AppreciateResult {
-        if (fromMemberId == toMemberId) return AppreciateResult.Error(AppreciateErrorReason.SELF)
-        if (amount < 1) return AppreciateResult.Error(AppreciateErrorReason.INVALID_AMOUNT)
+        PointsRules.validateAppreciateBasic(fromMemberId, toMemberId, amount)?.let {
+            return AppreciateResult.Error(it.toRepoReason())
+        }
 
         val members = getMembers(householdId)
         val fromMember = members.find { it.id == fromMemberId }
@@ -928,7 +993,9 @@ class FirestoreRepository(
 
         val now = Clock.System.now().toEpochMilliseconds()
         val budget = currentAppreciationBudget(fromMember, now)
-        if (amount > budget.remaining) return AppreciateResult.Error(AppreciateErrorReason.LIMIT_EXCEEDED)
+        PointsRules.validateAppreciateLimit(amount, budget)?.let {
+            return AppreciateResult.Error(it.toRepoReason())
+        }
 
         // Acuñar: el receptor gana puntos sin que se le resten al que agradece.
         addMemberPoints(householdId, toMemberId, amount)
@@ -946,7 +1013,7 @@ class FirestoreRepository(
         }
 
         return AppreciateResult.Ok(
-            remaining = WEEKLY_APPRECIATION_BUDGET - newGiven,
+            remaining = PointsRules.WEEKLY_APPRECIATION_BUDGET - newGiven,
             receptorNewTotal = toMember.totalPoints + amount
         )
     }
@@ -962,8 +1029,9 @@ class FirestoreRepository(
         toMemberId: String,
         amount: Int
     ): DonateResult {
-        if (fromMemberId == toMemberId) return DonateResult.Error(DonateErrorReason.SELF)
-        if (amount < 1) return DonateResult.Error(DonateErrorReason.INVALID_AMOUNT)
+        PointsRules.validateDonateBasic(fromMemberId, toMemberId, amount)?.let {
+            return DonateResult.Error(it.toRepoReason())
+        }
 
         val members = getMembers(householdId)
         val fromMember = members.find { it.id == fromMemberId }
@@ -971,7 +1039,9 @@ class FirestoreRepository(
         val toMember = members.find { it.id == toMemberId }
             ?: return DonateResult.Error(DonateErrorReason.MEMBER_NOT_FOUND)
 
-        if (amount > fromMember.totalPoints) return DonateResult.Error(DonateErrorReason.INSUFFICIENT_BALANCE)
+        PointsRules.validateDonateBalance(amount, fromMember.totalPoints)?.let {
+            return DonateResult.Error(it.toRepoReason())
+        }
 
         addMemberPoints(householdId, toMemberId, amount)
         addMemberPoints(householdId, fromMemberId, -amount)
@@ -1140,7 +1210,7 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }.body()
 
-        val id = extractDocId(response.name)
+        val id = extractDocId(response.name, "createTask")
         return TaskResponse(
             id = id, householdId = householdId, createdBy = createdBy,
             title = title, description = description, points = points,
@@ -1276,7 +1346,7 @@ class FirestoreRepository(
             response.documents.map { doc ->
                 val f = doc.fields
                 TaskHistoryResponse(
-                    id = extractDocId(doc.name),
+                    id = extractDocId(doc.name, "getTaskHistory"),
                     taskId = f["taskId"]?.stringValue ?: "",
                     memberId = f["memberId"]?.stringValue ?: "",
                     points = f["points"]?.integerValue?.toIntOrNull() ?: 0,
@@ -1391,7 +1461,7 @@ class FirestoreRepository(
                 setBody(FirestoreDocument(fields))
             }.body()
 
-            val id = extractDocId(response.name)
+            val id = extractDocId(response.name, "assignTask")
             results.add(TaskAssignmentResponse(
                 id = id, taskId = taskId, memberId = memberId,
                 mandatory = mandatory, dueDate = dueDate, status = "assigned",
@@ -1770,7 +1840,7 @@ class FirestoreRepository(
     private fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse {
         val f = doc.fields
         return TaskResponse(
-            id = extractDocId(doc.name),
+            id = extractDocId(doc.name, "getTasks"),
             householdId = f["householdId"]?.stringValue ?: householdId,
             createdBy = f["createdBy"]?.stringValue ?: "",
             title = f["title"]?.stringValue ?: "",
@@ -1814,7 +1884,7 @@ class FirestoreRepository(
     ): TaskAssignmentResponse {
         val f = doc.fields
         return TaskAssignmentResponse(
-            id = extractDocId(doc.name),
+            id = extractDocId(doc.name, "getAssignments"),
             taskId = f["taskId"]?.stringValue ?: taskId,
             memberId = f["memberId"]?.stringValue ?: "",
             mandatory = f["mandatory"]?.booleanValue ?: false,
@@ -1853,7 +1923,7 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }.body()
 
-        val id = extractDocId(response.name)
+        val id = extractDocId(response.name, "addComment")
         return org.taskhub.network.models.CommentResponse(id, authorName, text, now)
     }
 
@@ -1871,7 +1941,7 @@ class FirestoreRepository(
         return response.documents.map { doc ->
             val f = doc.fields
             org.taskhub.network.models.CommentResponse(
-                id = extractDocId(doc.name),
+                id = extractDocId(doc.name, "getComments"),
                 authorName = f["authorName"]?.stringValue ?: "",
                 text = f["text"]?.stringValue ?: "",
                 createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
@@ -1906,7 +1976,7 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }.body()
 
-        val id = extractDocId(response.name)
+        val id = extractDocId(response.name, "sendMessage")
         return org.taskhub.network.models.MessageResponse(id, memberId, authorName, text, now)
     }
 
@@ -1921,7 +1991,7 @@ class FirestoreRepository(
         return response.documents.map { doc ->
             val f = doc.fields
             org.taskhub.network.models.MessageResponse(
-                id = extractDocId(doc.name),
+                id = extractDocId(doc.name, "getMessages"),
                 memberId = f["memberId"]?.stringValue ?: "",
                 authorName = f["authorName"]?.stringValue ?: "",
                 text = f["text"]?.stringValue ?: "",
@@ -1960,7 +2030,7 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }.body()
 
-        val id = extractDocId(response.name)
+        val id = extractDocId(response.name, "createNotification")
         return NotificationResponse(id, memberId, taskId, title, message, now, read = false)
     }
 
@@ -1976,7 +2046,7 @@ class FirestoreRepository(
             response.documents.map { doc ->
                 val f = doc.fields
                 NotificationResponse(
-                    id = extractDocId(doc.name),
+                    id = extractDocId(doc.name, "getNotifications"),
                     memberId = f["memberId"]?.stringValue ?: "",
                     taskId = f["taskId"]?.stringValue ?: "",
                     title = f["title"]?.stringValue ?: "",
@@ -2021,7 +2091,7 @@ class FirestoreRepository(
             response.documents.map { doc ->
                 val f = doc.fields
                 RewardResponse(
-                    id = extractDocId(doc.name),
+                    id = extractDocId(doc.name, "getRewards"),
                     householdId = f["householdId"]?.stringValue ?: householdId,
                     title = f["title"]?.stringValue ?: "",
                     description = f["description"]?.stringValue ?: "",
@@ -2065,7 +2135,7 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }.body()
 
-        val id = extractDocId(response.name)
+        val id = extractDocId(response.name, "createReward")
         return RewardResponse(id, householdId, title, description, cost, icon, createdBy, now)
     }
 
@@ -2104,7 +2174,7 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }.body()
 
-        val id = extractDocId(response.name)
+        val id = extractDocId(response.name, "redeemReward")
         return RewardRedemption(id, rewardId, memberId, now, pointsSpent)
     }
 
@@ -2120,7 +2190,7 @@ class FirestoreRepository(
             response.documents.map { doc ->
                 val f = doc.fields
                 RewardRedemption(
-                    id = extractDocId(doc.name),
+                    id = extractDocId(doc.name, "getRewardRedemptions"),
                     rewardId = f["rewardId"]?.stringValue ?: "",
                     memberId = f["memberId"]?.stringValue ?: "",
                     redeemedAt = f["redeemedAt"]?.integerValue?.toLongOrNull() ?: 0L,
@@ -2154,53 +2224,21 @@ class FirestoreRepository(
     //  Helpers
     // ────────────────────────────────────────────────────────
 
-    /** Extract the document ID from the full Firestore resource name. */
-    private fun extractDocId(resourceName: String): String {
-        if (resourceName.isBlank()) {
-            throw IllegalStateException(
-                "Firestore response missing document name — " +
-                "the API returned a response without the expected 'name' field. " +
-                "This is a transient Firestore issue; retry the operation."
-            )
-        }
-        return resourceName.substringAfterLast("/")
-    }
+    /** Ver [FirestoreParsers.extractDocId] — extraído para ser testable sin I/O. */
+    private fun extractDocId(resourceName: String, operation: String): String =
+        FirestoreParsers.extractDocId(resourceName, operation)
 
-    private fun toHouseholdResponse(doc: FirestoreDocumentResponse, knownId: String? = null): HouseholdResponse {
-        val f = doc.fields
-        val id = if (doc.name.isNotBlank()) extractDocId(doc.name)
-                 else knownId ?: throw IllegalStateException("Firestore document has no name and no known ID was provided")
-        return HouseholdResponse(
-            id = id,
-            name = f["name"]?.stringValue ?: "",
-            inviteCode = f["inviteCode"]?.stringValue ?: "",
-            createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            isPersonal = f["isPersonal"]?.booleanValue ?: false
-        )
-    }
+    private fun toHouseholdResponse(
+        doc: FirestoreDocumentResponse,
+        knownId: String? = null,
+        operation: String = "getHousehold"
+    ): HouseholdResponse = FirestoreParsers.toHouseholdResponse(doc, knownId, operation)
 
-    private fun toMemberResponse(doc: FirestoreDocumentResponse, householdId: String): MemberResponse {
-        val f = doc.fields
-        val id = if (doc.name.isNotBlank()) extractDocId(doc.name)
-                 else throw IllegalStateException("Member document missing 'name' field in Firestore response")
-        return MemberResponse(
-            id = id,
-            householdId = f["householdId"]?.stringValue ?: householdId,
-            displayName = f["displayName"]?.stringValue ?: "",
-            avatarUrl = f["avatarUrl"]?.stringValue,
-            role = f["role"]?.stringValue ?: "child",
-            totalPoints = f["totalPoints"]?.integerValue?.toIntOrNull() ?: 0,
-            joinedAt = f["joinedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            userId = f["userId"]?.stringValue,
-            currentStreak = f["currentStreak"]?.integerValue?.toIntOrNull() ?: 0,
-            bestStreak = f["bestStreak"]?.integerValue?.toIntOrNull() ?: 0,
-            lastStreakDate = f["lastStreakDate"]?.integerValue?.toLongOrNull() ?: 0L,
-            leftAt = f["leftAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            appreciationGiven = f["appreciationGiven"]?.integerValue?.toIntOrNull() ?: 0,
-            appreciationWeekStart = f["appreciationWeekStart"]?.integerValue?.toLongOrNull() ?: 0L
-        )
-    }
+    private fun toMemberResponse(
+        doc: FirestoreDocumentResponse,
+        householdId: String,
+        operation: String = "getMembers"
+    ): MemberResponse = FirestoreParsers.toMemberResponse(doc, householdId, operation)
 
     private fun generateInviteCode(): String {
         val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -2216,9 +2254,5 @@ class FirestoreRepository(
          *       or inject it via build config / environment.
          */
         const val DEFAULT_API_KEY = "AIzaSyD5Xo11SqvysWRgEFv_91rBjYuFIq93lV8"
-
-        /** Tope semanal de puntos que un miembro puede DAR agradeciendo a otros. */
-        const val WEEKLY_APPRECIATION_BUDGET = 50
-        private const val WEEK_MILLIS = 7L * 24 * 60 * 60 * 1000
     }
 }

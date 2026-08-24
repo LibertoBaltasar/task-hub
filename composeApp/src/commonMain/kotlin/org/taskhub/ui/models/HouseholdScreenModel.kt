@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MessageResponse
@@ -17,7 +18,12 @@ sealed class HouseholdUiState {
     data object Loading : HouseholdUiState()
     data class Success(val household: HouseholdResponse) : HouseholdUiState()
     data class AlreadyMember(val household: HouseholdResponse) : HouseholdUiState()
-    data class Error(val message: String) : HouseholdUiState()
+    /**
+     * [removable] es true cuando Firestore confirmó (404/403) que el hogar ya
+     * no existe o no es accesible — la UI puede ofrecer "quitar de mis espacios"
+     * en vez de solo "reintentar", que nunca funcionaría en ese caso.
+     */
+    data class Error(val message: String, val removable: Boolean = false) : HouseholdUiState()
 }
 
 sealed class MessagesUiState {
@@ -84,12 +90,26 @@ class HouseholdScreenModel(
             try {
                 val household = repo.getHousehold(id)
                 _uiState.value = HouseholdUiState.Success(household)
+            } catch (e: FirestoreException) {
+                if (e.statusCode == 404 || e.statusCode == 403) {
+                    _uiState.value = HouseholdUiState.Error(
+                        message = "Este espacio ya no existe o ya no tienes acceso a él.",
+                        removable = true
+                    )
+                } else {
+                    _uiState.value = HouseholdUiState.Error(e.message)
+                }
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: "Error al cargar el espacio"
                 )
             }
         }
+    }
+
+    /** Quita un hogar inaccesible de la caché local (ver [HouseholdUiState.Error.removable]). */
+    fun removeGhostHousehold(householdId: String) {
+        householdStore.removeHousehold(householdId)
     }
 
     fun reset() {

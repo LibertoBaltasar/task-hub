@@ -65,9 +65,10 @@ class HomeScreen : Screen {
             mutableStateOf(!settingsStore.hasSeenGooglePrompt() && !settingsStore.isGoogleLoggedIn())
         }
 
-        // Cargar hogares + tareas de todos al entrar
+        // Cargar hogares + tareas de todos al entrar. Reconcilia primero contra
+        // Firestore para podar hogares "fantasma" (borrados o sin acceso).
         LaunchedEffect(Unit) {
-            households = householdStore.getSavedHouseholds()
+            households = model.reconcileHouseholds()
             model.loadAllTasks()
         }
 

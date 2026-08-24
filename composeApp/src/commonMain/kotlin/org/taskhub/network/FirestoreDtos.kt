@@ -56,6 +56,21 @@ data class FirestoreListResponse(
     val documents: List<FirestoreDocumentResponse> = emptyList()
 )
 
+// ── Error envelope ──────────────────────────────────────────
+// Firestore REST errors come back as {"error": {"code": 403, "message": "...", "status": "PERMISSION_DENIED"}}
+
+@Serializable
+data class FirestoreErrorEnvelope(
+    val error: FirestoreErrorBody? = null
+)
+
+@Serializable
+data class FirestoreErrorBody(
+    val code: Int? = null,
+    val message: String? = null,
+    val status: String? = null
+)
+
 // ── Query types ────────────────────────────────────────────
 
 @Serializable

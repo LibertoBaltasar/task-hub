@@ -33,6 +33,13 @@ class HomeScreenModel(
     val uiState: StateFlow<HomeScreenUiState> = _uiState.asStateFlow()
 
     /**
+     * Reconcilia los hogares guardados localmente contra Firestore antes de
+     * mostrarlos — poda los que ya no existen o son inaccesibles (404/403),
+     * conserva los demás ante cualquier fallo de red/servidor.
+     */
+    suspend fun reconcileHouseholds(): List<SavedHousehold> = repo.reconcileHouseholds(householdStore)
+
+    /**
      * Carga las tareas pendientes de todos los hogares y
      * actualiza el widget con la lista combinada.
      */
