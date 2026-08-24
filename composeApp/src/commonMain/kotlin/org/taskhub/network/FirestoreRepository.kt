@@ -348,7 +348,11 @@ class FirestoreRepository(
                 parameter("key", apiKey)
             }
             true
+        } catch (e: FirestoreException) {
+            // Firestore respondió con un status HTTP (aunque sea 404/403): hay red.
+            true
         } catch (_: Exception) {
+            // Fallo de transporte (sin red): no se llegó a Firestore.
             false
         }
     }
