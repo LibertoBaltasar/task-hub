@@ -27,6 +27,7 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
+import org.taskhub.network.RecurrenceRules
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.models.*
@@ -781,6 +782,13 @@ private fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): B
         }
         "monthly" -> {
             val lcd = task.lastCompletedDate
+            if (task.recurrenceDay != null) {
+                val targetDay = RecurrenceRules.clampDayOfMonth(task.recurrenceDay, date.year, date.monthNumber)
+                if (date.dayOfMonth != targetDay) return false
+                if (lcd == null) return true
+                val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
+                return lcdDate < date
+            }
             if (lcd == null) return true
             val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
             return lcdDate.year < date.year || (lcdDate.year == date.year && lcdDate.month < date.month)

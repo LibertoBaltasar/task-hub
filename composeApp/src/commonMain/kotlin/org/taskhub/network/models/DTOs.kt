@@ -122,6 +122,13 @@ data class TaskResponse(
     val frequency: String = "once",
     /** Días de la semana en que aplica (1=Lunes..7=Domingo). Solo para "weekly". */
     val recurrenceDays: List<Int> = emptyList(),
+    /**
+     * Día del mes en que aplica (1..31). Solo para "monthly".
+     * null = comportamiento legado: toca una vez al mes, cualquier día.
+     * Si el mes no tiene ese día (p.ej. 31 en febrero), se ajusta al último
+     * día del mes — ver [org.taskhub.network.RecurrenceRules.clampDayOfMonth].
+     */
+    val recurrenceDay: Int? = null,
     val tags: List<String> = emptyList(),
     /** Checklist de subtareas dentro de la tarea. */
     val subtasks: List<Subtask> = emptyList(),

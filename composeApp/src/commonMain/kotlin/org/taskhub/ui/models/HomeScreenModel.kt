@@ -7,11 +7,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.RecurrenceRules
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.platform.updateWidgetPendingTasks
 import org.taskhub.storage.HouseholdStore
@@ -99,38 +99,14 @@ class HomeScreenModel(
         val today = now.toLocalDateTime(tz).date
         val todayStartEpoch = today.atStartOfDayIn(tz).toEpochMilliseconds()
 
-        val due = when (task.frequency) {
-            "daily" -> {
-                val lcd = task.lastCompletedDate
-                if (lcd == null) true
-                else {
-                    val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-                    lcdDate != today
-                }
-            }
-            "weekly" -> {
-                val todayDow = today.dayOfWeek.ordinal + 1
-                if (task.recurrenceDays.isNotEmpty() && todayDow !in task.recurrenceDays) false
-                else {
-                    val lcd = task.lastCompletedDate
-                    if (lcd == null) true
-                    else {
-                        val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-                        lcdDate != today
-                    }
-                }
-            }
-            "monthly" -> {
-                val lcd = task.lastCompletedDate
-                if (lcd == null) true
-                else {
-                    val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-                    lcdDate.month != today.month || lcdDate.year != today.year
-                }
-            }
-            "once" -> task.lastCompletedDate == null
-            else -> false
-        }
+        val due = RecurrenceRules.isDueToday(
+            frequency = task.frequency,
+            recurrenceDays = task.recurrenceDays,
+            recurrenceDay = task.recurrenceDay,
+            lastCompletedDate = task.lastCompletedDate,
+            nowEpochMs = now.toEpochMilliseconds(),
+            tz = tz
+        )
 
         val done = task.lastCompletedDate != null && task.lastCompletedDate >= todayStartEpoch
         return due && !done

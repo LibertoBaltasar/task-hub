@@ -28,6 +28,7 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
+import org.taskhub.network.RecurrenceRules
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
@@ -279,43 +280,14 @@ private data class TaskGroup(
  * - monthly: due if not completed this month
  * - once: due if has dueDate and not completed yet
  */
-private fun isTaskDueToday(task: TaskResponse, todayStartEpoch: Long): Boolean {
-    val tz = TimeZone.currentSystemDefault()
-    val todayInstant = Instant.fromEpochMilliseconds(todayStartEpoch)
-    val today = todayInstant.toLocalDateTime(tz).date
-
-    when (task.frequency) {
-        "daily" -> {
-            // Daily tasks are always due. Check if completed today.
-            val lcd = task.lastCompletedDate
-            if (lcd == null) return true
-            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-            return lcdDate != today
-        }
-        "weekly" -> {
-            val todayDow = today.dayOfWeek.ordinal + 1 // 1=Monday
-            if (task.recurrenceDays.isNotEmpty() && todayDow !in task.recurrenceDays) {
-                return false // Not a matching day
-            }
-            // Check if completed today
-            val lcd = task.lastCompletedDate
-            if (lcd == null) return true
-            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-            return lcdDate != today
-        }
-        "monthly" -> {
-            val lcd = task.lastCompletedDate
-            if (lcd == null) return true
-            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-            return lcdDate.month != today.month || lcdDate.year != today.year
-        }
-        "once" -> {
-            // Due if not completed yet (with or without dueDate)
-            return task.lastCompletedDate == null
-        }
-        else -> return false
-    }
-}
+private fun isTaskDueToday(task: TaskResponse, todayStartEpoch: Long): Boolean =
+    RecurrenceRules.isDueToday(
+        frequency = task.frequency,
+        recurrenceDays = task.recurrenceDays,
+        recurrenceDay = task.recurrenceDay,
+        lastCompletedDate = task.lastCompletedDate,
+        nowEpochMs = todayStartEpoch
+    )
 
 /**
  * Determines if a task was completed today.
@@ -728,7 +700,7 @@ private fun TaskCard(
                 val freqLabel = when (task.frequency) {
                     "daily" -> "🔄 Diaria"
                     "weekly" -> "📅 Semanal"
-                    "monthly" -> "📆 Mensual"
+                    "monthly" -> if (task.recurrenceDay != null) "📆 Día ${task.recurrenceDay}" else "📆 Mensual"
                     else -> "• Una vez"
                 }
                 Surface(

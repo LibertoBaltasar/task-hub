@@ -66,6 +66,7 @@ data class CreateTaskScreen(
         var pointsText by remember { mutableStateOf("10") }
         var frequency by remember { mutableStateOf("once") }
         var recurrenceDays by remember { mutableStateOf(setOf<Int>()) }
+        var recurrenceDay by remember { mutableStateOf<Int?>(null) }
         var tagsText by remember { mutableStateOf("") }
         var tags by remember { mutableStateOf(listOf<String>()) }
         var selectedMembers by remember {
@@ -155,6 +156,7 @@ data class CreateTaskScreen(
                                         points = points,
                                         frequency = frequency,
                                         recurrenceDays = recurrenceDays.toList().sorted(),
+                                        recurrenceDay = if (frequency == "monthly") recurrenceDay else null,
                                         tags = tags,
                                         subtasks = subtasks,
                                         penaltyMode = if (hasPenalty) penaltyMode else null,
@@ -418,6 +420,34 @@ data class CreateTaskScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+
+                    // Recurrence day of month (only for monthly)
+                    if (frequency == "monthly") {
+                        item {
+                            Text(
+                                text = "Día del mes",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = recurrenceDay?.toString() ?: "",
+                                onValueChange = { text ->
+                                    val n = text.toIntOrNull()
+                                    recurrenceDay = when {
+                                        text.isBlank() -> null
+                                        n != null -> n.coerceIn(1, 31)
+                                        else -> recurrenceDay
+                                    }
+                                },
+                                label = { Text("Día (1-31)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(0.4f)
+                            )
                         }
                     }
 

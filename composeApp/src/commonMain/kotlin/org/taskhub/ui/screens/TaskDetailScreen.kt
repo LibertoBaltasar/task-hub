@@ -341,6 +341,16 @@ private fun TaskDetailContent(
                         )
                     }
 
+                    // Recurrence day of month
+                    if (task.frequency == "monthly" && task.recurrenceDay != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "📆 Cada día ${task.recurrenceDay} del mes",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Teal700
+                        )
+                    }
+
                     // Tags
                     if (task.tags.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))

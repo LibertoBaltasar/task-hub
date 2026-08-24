@@ -66,6 +66,7 @@ data class EditTaskScreen(
         var pointsText by remember { mutableStateOf(task.points.toString()) }
         var frequency by remember { mutableStateOf(task.frequency) }
         var recurrenceDays by remember { mutableStateOf(task.recurrenceDays.toSet()) }
+        var recurrenceDay by remember { mutableStateOf(task.recurrenceDay) }
         var tags by remember { mutableStateOf(task.tags) }
         var tagsText by remember { mutableStateOf("") }
         // Checklist (subtareas) — editable desde "Editar tarea"
@@ -192,6 +193,7 @@ data class EditTaskScreen(
                                         points = points,
                                         frequency = frequency,
                                         recurrenceDays = recurrenceDays.toList().sorted(),
+                                        recurrenceDay = if (frequency == "monthly") recurrenceDay else null,
                                         tags = tags,
                                         subtasks = subtasks,
                                         penaltyMode = if (hasPenalty) penaltyMode else null,
@@ -441,6 +443,34 @@ data class EditTaskScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+
+                    // Recurrence day of month (only for monthly)
+                    if (frequency == "monthly") {
+                        item {
+                            Text(
+                                text = "Día del mes",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item {
+                            OutlinedTextField(
+                                value = recurrenceDay?.toString() ?: "",
+                                onValueChange = { text ->
+                                    val n = text.toIntOrNull()
+                                    recurrenceDay = when {
+                                        text.isBlank() -> null
+                                        n != null -> n.coerceIn(1, 31)
+                                        else -> recurrenceDay
+                                    }
+                                },
+                                label = { Text("Día (1-31)") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.fillMaxWidth(0.4f)
+                            )
                         }
                     }
 

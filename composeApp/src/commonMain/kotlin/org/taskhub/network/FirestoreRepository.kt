@@ -1116,6 +1116,7 @@ class FirestoreRepository(
         points: Int,
         frequency: String,
         recurrenceDays: List<Int>,
+        recurrenceDay: Int? = null,
         tags: List<String>,
         subtasks: List<Subtask> = emptyList(),
         penaltyMode: String?,
@@ -1159,6 +1160,11 @@ class FirestoreRepository(
                     values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }
                 )
             )
+        }
+
+        // Recurrence day of month (solo "monthly")
+        if (recurrenceDay != null) {
+            fields["recurrenceDay"] = FirestoreValue(integerValue = recurrenceDay.toString())
         }
 
         // Penalty configuration
@@ -1214,7 +1220,8 @@ class FirestoreRepository(
         return TaskResponse(
             id = id, householdId = householdId, createdBy = createdBy,
             title = title, description = description, points = points,
-            frequency = frequency, recurrenceDays = recurrenceDays, tags = tags,
+            frequency = frequency, recurrenceDays = recurrenceDays,
+            recurrenceDay = recurrenceDay, tags = tags,
             subtasks = subtasks,
             penaltyMode = penaltyMode, penaltyValue = penaltyValue,
             penaltyInterval = penaltyInterval, penaltyMax = penaltyMax,
@@ -1704,6 +1711,7 @@ class FirestoreRepository(
         points: Int,
         frequency: String,
         recurrenceDays: List<Int>,
+        recurrenceDay: Int? = null,
         tags: List<String>,
         subtasks: List<Subtask> = emptyList(),
         penaltyMode: String?,
@@ -1737,6 +1745,13 @@ class FirestoreRepository(
                 values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }
             )
         )
+
+        // Recurrence day of month (solo "monthly"); null borra el valor previo.
+        fields["recurrenceDay"] = if (recurrenceDay != null) {
+            FirestoreValue(integerValue = recurrenceDay.toString())
+        } else {
+            FirestoreValue(nullValue = "NULL_VALUE")
+        }
 
         // Penalty configuration
         if (penaltyMode != null) {
@@ -1849,6 +1864,7 @@ class FirestoreRepository(
             frequency = f["frequency"]?.stringValue ?: "once",
             recurrenceDays = f["recurrenceDays"]?.arrayValue?.values
                 ?.mapNotNull { it.integerValue?.toIntOrNull() } ?: emptyList(),
+            recurrenceDay = f["recurrenceDay"]?.integerValue?.toIntOrNull(),
             tags = f["tags"]?.arrayValue?.values
                 ?.mapNotNull { it.stringValue } ?: emptyList(),
             subtasks = f["subtasks"]?.arrayValue?.values

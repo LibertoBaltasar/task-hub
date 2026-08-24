@@ -89,6 +89,26 @@ object AppStrings {
             "tasks_error_loading" to "Error al cargar espacios",
             "tasks_retry" to "Reintentar",
 
+            // Recurrence
+            "recurrence_label" to "Recurrencia",
+            "recurrence_none" to "Ninguna",
+            "recurrence_once" to "Una vez",
+            "recurrence_daily" to "Diaria",
+            "recurrence_weekly" to "Semanal",
+            "recurrence_monthly" to "Mensual",
+            "recurrence_every_day" to "Cada día",
+            "recurrence_every_week" to "Cada semana",
+            "recurrence_every_month" to "Cada mes",
+            "recurrence_days_label" to "Días de repetición",
+            "recurrence_day_of_month_label" to "Día del mes",
+            "recurrence_day_monday" to "Lunes",
+            "recurrence_day_tuesday" to "Martes",
+            "recurrence_day_wednesday" to "Miércoles",
+            "recurrence_day_thursday" to "Jueves",
+            "recurrence_day_friday" to "Viernes",
+            "recurrence_day_saturday" to "Sábado",
+            "recurrence_day_sunday" to "Domingo",
+
             // Delete
             "delete_multiple_title" to "Eliminar %d espacio(s)",
             "delete_multiple_confirm" to "¿Eliminar %s? Esta acción no se puede deshacer.",
@@ -207,6 +227,26 @@ object AppStrings {
             "tasks_empty_all" to "📋 No tasks yet. Create the first one!",
             "tasks_error_loading" to "Error loading spaces",
             "tasks_retry" to "Retry",
+
+            // Recurrence
+            "recurrence_label" to "Recurrence",
+            "recurrence_none" to "None",
+            "recurrence_once" to "Once",
+            "recurrence_daily" to "Daily",
+            "recurrence_weekly" to "Weekly",
+            "recurrence_monthly" to "Monthly",
+            "recurrence_every_day" to "Every day",
+            "recurrence_every_week" to "Every week",
+            "recurrence_every_month" to "Every month",
+            "recurrence_days_label" to "Repeat days",
+            "recurrence_day_of_month_label" to "Day of month",
+            "recurrence_day_monday" to "Monday",
+            "recurrence_day_tuesday" to "Tuesday",
+            "recurrence_day_wednesday" to "Wednesday",
+            "recurrence_day_thursday" to "Thursday",
+            "recurrence_day_friday" to "Friday",
+            "recurrence_day_saturday" to "Saturday",
+            "recurrence_day_sunday" to "Sunday",
 
             // Delete
             "delete_multiple_title" to "Delete %d space(s)",
