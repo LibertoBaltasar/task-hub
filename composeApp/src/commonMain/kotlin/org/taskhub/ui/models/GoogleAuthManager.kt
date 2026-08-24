@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.platform.GoogleSignInResultHolder
+import org.taskhub.platform.getGoogleCalendarAccessToken
 import org.taskhub.platform.launchGoogleSignIn
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
@@ -84,6 +85,20 @@ class GoogleAuthManager(
     fun signOut() {
         settingsStore.clearGoogleAuth()
         _state.value = GoogleAuthState.Anonymous
+    }
+
+    /**
+     * Obtiene bajo demanda un access token OAuth con scope de Calendar (efímero,
+     * ~1h) y actualiza el flag "vinculado" de [SettingsStore] según el resultado:
+     * éxito → vinculado; fallo (sin cuenta, consentimiento denegado, revocado) →
+     * desvinculado. No se persiste como si fuera de larga duración — se vuelve a
+     * pedir cada vez que hace falta, y la capa de plataforma cachea/refresca la
+     * cuenta subyacente de forma transparente.
+     */
+    suspend fun ensureCalendarAccessToken(): String? {
+        val token = getGoogleCalendarAccessToken()
+        settingsStore.setGoogleAccessToken(token)
+        return token
     }
 
     /**

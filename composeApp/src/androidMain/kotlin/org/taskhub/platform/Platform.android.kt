@@ -5,6 +5,7 @@ import android.content.Intent
 import android.app.Activity
 import org.taskhub.TaskHubWidgetProvider
 import org.taskhub.GoogleSignInHelper
+import org.taskhub.GoogleCalendarAuthHelper
 
 actual fun shareText(text: String, title: String) {
     val context = AndroidContextHolder.context ?: return
@@ -45,6 +46,11 @@ actual fun updateWidgetPendingTasks(taskList: String) {
 actual fun launchGoogleSignIn() {
     val context = AndroidContextHolder.context ?: return
     GoogleSignInHelper.launch(context)
+}
+
+actual suspend fun getGoogleCalendarAccessToken(): String? {
+    val context = AndroidContextHolder.context ?: return null
+    return GoogleCalendarAuthHelper.getAccessToken(context)
 }
 
 /** Simple static context holder set from MainActivity. */

@@ -17,6 +17,14 @@ expect fun updateWidgetPendingTasks(taskList: String)
 expect fun launchGoogleSignIn()
 
 /**
+ * Obtains (or transparently refreshes) a Google Calendar OAuth **access token**
+ * for the linked Google account, requesting user consent via native UI if
+ * needed. Returns null if there's no linked account or the token could not be
+ * obtained. Short-lived (~1h) — fetch on demand, don't treat it as durable.
+ */
+expect suspend fun getGoogleCalendarAccessToken(): String?
+
+/**
  * Debug flag — true in debug builds, false in release.
  * Used to guard println() logs and debug UI elements (red counter, etc.).
  * Set from MainActivity in onCreate() via BuildConfig.DEBUG.

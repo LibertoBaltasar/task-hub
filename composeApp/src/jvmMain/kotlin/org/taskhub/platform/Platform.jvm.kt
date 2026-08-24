@@ -16,3 +16,8 @@ actual fun updateWidgetPendingTasks(taskList: String) {
 actual fun launchGoogleSignIn() {
     // JVM: Google Sign-In not supported — no-op
 }
+
+actual suspend fun getGoogleCalendarAccessToken(): String? {
+    // JVM: Google Sign-In not supported — no-op
+    return null
+}

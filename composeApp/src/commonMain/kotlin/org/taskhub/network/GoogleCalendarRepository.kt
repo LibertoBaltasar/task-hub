@@ -42,47 +42,95 @@ class GoogleCalendarRepository(
     }
 
     /**
-     * Creates an event on the user's primary calendar.
+     * Finds a calendar owned/subscribed by the user whose `summary` (display
+     * name) matches, or creates one if none exists. Idempotent — safe to call
+     * every time a task needs to be synced.
      *
-     * @param accessToken OAuth Bearer token from Google Sign-In (idToken works
-     *                    when the calendar scope is included in the sign-in request).
+     * @param accessToken OAuth Bearer access token (Calendar scope).
+     * @param summary Calendar display name (e.g. "Task Hub").
+     * @return the `calendarId` to use with [createEvent]/[updateEvent]/[deleteEvent].
+     */
+    suspend fun ensureCalendar(accessToken: String, summary: String): String {
+        val existingId = findCalendarIdByName(accessToken, summary)
+        if (existingId != null) return existingId
+
+        val response: CalendarInsertResponse = client.post("$calendarBaseUrl/calendars") {
+            header("Authorization", "Bearer $accessToken")
+            contentType(ContentType.Application.Json)
+            setBody(CalendarInsertRequest(summary = summary))
+        }.body()
+
+        return response.id
+    }
+
+    private suspend fun findCalendarIdByName(accessToken: String, summary: String): String? {
+        val response: CalendarListResponse = client.get("$calendarBaseUrl/users/me/calendarList") {
+            header("Authorization", "Bearer $accessToken")
+            parameter("fields", "items(id,summary)")
+        }.body()
+
+        return response.items?.firstOrNull { it.summary == summary }?.id
+    }
+
+    /**
+     * Creates an event on the given calendar.
+     *
+     * @param accessToken OAuth Bearer access token (Calendar scope).
+     * @param calendarId Target calendar, e.g. from [ensureCalendar] (or "primary").
      * @param summary Event title.
      * @param description Event description (task notes).
      * @param dueDateEpochMs Deadline epoch millis. Used as the event date for
      *                       "once" tasks. For recurring tasks, today's date is used.
-     * @return link to the created Google Calendar event, or throws on error.
+     * @return the created Google Calendar event, or throws on error.
      */
     suspend fun createEvent(
         accessToken: String,
+        calendarId: String = "primary",
         summary: String,
         description: String,
         dueDateEpochMs: Long
     ): CalendarEventResponse {
-        // Determine event date string (YYYY-MM-DD)
-        val dateString = if (dueDateEpochMs > 0) {
-            epochMillisToDateString(dueDateEpochMs)
-        } else {
-            // No due date — use today
-            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
-            epochMillisToDateString(now)
-        }
-
-        val eventBody = CalendarEventRequest(
-            summary = summary,
-            description = description,
-            start = CalendarEventDateTime(date = dateString),
-            end = CalendarEventDateTime(date = dateString)
-        )
-
         val response: CalendarEventResponse = client.post(
-            "$calendarBaseUrl/calendars/primary/events"
+            "$calendarBaseUrl/calendars/$calendarId/events"
         ) {
             header("Authorization", "Bearer $accessToken")
             contentType(ContentType.Application.Json)
-            setBody(eventBody)
+            setBody(buildEventRequest(summary, description, dueDateEpochMs))
         }.body()
 
         return response
+    }
+
+    /**
+     * Updates an existing event (e.g. its title or due date changed).
+     *
+     * @param calendarId Calendar the event lives in.
+     * @param eventId Event to update, as returned by [createEvent].
+     */
+    suspend fun updateEvent(
+        accessToken: String,
+        calendarId: String,
+        eventId: String,
+        summary: String,
+        description: String,
+        dueDateEpochMs: Long
+    ): CalendarEventResponse {
+        val response: CalendarEventResponse = client.put(
+            "$calendarBaseUrl/calendars/$calendarId/events/$eventId"
+        ) {
+            header("Authorization", "Bearer $accessToken")
+            contentType(ContentType.Application.Json)
+            setBody(buildEventRequest(summary, description, dueDateEpochMs))
+        }.body()
+
+        return response
+    }
+
+    /** Deletes an event, e.g. when the task is deleted or unlinked from Calendar. */
+    suspend fun deleteEvent(accessToken: String, calendarId: String, eventId: String) {
+        client.delete("$calendarBaseUrl/calendars/$calendarId/events/$eventId") {
+            header("Authorization", "Bearer $accessToken")
+        }
     }
 
     /**
@@ -99,6 +147,28 @@ class GoogleCalendarRepository(
         } catch (_: Exception) {
             false
         }
+    }
+
+    private fun buildEventRequest(
+        summary: String,
+        description: String,
+        dueDateEpochMs: Long
+    ): CalendarEventRequest {
+        // Determine event date string (YYYY-MM-DD)
+        val dateString = if (dueDateEpochMs > 0) {
+            epochMillisToDateString(dueDateEpochMs)
+        } else {
+            // No due date — use today
+            val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+            epochMillisToDateString(now)
+        }
+
+        return CalendarEventRequest(
+            summary = summary,
+            description = description,
+            start = CalendarEventDateTime(date = dateString),
+            end = CalendarEventDateTime(date = dateString)
+        )
     }
 
     private fun epochMillisToDateString(epochMillis: Long): String {
@@ -134,4 +204,26 @@ data class CalendarEventResponse(
     val id: String,
     val htmlLink: String? = null,
     val status: String? = null
+)
+
+@Serializable
+data class CalendarListResponse(
+    val items: List<CalendarListItem>? = null
+)
+
+@Serializable
+data class CalendarListItem(
+    val id: String,
+    val summary: String? = null
+)
+
+@Serializable
+data class CalendarInsertRequest(
+    val summary: String
+)
+
+@Serializable
+data class CalendarInsertResponse(
+    val id: String,
+    val summary: String? = null
 )
