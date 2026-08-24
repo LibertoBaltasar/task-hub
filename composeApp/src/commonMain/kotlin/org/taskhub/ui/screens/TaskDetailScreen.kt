@@ -196,9 +196,11 @@ data class TaskDetailScreen(
                             onLinkCalendar = {
                                 isLinkingCalendar = true
                                 coroutineScope.launch {
-                                    authManager.linkCalendar()
+                                    val linked = authManager.linkCalendar()
                                     isLinkingCalendar = false
-                                    settingsStore.setCalendarSyncEnabled(true)
+                                    if (linked) {
+                                        settingsStore.setCalendarSyncEnabled(true)
+                                    }
                                     model.loadTaskDetail(householdId, taskId)
                                 }
                             },
