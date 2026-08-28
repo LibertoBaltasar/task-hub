@@ -1,5 +1,6 @@
 package org.taskhub.network.models
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
 // ── Request DTOs ──────────────────────────────────────────
@@ -19,6 +20,7 @@ data class CreateMemberRequest(
 
 // ── Response DTOs ─────────────────────────────────────────
 
+@Immutable
 @Serializable
 data class HouseholdResponse(
     val id: String,
@@ -31,6 +33,7 @@ data class HouseholdResponse(
 )
 
 /** Miembro de un hogar. Cada usuario que se une crea un Member doc. */
+@Immutable
 @Serializable
 data class MemberResponse(
     val id: String,
@@ -110,6 +113,7 @@ data class Subtask(
  *   toca hoy (isTaskDueToday en TaskListScreen.kt).
  * - [dueDate] es la fecha límite para tareas "once" (0 = sin fecha).
  */
+@Immutable
 @Serializable
 data class TaskResponse(
     val id: String,
@@ -166,6 +170,7 @@ data class TaskResponse(
  * Asignación de una tarea a un miembro.
  * Una tarea puede tener 0..N asignaciones (una por miembro).
  */
+@Immutable
 @Serializable
 data class TaskAssignmentResponse(
     val id: String,
@@ -236,6 +241,7 @@ data class NotificationResponse(
 
 // ── Reward DTOs ────────────────────────────────────────────
 
+@Immutable
 @Serializable
 data class RewardResponse(
     val id: String,

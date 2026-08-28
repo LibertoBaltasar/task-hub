@@ -18,6 +18,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.theme.*
@@ -77,10 +78,11 @@ internal fun RankingBody(householdId: String) {
     when {
         isLoading -> {
             Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
             ) {
-                CircularProgressIndicator(color = Teal600)
+                ShimmerList(count = 5, itemHeight = 64.dp)
             }
         }
         errorMessage != null -> {
@@ -97,15 +99,26 @@ internal fun RankingBody(householdId: String) {
         }
         members.isEmpty() -> {
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    "No hay miembros aún",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("🏆", style = MaterialTheme.typography.displayMedium)
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        "Aún no hay nadie en el ranking",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Completa tareas para sumar puntos y aparecer aquí.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
         else -> {

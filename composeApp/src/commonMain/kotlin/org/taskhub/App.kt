@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
+import cafe.adriel.voyager.transitions.FadeTransition
 import cafe.adriel.voyager.transitions.SlideTransition
 import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
@@ -21,6 +22,7 @@ import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.AppSettingsState
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.screens.HomeScreen
 import org.taskhub.ui.screens.SplashScreen
@@ -163,8 +165,13 @@ fun App() {
                                 }
                             }
                             else -> {
+                                val reduceMotion = shouldReduceMotion()
                                 Navigator(screen = screen) { navigator ->
-                                    SlideTransition(navigator)
+                                    if (reduceMotion) {
+                                        FadeTransition(navigator)
+                                    } else {
+                                        SlideTransition(navigator)
+                                    }
                                 }
                             }
                         }

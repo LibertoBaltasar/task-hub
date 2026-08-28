@@ -13,6 +13,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import org.taskhub.ui.components.AppLogo
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.theme.Teal800
 import org.taskhub.ui.theme.Coral100
 import androidx.compose.ui.graphics.Color
@@ -25,11 +27,12 @@ import androidx.compose.ui.graphics.Color
  */
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
-    // Animación de fade-in
+    // Animación de fade-in (instantánea si el sistema pide reducir movimiento)
     var visible by remember { mutableStateOf(false) }
+    val reduceMotion = shouldReduceMotion()
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
-        animationSpec = tween(durationMillis = 800)
+        animationSpec = tween(durationMillis = if (reduceMotion) 0 else 800)
     )
 
     // Al montar: activa el fade-in y programa el callback a los 5s
@@ -49,6 +52,14 @@ fun SplashScreen(onFinished: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            AppLogo(
+                modifier = Modifier.alpha(alpha),
+                size = 72.dp,
+                ringColor = Color.White,
+                checkColor = Coral100,
+                dotColor = Coral100
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = "TASK",
                 fontSize = 72.sp,

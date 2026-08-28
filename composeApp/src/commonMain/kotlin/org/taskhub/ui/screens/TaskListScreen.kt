@@ -1,5 +1,12 @@
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -16,6 +23,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -27,17 +38,22 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import kotlinx.coroutines.delay
 import kotlinx.datetime.*
+import kotlin.random.Random
 import org.taskhub.network.RecurrenceRules
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
+import org.taskhub.ui.components.EmptyTasksIllustration
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
+import org.taskhub.ui.components.ShimmerList
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.theme.*
 import org.taskhub.platform.shareText
 
@@ -183,10 +199,11 @@ data class TaskListScreen(
                 when (val state = listState) {
                     is TaskListUiState.Loading -> {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp)
                         ) {
-                            CircularProgressIndicator(color = Teal600)
+                            ShimmerList(count = 5, itemHeight = 88.dp)
                         }
                     }
 
@@ -209,7 +226,10 @@ data class TaskListScreen(
                             onCompleteTask = { task ->
                                 model.completeTask(householdId, task.id)
                             },
-                            onRefresh = { model.loadTasks(householdId) }
+                            onRefresh = { model.loadTasks(householdId) },
+                            onCreateFirstTask = {
+                                navigator.push(CreateTaskScreen(householdId, currentMemberId ?: ""))
+                            }
                         )
                     }
 
@@ -268,6 +288,7 @@ private data class TaskGroup(
     val sortKey: Int,
     val dateKey: String,
     val isOverdue: Boolean,
+    val isDueSoon: Boolean = false,
     val isNoDate: Boolean,
     val items: List<TaskWithStatus>
 )
@@ -371,6 +392,7 @@ private fun groupTasksByStatus(
             sortKey = 1,
             dateKey = "today",
             isOverdue = false,
+            isDueSoon = true,
             isNoDate = false,
             items = sorted
         ))
@@ -412,11 +434,13 @@ private fun TaskListContent(
     onSearchQueryChange: (String) -> Unit,
     onTaskClick: (TaskResponse) -> Unit,
     onCompleteTask: (TaskResponse) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onCreateFirstTask: () -> Unit
 ) {
     val taskMap = state.tasks.associateBy { it.id }
     val memberMap = state.members.associateBy { it.id }
     val assignmentsByTask = state.assignments.groupBy { it.taskId }
+    val reduceMotion = shouldReduceMotion()
 
     // Compute today start for overdue detection and due-today calculation
     val now = Clock.System.now()
@@ -519,7 +543,40 @@ private fun TaskListContent(
             }
         }
 
-        if (tasksWithStatus.isEmpty() || groups.isEmpty()) {
+        if (state.tasks.isEmpty()) {
+            item {
+                Spacer(Modifier.height(24.dp))
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        EmptyTasksIllustration()
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            "¡Todo al día!",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Aún no hay tareas en este espacio. ¡Crea la primera!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(24.dp))
+                        Button(
+                            onClick = onCreateFirstTask,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text("Crear primera tarea", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        } else if (tasksWithStatus.isEmpty() || groups.isEmpty()) {
             item {
                 Spacer(Modifier.height(8.dp))
                 Card(
@@ -551,6 +608,7 @@ private fun TaskListContent(
                         label = group.label,
                         count = group.items.size,
                         isOverdue = group.isOverdue,
+                        isDueSoon = group.isDueSoon,
                         isNoDate = group.isNoDate,
                         isCollapsed = isCollapsed,
                         onToggle = { collapsedGroups[group.dateKey] = !isCollapsed }
@@ -564,7 +622,10 @@ private fun TaskListContent(
                 if (!isCollapsed) {
                     items(
                         items = group.items,
-                        key = { "task_${it.task.id}_${group.dateKey}" }
+                        // Sin sufijo de grupo: misma key al completar una tarea permite que
+                        // Compose la reconozca como el mismo ítem moviéndose de grupo (en vez
+                        // de destruirla y recrearla), habilitando animateItem() para el traslado.
+                        key = { "task_${it.task.id}" }
                     ) { item ->
                         TaskCard(
                             item = item,
@@ -577,7 +638,8 @@ private fun TaskListContent(
                                     loadingTaskIds[item.task.id] = true
                                     onCompleteTask(item.task)
                                 }
-                            } else null
+                            } else null,
+                            modifier = if (reduceMotion) Modifier else Modifier.animateItem()
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -601,18 +663,52 @@ private fun TaskCard(
     memberMap: Map<String, MemberResponse>,
     isLoading: Boolean,
     onClick: () -> Unit,
-    onComplete: (() -> Unit)?
+    onComplete: (() -> Unit)?,
+    modifier: Modifier = Modifier
 ) {
     val task = item.task
     val pendingCount = assignments.count { it.status == "assigned" }
     val completedCount = assignments.count { it.status == "completed" }
     val totalAssigned = assignments.size
     val isDone = item.isCompletedToday
+    val reduceMotion = shouldReduceMotion()
 
+    // Al pulsar "Hecho" primero se anima la card (fade out + scale down) y solo
+    // entonces se dispara la finalización real, para que la tarea no desaparezca
+    // bruscamente al pasar al grupo "Completadas hoy".
+    var isCompleting by remember(task.id) { mutableStateOf(false) }
+    LaunchedEffect(isDone) {
+        // La card puede reutilizarse (misma key) al moverse de grupo — una vez el
+        // backend confirma el completado, se libera la animación de salida.
+        if (isDone) isCompleting = false
+    }
+    LaunchedEffect(isCompleting) {
+        if (isCompleting) {
+            if (!reduceMotion) delay(260)
+            onComplete?.invoke()
+        }
+    }
+    val cardScale by animateFloatAsState(
+        targetValue = if (isCompleting) 0.92f else 1f,
+        animationSpec = tween(durationMillis = if (reduceMotion) 0 else 260),
+        label = "taskCardScale"
+    )
+    val cardAlpha by animateFloatAsState(
+        targetValue = if (isCompleting) 0f else 1f,
+        animationSpec = tween(durationMillis = if (reduceMotion) 0 else 260),
+        label = "taskCardAlpha"
+    )
+
+    Box(modifier = modifier) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .graphicsLayer {
+                scaleX = cardScale
+                scaleY = cardScale
+                alpha = cardAlpha
+            }
+            .clickable(enabled = !isCompleting, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (isDone) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.surface
@@ -641,22 +737,26 @@ private fun TaskCard(
                 )
 
                 if (!isDone && onComplete != null) {
-                    Button(
-                        onClick = onComplete,
-                        enabled = !isLoading,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        ),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text("✅ Hecho", style = MaterialTheme.typography.labelMedium)
+                    if (isCompleting) {
+                        AnimatedCheckmark(reduceMotion = reduceMotion)
+                    } else {
+                        Button(
+                            onClick = { isCompleting = true },
+                            enabled = !isLoading,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text("✅ Hecho", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
                 } else if (isDone) {
@@ -744,7 +844,7 @@ private fun TaskCard(
                     Text(
                         text = "✅ ${formatDeadline(task.lastCompletedDate!!)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.semanticColors.success
                     )
                 } else if (task.dueDate > 0) {
                     val deadlineText = formatDeadline(task.dueDate)
@@ -764,15 +864,16 @@ private fun TaskCard(
 
                 // Assignment status
                 if (totalAssigned > 0) {
+                    val allDone = completedCount == totalAssigned
                     Surface(
                         shape = MaterialTheme.shapes.small,
-                        color = Teal100
+                        color = if (allDone) MaterialTheme.semanticColors.successContainer else Teal100
                     ) {
                         Text(
                             text = "✅ $completedCount/$totalAssigned",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = Teal800,
+                            color = if (allDone) MaterialTheme.semanticColors.onSuccessContainer else Teal800,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -799,6 +900,91 @@ private fun TaskCard(
             }
         }
     }
+
+        // Confeti mínimo mientras la card se anima de salida al completar.
+        if (isCompleting && !reduceMotion) {
+            ConfettiOverlay(modifier = Modifier.matchParentSize())
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+//  AnimatedCheckmark – ✅ con bounce al completar una tarea
+// ────────────────────────────────────────────────────────────
+
+@Composable
+private fun AnimatedCheckmark(reduceMotion: Boolean, modifier: Modifier = Modifier) {
+    var animateIn by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animateIn = true }
+    val scale by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0f,
+        animationSpec = if (reduceMotion) tween(0) else spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "checkBounce"
+    )
+    Surface(
+        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        shape = MaterialTheme.shapes.small,
+        color = Teal100
+    ) {
+        Text(
+            text = "✅",
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelMedium
+        )
+    }
+}
+
+// ────────────────────────────────────────────────────────────
+//  ConfettiOverlay – partículas mínimas al completar (sin librerías)
+// ────────────────────────────────────────────────────────────
+
+private data class ConfettiParticle(
+    val startX: Float,
+    val colorIndex: Int,
+    val fallDelay: Float,
+    val horizontalDrift: Float,
+    val rotationSpeed: Float
+)
+
+@Composable
+private fun ConfettiOverlay(modifier: Modifier = Modifier) {
+    val particles = remember {
+        List(12) {
+            ConfettiParticle(
+                startX = Random.nextFloat(),
+                colorIndex = Random.nextInt(4),
+                fallDelay = Random.nextFloat() * 0.2f,
+                horizontalDrift = (Random.nextFloat() - 0.5f) * 0.5f,
+                rotationSpeed = (Random.nextFloat() - 0.5f) * 540f
+            )
+        }
+    }
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f, animationSpec = tween(durationMillis = 1000, easing = LinearEasing))
+    }
+    val colors = listOf(Teal500, Coral500, Teal300, Coral300)
+
+    Canvas(modifier = modifier) {
+        val particleSize = 6.dp.toPx()
+        particles.forEach { particle ->
+            val t = ((progress.value - particle.fallDelay) / (1f - particle.fallDelay)).coerceIn(0f, 1f)
+            if (t <= 0f) return@forEach
+            val x = (particle.startX + particle.horizontalDrift * t) * size.width
+            val y = t * size.height
+            val alpha = 1f - t
+            rotate(degrees = particle.rotationSpeed * t, pivot = Offset(x, y)) {
+                drawRect(
+                    color = colors[particle.colorIndex].copy(alpha = alpha),
+                    topLeft = Offset(x - particleSize / 2f, y - particleSize / 2f),
+                    size = Size(particleSize, particleSize)
+                )
+            }
+        }
+    }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -810,22 +996,27 @@ private fun GroupHeader(
     label: String,
     count: Int,
     isOverdue: Boolean,
+    isDueSoon: Boolean = false,
     isNoDate: Boolean,
     isCollapsed: Boolean,
     onToggle: () -> Unit
 ) {
+    val semantic = MaterialTheme.semanticColors
     val backgroundColor = when {
         isOverdue -> Coral100
+        isDueSoon -> semantic.warningContainer
         isNoDate -> MaterialTheme.colorScheme.surfaceVariant
         else -> Teal50
     }
     val contentColor = when {
         isOverdue -> Coral800
+        isDueSoon -> semantic.onWarningContainer
         isNoDate -> MaterialTheme.colorScheme.onSurfaceVariant
         else -> Teal800
     }
     val dotColor = when {
         isOverdue -> Coral600
+        isDueSoon -> semantic.warning
         isNoDate -> MaterialTheme.colorScheme.outline
         else -> Teal600
     }

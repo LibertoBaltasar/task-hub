@@ -2,6 +2,9 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,19 +52,20 @@ class HomeScreenModel(
 
             try {
                 val households = householdStore.getSavedHouseholds()
-                val allTasks = mutableListOf<Pair<String, TaskResponse>>() // householdId → task
 
-                for (h in households) {
-                    try {
-                        val tasks = repo.getTasks(h.id)
-                        tasks.forEach { task ->
-                            if (isPending(task)) {
-                                allTasks.add(h.id to task)
+                val allTasks = coroutineScope {
+                    households.map { h ->
+                        async {
+                            try {
+                                repo.getTasks(h.id)
+                                    .filter { isPending(it) }
+                                    .map { h.id to it }
+                            } catch (_: Exception) {
+                                // Silently skip households that fail (offline, deleted, etc.)
+                                emptyList()
                             }
                         }
-                    } catch (_: Exception) {
-                        // Silently skip households that fail (offline, deleted, etc.)
-                    }
+                    }.awaitAll().flatten()
                 }
 
                 // Sort: overdue first, then by due date, then no-due-date last

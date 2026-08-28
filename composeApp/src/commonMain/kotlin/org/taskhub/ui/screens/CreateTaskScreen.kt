@@ -668,7 +668,7 @@ data class CreateTaskScreen(
                                     onClick = { showDatePicker = true },
                                     modifier = Modifier.weight(1f).height(56.dp)
                                 ) {
-                                    Icon(Icons.Default.DateRange, contentDescription = null)
+                                    Icon(Icons.Default.DateRange, contentDescription = "Elegir fecha")
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         text = if (deadlineDay.isBlank()) "Elegir fecha" else deadlineDay,

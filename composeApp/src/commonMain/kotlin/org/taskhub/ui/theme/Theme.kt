@@ -6,6 +6,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -98,7 +99,7 @@ private val DefaultLightColorScheme = lightColorScheme(
     primaryContainer = Teal100,
     onPrimaryContainer = Teal900,
 
-    secondary = Teal700,
+    secondary = Teal800,
     onSecondary = Color.White,
     secondaryContainer = Teal50,
     onSecondaryContainer = Teal700,
@@ -311,9 +312,13 @@ fun TaskHubTheme(
         TaskHubThemeType.MINIMAL -> if (darkTheme) MinimalDarkColorScheme else MinimalLightColorScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = TaskHubTypography,
-        content = content
-    )
+    val semanticColors = if (darkTheme) DarkSemanticColors else LightSemanticColors
+
+    CompositionLocalProvider(LocalSemanticColors provides semanticColors) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = TaskHubTypography,
+            content = content
+        )
+    }
 }

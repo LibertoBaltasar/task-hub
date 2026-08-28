@@ -75,7 +75,7 @@ data class NotificationListScreen(
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text(
-                                        text = "No tienes notificaciones",
+                                        text = "No tienes notificaciones pendientes",
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center
@@ -165,7 +165,7 @@ private fun NotificationCard(
                         .size(8.dp)
                         .offset(y = 6.dp),
                     shape = MaterialTheme.shapes.extraLarge,
-                    color = Coral500
+                    color = MaterialTheme.semanticColors.info
                 ) {}
                 Spacer(modifier = Modifier.width(8.dp))
             }

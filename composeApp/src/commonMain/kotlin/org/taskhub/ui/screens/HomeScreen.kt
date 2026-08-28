@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -26,10 +27,13 @@ import org.koin.compose.koinInject
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
 import org.taskhub.storage.SettingsStore
+import org.taskhub.ui.components.AppLogo
+import org.taskhub.ui.components.EmptyHouseholdsIllustration
 import org.taskhub.ui.components.HouseholdTaskSection
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
+import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.models.HomeScreenModel
@@ -162,7 +166,13 @@ class HomeScreen : Screen {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Task Hub", fontWeight = FontWeight.Bold) },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AppLogo(size = 28.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Task Hub", fontWeight = FontWeight.Bold)
+                        }
+                    },
                     actions = {
                         IconButton(onClick = {
                             navigator.push(ProfileScreen(households))
@@ -189,7 +199,7 @@ class HomeScreen : Screen {
                                 },
                                 containerColor = MaterialTheme.colorScheme.secondary,
                                 contentColor = MaterialTheme.colorScheme.onSecondary,
-                                icon = { Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                icon = { Icon(Icons.Default.Add, contentDescription = "Crear espacio", modifier = Modifier.size(20.dp)) },
                                 text = { Text("Crear espacio", fontWeight = FontWeight.SemiBold) }
                             )
                             Spacer(Modifier.height(12.dp))
@@ -200,7 +210,7 @@ class HomeScreen : Screen {
                                 },
                                 containerColor = MaterialTheme.colorScheme.tertiary,
                                 contentColor = MaterialTheme.colorScheme.onTertiary,
-                                icon = { Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                icon = { Icon(Icons.Default.Home, contentDescription = "Unirse a espacio", modifier = Modifier.size(20.dp)) },
                                 text = { Text("Unirse a espacio", fontWeight = FontWeight.SemiBold) }
                             )
                             Spacer(Modifier.height(12.dp))
@@ -224,13 +234,43 @@ class HomeScreen : Screen {
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
+                        .padding(24.dp)
+                ) {
+                    ShimmerList(count = 4, itemHeight = 96.dp)
+                }
+            } else if (households.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
                         .padding(24.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = Teal600)
+                        EmptyHouseholdsIllustration()
                         Spacer(Modifier.height(16.dp))
-                        Text("Preparando tu espacio...", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "Crea tu primer espacio",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Organiza las tareas del hogar y suma puntos en equipo.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(24.dp))
+                        Button(
+                            onClick = { navigator.push(CreateHouseholdScreen()) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Crear espacio", fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             } else {
