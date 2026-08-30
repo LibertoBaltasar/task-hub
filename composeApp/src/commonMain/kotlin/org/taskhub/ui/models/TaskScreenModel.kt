@@ -598,6 +598,7 @@ class TaskScreenModel(
                 _detailState.value = TaskDetailUiState.Success(task, assignments, members)
 
                 val myMemberId = try { repo.resolveCurrentMember(householdId) } catch (_: Exception) { null }
+                _currentMemberId.value = myMemberId
                 _myAssignment.value = assignments.find { it.memberId == myMemberId }
             } catch (e: Exception) {
                 _detailState.value = TaskDetailUiState.Error(

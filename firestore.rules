@@ -3,14 +3,44 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v3 — NO DESPLEGADO)
+    //  Task Hub — Reglas de seguridad (v4 — NO DESPLEGADO)
     //
-    //  ⚠️ Este archivo se editó como parte de la auditoría de
-    //  2026-08-30 (ver docs/audit-2026-08-30.md) pero NO se ha
-    //  desplegado a Firebase — hazlo manualmente (PATCH, no POST,
-    //  ver CLAUDE.md) tras revisar el impacto en la UI descrito abajo.
+    //  ⚠️ Este archivo se editó como parte del encargo "modelo de roles
+    //  seguro" de 2026-08-30 (cierra los 2 bloqueantes de la auditoría
+    //  anterior, ver docs/audit-2026-08-30.md) pero NO se ha desplegado
+    //  a Firebase — hazlo manualmente (PATCH, no POST, ver CLAUDE.md)
+    //  tras revisar el impacto en la UI descrito abajo.
     //
-    //  Cambios respecto a v2 (cierran huecos encontrados en la auditoría):
+    //  Cambios respecto a v3 (cierran los 2 bloqueantes que impedían
+    //  desplegar v3 — ver "IMPORTANTE" de v3 más abajo):
+    //   - members/{mid} (auto-alta con código de invitación): el rol YA
+    //     NO es libre. v3 permitía "child" o "admin" porque
+    //     JoinHouseholdScreen.kt dejaba elegir; ahora esa pantalla fuerza
+    //     "child" siempre (nadie se autoproclama admin al unirse por
+    //     código — un admin existente asciende al segundo progenitor
+    //     después). Se exige `role == "child"` en la propia regla, no solo
+    //     en la UI, para que no se pueda saltar por REST directo.
+    //     CreateProfileScreen.kt (crear el PRIMER perfil justo tras crear
+    //     el hogar) NO usa esta rama: ese flujo solo es alcanzable siendo
+    //     ya `ownerId` del hogar recién creado, así que cae en la rama
+    //     `isOwner(hid)` de abajo, que sigue permitiendo elegir rol
+    //     libremente (el creador del hogar eligiendo su propio rol).
+    //   - households/{hid}/tasks/{tid}: antes cualquier miembro podía
+    //     escribir cualquier campo de una tarea, incluido `completedBy`
+    //     sin restricción — lo que permitía a un miembro no-admin usar
+    //     `reassignTaskCompletion` (REST directo) para robarle a otro
+    //     miembro los puntos de una tarea ya completada. Ahora un cambio
+    //     de `completedBy` que NO va acompañado de un cambio de
+    //     `lastCompletedDate` (la firma de una reasignación: ver
+    //     [FirestoreRepository.reassignTaskCompletion], que actualiza
+    //     `completedBy` en solitario vía `updateMask`) requiere
+    //     admin/owner. Completar una tarea (completeTask) y deshacer un
+    //     "hecho" (revertTaskCompletion) SIEMPRE cambian ambos campos a
+    //     la vez, así que un miembro normal los sigue pudiendo hacer.
+    //
+    //  (el resto de esta sección documenta los cambios de v2→v3, aún
+    //  vigentes en v4 salvo lo indicado arriba):
+    //
     //   - members/{mid}: antes CUALQUIER miembro podía update/delete el
     //     documento de CUALQUIER otro miembro sin restricción de campos,
     //     así que un perfil "child" podía auto-ascenderse a "role: admin"
@@ -23,11 +53,8 @@ service cloud.firestore {
     //     y que `userId` coincida con el UID que se está creando (evita
     //     que alguien se auto-registre suplantando el userId de otro
     //     usuario, lo que confundiría a resolveCurrentMember()/isMember()
-    //     del lado del cliente). El rol SÍ puede elegirse libremente
-    //     ("child" o "admin") porque JoinHouseholdScreen.kt lo permite
-    //     explícitamente (p. ej. el segundo progenitor uniéndose como
-    //     admin a un hogar ya creado) — restringir a solo "child" aquí
-    //     rompería ese flujo real de la app.
+    //     del lado del cliente). [en v3 el rol era libre aquí; en v4 se
+    //     fuerza a "child" — ver el bloque de cambios v3→v4 más arriba]
     //   - taskHistory/rewards: antes cualquier miembro podía editar/borrar
     //     el historial (rompe la integridad de puntos/estadísticas) o
     //     crear/editar recompensas (la UI ya restringe esto a admin/owner,
@@ -54,12 +81,10 @@ service cloud.firestore {
     //  REST directo. Cerrarlo del todo requeriría mover esa escritura a
     //  un backend/Cloud Function. Ver docs/audit-2026-08-30.md.
     //
-    //  IMPORTANTE — impacto en la app actual antes de desplegar:
-    //   - `reassignTaskCompletion` (TaskDetailScreen, "cambiar quién hizo
-    //     la tarea") escribe en taskHistory; con esta regla solo funciona
-    //     si quien lo hace es admin/owner. Si se usa desde miembros no-admin
-    //     en producción, gatéalo en la UI antes de desplegar, o relaja esa
-    //     regla a isMember(hid).
+    //  Los 2 bloqueantes de v3 (`reassignTaskCompletion` sin gatear por rol
+    //  y el selector libre de rol "Admin" al unirse) están resueltos en v4
+    //  tanto en la UI (TaskDetailScreen/HouseholdMemberList/JoinHouseholdScreen)
+    //  como en estas reglas — ver el bloque de cambios v3→v4 más arriba.
     //
     //  Modelo de acceso:
     //   - Todo acceso requiere autenticación (request.auth != null).
@@ -151,12 +176,15 @@ service cloud.firestore {
           // válido; se fuerza `userId == request.auth.uid` (nadie puede
           // auto-registrarse suplantando el userId de otro usuario) y
           // contadores en 0 para que nadie pueda entrar ya con saldo/racha
-          // inventados. El rol SÍ es libre ("child"/"admin"): JoinHouseholdScreen
-          // permite elegirlo explícitamente al unirse por código.
+          // inventados. El rol se fuerza a "child" (nombre de display
+          // "Miembro" — ver AppStrings, el valor interno NO cambia): nadie
+          // se autoproclama admin al unirse por código, un admin/owner
+          // existente asciende a quien haga falta después (ver el `update`
+          // de más abajo). JoinHouseholdScreen.kt ya no ofrece selector.
           || (request.auth.uid == mid
               && request.resource.data.inviteCode == householdDoc(hid).data.inviteCode
               && request.resource.data.userId == request.auth.uid
-              && request.resource.data.role in ["child", "admin"]
+              && request.resource.data.role == "child"
               && request.resource.data.totalPoints == 0
               && request.resource.data.currentStreak == 0
               && request.resource.data.bestStreak == 0)
@@ -176,8 +204,25 @@ service cloud.firestore {
     }
 
     // ── Contenido del hogar ──────────────────────────────────────
+    // Cualquier miembro puede leer/crear/borrar tareas y editar sus campos
+    // habituales (título, puntos, subtareas…) igual que antes. La excepción
+    // es reasignar `completedBy` de una tarea YA completada a otra persona
+    // sin tocar `lastCompletedDate` (la firma de
+    // [FirestoreRepository.reassignTaskCompletion], que solo toca ese
+    // campo vía `updateMask`) — eso mueve puntos de un miembro a otro y
+    // ahora requiere admin/owner. Completar (completeTask) y deshacer
+    // (revertTaskCompletion) cambian `completedBy` Y `lastCompletedDate`
+    // juntos, así que no caen en esta restricción.
     match /households/{hid}/tasks/{tid} {
-      allow read, write: if isMember(hid) || isOwner(hid);
+      allow read, create, delete: if isMember(hid) || isOwner(hid);
+      allow update: if isTrusted(hid)
+        || (
+          (isMember(hid) || isOwner(hid))
+          && !(
+            request.resource.data.get('completedBy', null) != resource.data.get('completedBy', null)
+            && request.resource.data.get('lastCompletedDate', null) == resource.data.get('lastCompletedDate', null)
+          )
+        );
     }
     match /households/{hid}/tasks/{tid}/assignments/{aid} {
       allow read, write: if isMember(hid) || isOwner(hid);
