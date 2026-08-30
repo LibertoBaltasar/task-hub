@@ -17,7 +17,9 @@ import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardActionState
 import org.taskhub.ui.theme.*
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 
 data class MemberRewardScreen(
     val householdId: String,
@@ -31,6 +33,8 @@ data class MemberRewardScreen(
         val memberModel = koinScreenModel<MemberScreenModel>()
         val memberState by memberModel.uiState.collectAsState()
         val actionState by memberModel.rewardActionState.collectAsState()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var showConfirmDialog by remember { mutableStateOf(false) }
 
@@ -66,7 +70,7 @@ data class MemberRewardScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Canjear",
+                    title = s("member_reward_title"),
                     onBack = { navigator.pop() }
                 )
 
@@ -120,7 +124,7 @@ data class MemberRewardScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Coste",
+                                text = s("member_reward_cost_label"),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -141,7 +145,7 @@ data class MemberRewardScreen(
                             Spacer(Modifier.height(8.dp))
 
                             Text(
-                                text = "Tus puntos",
+                                text = s("member_reward_your_points_label"),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -155,7 +159,7 @@ data class MemberRewardScreen(
                             if (!canAfford) {
                                 Spacer(Modifier.height(8.dp))
                                 Text(
-                                    text = "Te faltan ⭐ ${reward.cost - memberPoints}",
+                                    text = s("member_reward_missing_points").replace("%d", (reward.cost - memberPoints).toString()),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
@@ -201,7 +205,7 @@ data class MemberRewardScreen(
                             )
                         } else {
                             Text(
-                                text = if (canAfford) "Canjear Recompensa" else "Puntos insuficientes",
+                                text = if (canAfford) s("member_reward_redeem_btn") else s("member_reward_insufficient"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -211,7 +215,7 @@ data class MemberRewardScreen(
                     if (!canAfford) {
                         Spacer(Modifier.height(12.dp))
                         TextButton(onClick = { navigator.pop() }) {
-                            Text("← Volver a recompensas")
+                            Text(s("member_reward_back_to_rewards"))
                         }
                     }
 
@@ -224,11 +228,13 @@ data class MemberRewardScreen(
         if (showConfirmDialog) {
             AlertDialog(
                 onDismissRequest = { showConfirmDialog = false },
-                title = { Text("Confirmar canje") },
+                title = { Text(s("member_reward_confirm_title")) },
                 text = {
                     Text(
-                        "¿Canjear '${reward.title}' por ⭐ ${reward.cost} puntos?\n\n" +
-                            "Te quedarán ⭐ ${memberPoints - reward.cost} puntos."
+                        s("member_reward_confirm_text")
+                            .replace("%1", reward.title)
+                            .replace("%2", reward.cost.toString())
+                            .replace("%3", (memberPoints - reward.cost).toString())
                     )
                 },
                 confirmButton = {
@@ -244,12 +250,12 @@ data class MemberRewardScreen(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
                     ) {
-                        Text("Sí, canjear")
+                        Text(s("member_reward_confirm_yes"))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showConfirmDialog = false }) {
-                        Text("Cancelar")
+                        Text(s("household_cancel"))
                     }
                 }
             )

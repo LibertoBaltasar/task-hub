@@ -8,6 +8,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.UserProfile
+import org.taskhub.platform.HapticKind
+import org.taskhub.platform.vibrate
+import org.taskhub.storage.SettingsStore
 
 /**
  * Estados de carga del perfil de usuario (propio o ajeno).
@@ -24,8 +27,13 @@ sealed class ProfileUiState {
  * Maneja tanto el perfil propio (editable) como el de otros (solo lectura).
  */
 class ProfileScreenModel(
-    private val repo: FirestoreRepository
+    private val repo: FirestoreRepository,
+    private val settingsStore: SettingsStore
 ) : ScreenModel {
+
+    private fun buzz(kind: HapticKind) {
+        if (settingsStore.isVibrationEnabled()) vibrate(kind)
+    }
 
     private val _myProfileState = MutableStateFlow<ProfileUiState>(ProfileUiState.Idle)
     val myProfileState: StateFlow<ProfileUiState> = _myProfileState.asStateFlow()
@@ -110,10 +118,12 @@ class ProfileScreenModel(
                     status = status
                 )
                 _saveState.value = ProfileSaveState.Saved
+                buzz(HapticKind.SUCCESS)
             } catch (e: Exception) {
                 _saveState.value = ProfileSaveState.Error(
                     e.message ?: "Error al guardar el perfil"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }

@@ -17,7 +17,10 @@ import org.taskhub.network.models.Subtask
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.DebugFlags
 import org.taskhub.platform.AdController
+import org.taskhub.platform.HapticKind
 import org.taskhub.platform.logAnalyticsEvent
+import org.taskhub.platform.vibrate
+import org.taskhub.storage.SettingsStore
 import kotlinx.datetime.*
 
 /**
@@ -138,8 +141,13 @@ class TaskScreenModel(
     private val repo: FirestoreRepository,
     private val notificationScheduler: NotificationScheduler,
     private val calendarSync: CalendarSyncManager,
-    private val adController: AdController
+    private val adController: AdController,
+    private val settingsStore: SettingsStore
 ) : ScreenModel {
+
+    private fun buzz(kind: HapticKind) {
+        if (settingsStore.isVibrationEnabled()) vibrate(kind)
+    }
 
     private val _listState = MutableStateFlow<TaskListUiState>(TaskListUiState.Idle)
     val listState: StateFlow<TaskListUiState> = _listState.asStateFlow()
@@ -331,10 +339,12 @@ class TaskScreenModel(
                 }
 
                 _actionState.value = TaskActionState.Success
+                buzz(HapticKind.SUCCESS)
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al crear tarea"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -439,6 +449,7 @@ class TaskScreenModel(
                 } catch (_: Exception) { }
 
                 _actionState.value = TaskActionState.Success
+                buzz(HapticKind.SUCCESS)
 
                 // Registrar el evento (métrica clave de engagement/racha) y mostrar
                 // el interstitial son efectos secundarios no críticos — un fallo
@@ -453,6 +464,7 @@ class TaskScreenModel(
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al completar tarea"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -471,6 +483,7 @@ class TaskScreenModel(
     fun undoCompleteTask() {
         val state = _undoState.value ?: return
         _undoState.value = null
+        buzz(HapticKind.LIGHT)
         screenModelScope.launch {
             try {
                 repo.addMemberPoints(state.householdId, state.memberId, -state.pointsAwarded)
@@ -708,10 +721,12 @@ class TaskScreenModel(
                 syncCalendarOnUnassigned(householdId, taskId)
                 repo.deleteTask(householdId, taskId)
                 _actionState.value = TaskActionState.Success
+                buzz(HapticKind.WARNING)
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al eliminar tarea"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -930,6 +945,7 @@ class TaskScreenModel(
                     if (st.id == subtaskId) st.copy(completed = !st.completed) else st
                 }
                 repo.updateSubtasks(householdId, taskId, updatedSubtasks)
+                buzz(HapticKind.SELECTION)
                 // Refresh detail
                 loadTaskDetail(householdId, taskId)
             } catch (_: Exception) {

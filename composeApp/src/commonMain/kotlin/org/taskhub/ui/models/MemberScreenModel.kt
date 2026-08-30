@@ -10,6 +10,9 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.network.models.RewardRedemption
+import org.taskhub.platform.HapticKind
+import org.taskhub.platform.vibrate
+import org.taskhub.storage.SettingsStore
 
 sealed class MemberUiState {
     data object Idle : MemberUiState()
@@ -49,8 +52,13 @@ sealed class DonateActionState {
 }
 
 class MemberScreenModel(
-    private val repo: FirestoreRepository
+    private val repo: FirestoreRepository,
+    private val settingsStore: SettingsStore
 ) : ScreenModel {
+
+    private fun buzz(kind: HapticKind) {
+        if (settingsStore.isVibrationEnabled()) vibrate(kind)
+    }
 
     private val _uiState = MutableStateFlow<MemberUiState>(MemberUiState.Idle)
     val uiState: StateFlow<MemberUiState> = _uiState.asStateFlow()
@@ -87,10 +95,12 @@ class MemberScreenModel(
                 // Reload the full member list
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
+                buzz(HapticKind.SUCCESS)
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
                     e.message ?: "Error al añadir miembro"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -165,12 +175,14 @@ class MemberScreenModel(
             try {
                 repo.createReward(householdId, title, description, cost, icon, createdBy)
                 _rewardActionState.value = RewardActionState.Success()
+                buzz(HapticKind.SUCCESS)
                 // Reload
                 loadRewards(householdId)
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
                     e.message ?: "Error al crear recompensa"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -179,11 +191,13 @@ class MemberScreenModel(
         screenModelScope.launch {
             try {
                 repo.deleteReward(householdId, rewardId)
+                buzz(HapticKind.WARNING)
                 loadRewards(householdId)
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
                     e.message ?: "Error al eliminar recompensa"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -200,12 +214,14 @@ class MemberScreenModel(
             try {
                 val redemption = repo.redeemReward(householdId, rewardId, memberId, pointsSpent)
                 _rewardActionState.value = RewardActionState.Success(redemption)
+                buzz(HapticKind.SUCCESS)
                 // Reload members to refresh points
                 loadMembers(householdId)
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
                     e.message ?: "Error al canjear recompensa"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -230,9 +246,11 @@ class MemberScreenModel(
                 is FirestoreRepository.AppreciateResult.Ok -> {
                     loadMembers(householdId)
                     _appreciateActionState.value = AppreciateActionState.Success(result.remaining)
+                    buzz(HapticKind.SUCCESS)
                 }
                 is FirestoreRepository.AppreciateResult.Error -> {
                     _appreciateActionState.value = AppreciateActionState.Error(appreciateErrorKey(result.reason))
+                    buzz(HapticKind.ERROR)
                 }
             }
         }
@@ -246,9 +264,11 @@ class MemberScreenModel(
                 is FirestoreRepository.DonateResult.Ok -> {
                     loadMembers(householdId)
                     _donateActionState.value = DonateActionState.Success(result.donorNewTotal)
+                    buzz(HapticKind.SUCCESS)
                 }
                 is FirestoreRepository.DonateResult.Error -> {
                     _donateActionState.value = DonateActionState.Error(donateErrorKey(result.reason))
+                    buzz(HapticKind.ERROR)
                 }
             }
         }

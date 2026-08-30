@@ -14,7 +14,9 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 
@@ -25,6 +27,8 @@ class CreateHouseholdScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<HouseholdScreenModel>()
         val uiState by model.uiState.collectAsState()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var householdName by remember { mutableStateOf("") }
         val focusManager = LocalFocusManager.current
@@ -46,7 +50,7 @@ class CreateHouseholdScreen : Screen {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TaskHubTopBar(
-                    title = "Crear nuevo espacio",
+                    title = s("create_household_title"),
                     onBack = { navigator.pop() }
                 )
                 Column(
@@ -65,7 +69,7 @@ class CreateHouseholdScreen : Screen {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Crear nuevo espacio",
+                    text = s("create_household_title"),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -73,7 +77,7 @@ class CreateHouseholdScreen : Screen {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Dale un nombre a tu espacio para empezar",
+                    text = s("create_household_subtitle"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -83,8 +87,8 @@ class CreateHouseholdScreen : Screen {
                 OutlinedTextField(
                     value = householdName,
                     onValueChange = { householdName = it },
-                    label = { Text("Nombre del espacio") },
-                    placeholder = { Text("Ej: Mi equipo") },
+                    label = { Text(s("create_household_name_label")) },
+                    placeholder = { Text(s("create_household_name_placeholder")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -114,7 +118,7 @@ class CreateHouseholdScreen : Screen {
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Crear espacio", style = MaterialTheme.typography.titleMedium)
+                        Text(s("welcome_create"), style = MaterialTheme.typography.titleMedium)
                     }
                 }
 

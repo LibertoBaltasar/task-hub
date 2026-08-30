@@ -18,7 +18,9 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.UserProfile
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.ProfileScreenModel
 import org.taskhub.ui.models.ProfileUiState
 import org.taskhub.ui.theme.*
@@ -42,6 +44,8 @@ data class PublicProfileScreen(
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<ProfileScreenModel>()
         val profileState by model.otherProfileState.collectAsState()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         LaunchedEffect(userId) {
             model.loadUserProfile(userId)
@@ -53,7 +57,7 @@ data class PublicProfileScreen(
                     title = { Text(member.displayName, fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = { navigator.pop() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, s("nav_back_content_description"))
                         }
                     }
                 )
@@ -130,6 +134,9 @@ private fun PublicProfileContent(
     currentStreak: Int,
     bestStreak: Int
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -163,7 +170,7 @@ private fun PublicProfileContent(
             color = if (role == "admin") Coral500.copy(alpha = 0.12f) else Teal600.copy(alpha = 0.12f)
         ) {
             Text(
-                text = if (role == "admin") "👑 Administrador" else "🧒 Niño/a",
+                text = if (role == "admin") s("public_profile_role_admin") else s("member_role_child_short"),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (role == "admin") Coral500 else Teal600,
@@ -198,7 +205,7 @@ private fun PublicProfileContent(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Sobre mí",
+                        text = s("public_profile_about_me"),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
@@ -217,7 +224,7 @@ private fun PublicProfileContent(
 
         // ── Estadísticas ──
         Text(
-            text = "📊 Estadísticas en este espacio",
+            text = s("public_profile_stats_title"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.align(Alignment.Start)
@@ -232,21 +239,21 @@ private fun PublicProfileContent(
                 modifier = Modifier.weight(1f),
                 emoji = "⭐",
                 value = "$totalPoints",
-                label = "Puntos"
+                label = s("public_profile_stat_points")
             )
             // Racha actual
             StatCard(
                 modifier = Modifier.weight(1f),
                 emoji = "🔥",
                 value = "$currentStreak",
-                label = "Racha"
+                label = s("public_profile_stat_streak")
             )
             // Mejor racha
             StatCard(
                 modifier = Modifier.weight(1f),
                 emoji = "🏆",
                 value = "$bestStreak",
-                label = "Récord"
+                label = s("public_profile_stat_record")
             )
         }
 

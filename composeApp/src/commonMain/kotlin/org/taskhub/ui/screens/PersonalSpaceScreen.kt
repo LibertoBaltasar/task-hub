@@ -14,7 +14,9 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.CalendarSyncManager
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
@@ -45,6 +47,8 @@ data class PersonalSpaceScreen(
         val memberModel = koinScreenModel<MemberScreenModel>()
         val memberState by memberModel.uiState.collectAsState()
         val calendarSync = koinInject<CalendarSyncManager>()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         // Cargar el miembro "Yo" para pasarlo a las pantallas de tareas/calendario
         LaunchedEffect(householdId) {
@@ -65,7 +69,7 @@ data class PersonalSpaceScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Mi espacio",
+                    title = s("personal_space_title"),
                     onBack = { navigator.replaceAll(HomeScreen()) }
                 )
 
@@ -93,7 +97,7 @@ data class PersonalSpaceScreen(
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Mi espacio personal",
+                                    text = s("personal_space_hero_title"),
                                     style = MaterialTheme.typography.headlineSmall,
                                     color = Teal900,
                                     fontWeight = FontWeight.Bold,
@@ -102,7 +106,7 @@ data class PersonalSpaceScreen(
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "Tus tareas y hábitos, sin compartir con nadie",
+                                    text = s("personal_space_hero_subtitle"),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.primary,
                                     textAlign = TextAlign.Center,
@@ -121,7 +125,7 @@ data class PersonalSpaceScreen(
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text(
-                                text = "Ver mis tareas",
+                                text = s("personal_space_view_tasks"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -137,7 +141,7 @@ data class PersonalSpaceScreen(
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text(
-                                text = "Nueva tarea",
+                                text = s("personal_space_new_task"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -153,7 +157,7 @@ data class PersonalSpaceScreen(
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text(
-                                text = "Calendario",
+                                text = s("personal_space_calendar"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )

@@ -30,7 +30,9 @@ import org.taskhub.ui.models.TaskActionState
 import org.taskhub.ui.models.TaskScreenModel
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 
 // ────────────────────────────────────────────────────────────
@@ -51,6 +53,8 @@ data class EditTaskScreen(
         val repo = koinInject<FirestoreRepository>()
         val actionState by taskModel.actionState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         LaunchedEffect(Unit) {
             taskModel.resetActionState()
@@ -151,10 +155,10 @@ data class EditTaskScreen(
                             deadlineDay = "${date.year}-${date.monthNumber.toString().padStart(2, '0')}-${date.dayOfMonth.toString().padStart(2, '0')}"
                         }
                         showDatePicker = false
-                    }) { Text("Aceptar") }
+                    }) { Text(s("task_date_accept")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+                    TextButton(onClick = { showDatePicker = false }) { Text(s("household_cancel")) }
                 }
             ) {
                 DatePicker(state = datePickerState)
@@ -168,7 +172,7 @@ data class EditTaskScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Editar tarea",
+                    title = s("edit_task_title"),
                     onBack = { navigator.pop() },
                     actions = {
                         if (actionState !is TaskActionState.Loading) {
@@ -221,7 +225,7 @@ data class EditTaskScreen(
                                     contentColor = MaterialTheme.colorScheme.primary
                                 )
                             ) {
-                                Text("Guardar", fontWeight = FontWeight.Bold)
+                                Text(s("edit_task_submit"), fontWeight = FontWeight.Bold)
                             }
                         } else {
                             CircularProgressIndicator(
@@ -260,7 +264,7 @@ data class EditTaskScreen(
                     // ── Basic info ──
                     item {
                         Text(
-                            text = "📝 Información básica",
+                            text = s("create_task_section_basic_info"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -271,13 +275,13 @@ data class EditTaskScreen(
                         OutlinedTextField(
                             value = title,
                             onValueChange = { title = it },
-                            label = { Text("Título de la tarea *") },
+                            label = { Text(s("create_task_title_field")) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             isError = title.isBlank(),
                             supportingText = {
                                 if (title.isBlank()) {
-                                    Text("El título es obligatorio")
+                                    Text(s("create_task_title_required"))
                                 }
                             }
                         )
@@ -286,7 +290,7 @@ data class EditTaskScreen(
                     // ── Checklist (subtareas) ──
                     item {
                         Text(
-                            text = "✅ Checklist",
+                            text = s("create_task_section_checklist"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -302,7 +306,7 @@ data class EditTaskScreen(
                             OutlinedTextField(
                                 value = subtaskText,
                                 onValueChange = { subtaskText = it },
-                                label = { Text("Añadir ítem") },
+                                label = { Text(s("create_task_add_item")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -360,7 +364,7 @@ data class EditTaskScreen(
                         OutlinedTextField(
                             value = description,
                             onValueChange = { description = it },
-                            label = { Text("Descripción") },
+                            label = { Text(s("create_task_description_label")) },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
                             maxLines = 4
@@ -371,16 +375,16 @@ data class EditTaskScreen(
                         OutlinedTextField(
                             value = pointsText,
                             onValueChange = { pointsText = it },
-                            label = { Text("Puntos") },
+                            label = { Text(s("public_profile_stat_points")) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             isError = (pointsText.toIntOrNull() ?: -1) <= 0,
                             supportingText = {
                                 if (pointsText.toIntOrNull() == null) {
-                                    Text("Debe ser un número")
+                                    Text(s("create_task_points_error_nan"))
                                 } else if ((pointsText.toIntOrNull() ?: -1) <= 0) {
-                                    Text("Debe ser mayor que 0")
+                                    Text(s("create_task_points_error_positive"))
                                 }
                             }
                         )
@@ -389,7 +393,7 @@ data class EditTaskScreen(
                     // ── Frequency ──
                     item {
                         Text(
-                            text = "🔄 Frecuencia",
+                            text = s("create_task_section_frequency"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -403,10 +407,10 @@ data class EditTaskScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val freqs = listOf(
-                                "once" to "Una vez",
-                                "daily" to "Diaria",
-                                "weekly" to "Semanal",
-                                "monthly" to "Mensual"
+                                "once" to s("recurrence_once"),
+                                "daily" to s("recurrence_daily"),
+                                "weekly" to s("recurrence_weekly"),
+                                "monthly" to s("recurrence_monthly")
                             )
                             freqs.forEach { (key, label) ->
                                 FilterChip(
@@ -426,7 +430,7 @@ data class EditTaskScreen(
                     if (frequency == "weekly") {
                         item {
                             Text(
-                                text = "Días de repetición",
+                                text = s("recurrence_days_label"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -436,7 +440,15 @@ data class EditTaskScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                val days = listOf(1 to "L", 2 to "M", 3 to "X", 4 to "J", 5 to "V", 6 to "S", 7 to "D")
+                                val days = listOf(
+                                    1 to s("day_letter_monday"),
+                                    2 to s("day_letter_tuesday"),
+                                    3 to s("day_letter_wednesday"),
+                                    4 to s("day_letter_thursday"),
+                                    5 to s("day_letter_friday"),
+                                    6 to s("day_letter_saturday"),
+                                    7 to s("day_letter_sunday")
+                                )
                                 days.forEach { (day, label) ->
                                     FilterChip(
                                         selected = day in recurrenceDays,
@@ -462,7 +474,7 @@ data class EditTaskScreen(
                     if (frequency == "monthly") {
                         item {
                             Text(
-                                text = "Día del mes",
+                                text = s("recurrence_day_of_month_label"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -478,7 +490,7 @@ data class EditTaskScreen(
                                         else -> recurrenceDay
                                     }
                                 },
-                                label = { Text("Día (1-31)") },
+                                label = { Text(s("create_task_day_of_month_field")) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(0.4f)
@@ -489,7 +501,7 @@ data class EditTaskScreen(
                     // ── Tags ──
                     item {
                         Text(
-                            text = "🏷️ Etiquetas",
+                            text = s("create_task_section_tags"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -505,7 +517,7 @@ data class EditTaskScreen(
                             OutlinedTextField(
                                 value = tagsText,
                                 onValueChange = { tagsText = it },
-                                label = { Text("Añadir etiqueta") },
+                                label = { Text(s("create_task_add_tag")) },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -571,14 +583,14 @@ data class EditTaskScreen(
                     // ── Assignment ──
                     item {
                         Text(
-                            text = "👥 Asignación",
+                            text = s("create_task_section_assignment"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                         if (assignmentsLoadFailed) {
                             Text(
-                                text = "⚠️ No se pudieron cargar las asignaciones actuales. Guardar podría dejar la tarea sin asignar.",
+                                text = s("edit_task_assignment_load_error"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -645,7 +657,7 @@ data class EditTaskScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "🔄 Rotación semanal (diferente persona cada día)",
+                                text = s("edit_task_rotation_toggle"),
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f)
                             )
@@ -665,14 +677,14 @@ data class EditTaskScreen(
                             is MemberUiState.Success -> {
                                 val members = mState.members
                                 val days = listOf(
-                                    1 to "Lunes", 2 to "Martes", 3 to "Miércoles",
-                                    4 to "Jueves", 5 to "Viernes", 6 to "Sábado", 7 to "Domingo"
+                                    1 to s("recurrence_day_monday"), 2 to s("recurrence_day_tuesday"), 3 to s("recurrence_day_wednesday"),
+                                    4 to s("recurrence_day_thursday"), 5 to s("recurrence_day_friday"), 6 to s("recurrence_day_saturday"), 7 to s("recurrence_day_sunday")
                                 )
                                 days.forEach { (day, label) ->
                                     item {
                                         var expanded by remember { mutableStateOf(false) }
                                         val selectedMember = members.find { it.id == rotationSlots[day] }
-                                        val displayText = selectedMember?.displayName ?: "Sin asignar"
+                                        val displayText = selectedMember?.displayName ?: s("edit_task_unassigned")
 
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -704,7 +716,7 @@ data class EditTaskScreen(
                                                     onDismissRequest = { expanded = false }
                                                 ) {
                                                     DropdownMenuItem(
-                                                        text = { Text("Sin asignar") },
+                                                        text = { Text(s("edit_task_unassigned")) },
                                                         onClick = {
                                                             rotationSlots = rotationSlots.toMutableMap().apply { put(day, "") }
                                                             expanded = false
@@ -747,7 +759,7 @@ data class EditTaskScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "🔒 Obligatoria (no rechazable)",
+                                    text = s("create_task_mandatory_label"),
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Switch(
@@ -769,7 +781,7 @@ data class EditTaskScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "⏰ Fecha límite",
+                                text = s("create_task_deadline_section"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -799,10 +811,10 @@ data class EditTaskScreen(
                                     onClick = { showDatePicker = true },
                                     modifier = Modifier.weight(1f).height(56.dp)
                                 ) {
-                                    Icon(Icons.Default.DateRange, contentDescription = "Elegir fecha")
+                                    Icon(Icons.Default.DateRange, contentDescription = s("create_task_pick_date"))
                                     Spacer(Modifier.width(8.dp))
                                     Text(
-                                        text = if (deadlineDay.isBlank()) "Elegir fecha" else deadlineDay,
+                                        text = if (deadlineDay.isBlank()) s("create_task_pick_date") else deadlineDay,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -810,7 +822,7 @@ data class EditTaskScreen(
                                 OutlinedTextField(
                                     value = deadlineTime,
                                     onValueChange = { deadlineTime = it },
-                                    label = { Text("Hora (HH:MM)") },
+                                    label = { Text(s("create_task_time_label")) },
                                     modifier = Modifier.weight(1f),
                                     singleLine = true,
                                     isError = !deadlineTime.isValidTimeFormat()
@@ -827,7 +839,7 @@ data class EditTaskScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "⚠️ Penalización por retraso",
+                                text = s("create_task_penalty_section"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -849,7 +861,7 @@ data class EditTaskScreen(
                                 FilterChip(
                                     selected = penaltyMode == "fixed",
                                     onClick = { penaltyMode = "fixed" },
-                                    label = { Text("Puntos fijos") },
+                                    label = { Text(s("create_task_penalty_fixed")) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Coral100,
                                         selectedLabelColor = Coral800
@@ -858,7 +870,7 @@ data class EditTaskScreen(
                                 FilterChip(
                                     selected = penaltyMode == "percentage",
                                     onClick = { penaltyMode = "percentage" },
-                                    label = { Text("Porcentaje") },
+                                    label = { Text(s("create_task_penalty_percentage")) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Coral100,
                                         selectedLabelColor = Coral800
@@ -872,22 +884,22 @@ data class EditTaskScreen(
                                 value = penaltyValue,
                                 onValueChange = { penaltyValue = it },
                                 label = {
-                                    Text(if (penaltyMode == "fixed") "Penalización (puntos)" else "Penalización (%)")
+                                    Text(if (penaltyMode == "fixed") s("create_task_penalty_points_label") else s("create_task_penalty_percent_label"))
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 supportingText = {
                                     Text(if (penaltyMode == "fixed")
-                                        "Ej: 10 → -10 pts por cada período de retraso"
-                                    else "Ej: 20 → -20% de los puntos por cada período de retraso")
+                                        s("create_task_penalty_fixed_hint")
+                                    else s("create_task_penalty_percent_hint"))
                                 }
                             )
                         }
 
                         item {
                             Text(
-                                text = "Intervalo de penalización",
+                                text = s("create_task_penalty_interval_label"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -900,7 +912,7 @@ data class EditTaskScreen(
                                 FilterChip(
                                     selected = penaltyInterval == "day",
                                     onClick = { penaltyInterval = "day" },
-                                    label = { Text("Diario") },
+                                    label = { Text(s("create_task_interval_daily")) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Coral50,
                                         selectedLabelColor = Coral700
@@ -909,7 +921,7 @@ data class EditTaskScreen(
                                 FilterChip(
                                     selected = penaltyInterval == "week",
                                     onClick = { penaltyInterval = "week" },
-                                    label = { Text("Semanal") },
+                                    label = { Text(s("recurrence_weekly")) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Coral50,
                                         selectedLabelColor = Coral700
@@ -918,7 +930,7 @@ data class EditTaskScreen(
                                 FilterChip(
                                     selected = penaltyInterval == "month",
                                     onClick = { penaltyInterval = "month" },
-                                    label = { Text("Mensual") },
+                                    label = { Text(s("recurrence_monthly")) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Coral50,
                                         selectedLabelColor = Coral700
@@ -931,12 +943,12 @@ data class EditTaskScreen(
                             OutlinedTextField(
                                 value = penaltyMax,
                                 onValueChange = { penaltyMax = it },
-                                label = { Text("Tope máximo (opcional)") },
+                                label = { Text(s("create_task_penalty_max_label")) },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 supportingText = {
-                                    Text("Penalización nunca superará este valor. 0 = sin tope.")
+                                    Text(s("create_task_penalty_max_hint"))
                                 }
                             )
                         }

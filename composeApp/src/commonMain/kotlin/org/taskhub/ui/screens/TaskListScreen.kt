@@ -54,6 +54,7 @@ import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.shouldReduceMotion
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 import org.taskhub.platform.shareText
 
@@ -82,13 +83,15 @@ data class TaskListScreen(
         val isOffline by model.isOffline.collectAsState()
 
         val snackbarHostState = remember { SnackbarHostState() }
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         // ── Undo snackbar ────────────────────────────────────
         LaunchedEffect(undoState) {
             if (undoState != null) {
                 val result = snackbarHostState.showSnackbar(
-                    message = "✅ Tarea completada",
-                    actionLabel = "Deshacer",
+                    message = s("task_list_undo_snackbar_msg"),
+                    actionLabel = s("task_list_undo_action"),
                     duration = SnackbarDuration.Short
                 )
                 if (result == SnackbarResult.ActionPerformed) {
@@ -126,14 +129,13 @@ data class TaskListScreen(
 
         // Settings dialog state
         var showSettings by remember { mutableStateOf(false) }
-        val appSettings = LocalAppSettings.current
 
         // Pre-compute CSV export callback — needs access to list state
         val exportCsv: () -> Unit = {
             val state = listState
             if (state is TaskListUiState.Success) {
                 val csv = model.generateCsv(state.tasks)
-                shareText(csv, "Tareas Task Hub")
+                shareText(csv, s("tasks_export_csv_title"))
             }
         }
 
@@ -169,14 +171,14 @@ data class TaskListScreen(
                 Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Tareas",
+                    title = s("task_list_title"),
                     onBack = { navigator.pop() },
                     actions = {
                         IconButton(onClick = { model.loadTasks(householdId) }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Actualizar")
+                            Icon(Icons.Default.Refresh, contentDescription = s("task_list_refresh_content_desc"))
                         }
                         IconButton(onClick = { showSettings = true }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Ajustes")
+                            Icon(Icons.Default.Settings, contentDescription = s("profile_settings_label"))
                         }
                         TextButton(
                             onClick = { navigator.push(CreateTaskScreen(householdId, currentMemberId ?: "")) },
@@ -184,7 +186,7 @@ data class TaskListScreen(
                                 contentColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
-                            Text("+ Nueva", fontWeight = FontWeight.Bold)
+                            Text(s("tasks_new"), fontWeight = FontWeight.Bold)
                         }
                     }
                 )
@@ -197,7 +199,7 @@ data class TaskListScreen(
                         color = Coral100
                     ) {
                         Text(
-                            text = "📡 Sin conexión — mostrando datos en caché",
+                            text = s("task_list_offline_banner"),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -228,6 +230,7 @@ data class TaskListScreen(
                             allTags = allTags,
                             searchQuery = searchQuery,
                             currentMemberId = currentMemberId,
+                            s = s,
                             onFilterChange = { model.setFilter(it) },
                             onSortChange = { model.setSort(it) },
                             onTagFilterChange = { model.setTagFilter(it) },
@@ -258,7 +261,7 @@ data class TaskListScreen(
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(onClick = { model.loadTasks(householdId) }) {
-                                    Text("Reintentar")
+                                    Text(s("tasks_retry"))
                                 }
                             }
                         }
@@ -331,32 +334,18 @@ private fun isTaskCompletedToday(task: TaskResponse, todayStartEpoch: Long): Boo
 }
 
 // ────────────────────────────────────────────────────────────
-//  Spanish day-of-week helper
+//  Localized day-of-week helper
 // ────────────────────────────────────────────────────────────
 
-private fun spanishDayName(dayOfWeek: DayOfWeek): String = when (dayOfWeek) {
-    DayOfWeek.MONDAY -> "Lunes"
-    DayOfWeek.TUESDAY -> "Martes"
-    DayOfWeek.WEDNESDAY -> "Miércoles"
-    DayOfWeek.THURSDAY -> "Jueves"
-    DayOfWeek.FRIDAY -> "Viernes"
-    DayOfWeek.SATURDAY -> "Sábado"
-    DayOfWeek.SUNDAY -> "Domingo"
-}
-
-private fun spanishMonthName(month: Month): String = when (month) {
-    Month.JANUARY -> "Ene"
-    Month.FEBRUARY -> "Feb"
-    Month.MARCH -> "Mar"
-    Month.APRIL -> "Abr"
-    Month.MAY -> "May"
-    Month.JUNE -> "Jun"
-    Month.JULY -> "Jul"
-    Month.AUGUST -> "Ago"
-    Month.SEPTEMBER -> "Sep"
-    Month.OCTOBER -> "Oct"
-    Month.NOVEMBER -> "Nov"
-    Month.DECEMBER -> "Dic"
+private fun localizedDayName(dayOfWeek: DayOfWeek, lang: String): String = when (dayOfWeek) {
+    DayOfWeek.MONDAY -> AppStrings.get("recurrence_day_monday", lang)
+    DayOfWeek.TUESDAY -> AppStrings.get("recurrence_day_tuesday", lang)
+    DayOfWeek.WEDNESDAY -> AppStrings.get("recurrence_day_wednesday", lang)
+    DayOfWeek.THURSDAY -> AppStrings.get("recurrence_day_thursday", lang)
+    DayOfWeek.FRIDAY -> AppStrings.get("recurrence_day_friday", lang)
+    DayOfWeek.SATURDAY -> AppStrings.get("recurrence_day_saturday", lang)
+    DayOfWeek.SUNDAY -> AppStrings.get("recurrence_day_sunday", lang)
+    else -> ""
 }
 
 // ────────────────────────────────────────────────────────────
@@ -377,7 +366,8 @@ private fun taskComparator(sort: TaskSort): Comparator<TaskWithStatus> = when (s
 
 private fun groupTasksByStatus(
     items: List<TaskWithStatus>,
-    sort: TaskSort
+    sort: TaskSort,
+    lang: String
 ): List<TaskGroup> {
     val dueItems = items.filter { it.isDueToday && !it.isCompletedToday }
     val overdueItems = dueItems.filter { it.isOverdue }
@@ -391,7 +381,7 @@ private fun groupTasksByStatus(
     if (overdueItems.isNotEmpty()) {
         val sorted = overdueItems.sortedWith(comparator)
         groups.add(TaskGroup(
-            label = "Vencidas",
+            label = AppStrings.get("tasks_overdue", lang),
             sortKey = 0,
             dateKey = "overdue",
             isOverdue = true,
@@ -405,10 +395,12 @@ private fun groupTasksByStatus(
         val tz = TimeZone.currentSystemDefault()
         val today = Clock.System.now().toLocalDateTime(tz).date
         val dow = today.dayOfWeek
-        val dayStr = spanishDayName(dow)
+        val dayStr = localizedDayName(dow, lang)
         val sorted = pendingToday.sortedWith(comparator)
         groups.add(TaskGroup(
-            label = "Hoy · $dayStr ${today.dayOfMonth}",
+            label = AppStrings.get("task_list_today_header", lang)
+                .replace("%1", dayStr)
+                .replace("%2", today.dayOfMonth.toString()),
             sortKey = 1,
             dateKey = "today",
             isOverdue = false,
@@ -422,7 +414,7 @@ private fun groupTasksByStatus(
     if (completedToday.isNotEmpty()) {
         val sorted = completedToday.sortedByDescending { it.task.lastCompletedDate ?: 0 }
         groups.add(TaskGroup(
-            label = "✅ Completadas hoy",
+            label = AppStrings.get("tasks_completed_today", lang),
             sortKey = 99,
             dateKey = "completed_today",
             isOverdue = false,
@@ -450,6 +442,7 @@ private fun TaskListContent(
     allTags: List<String>,
     searchQuery: String,
     currentMemberId: String?,
+    s: (String) -> String,
     onFilterChange: (TaskFilter) -> Unit,
     onSortChange: (TaskSort) -> Unit,
     onTagFilterChange: (String?) -> Unit,
@@ -463,6 +456,7 @@ private fun TaskListContent(
     val memberMap = state.members.associateBy { it.id }
     val assignmentsByTask = state.assignments.groupBy { it.taskId }
     val reduceMotion = shouldReduceMotion()
+    val lang = LocalAppSettings.current.currentLanguage
 
     // Compute today start for overdue detection and due-today calculation
     val now = Clock.System.now()
@@ -518,8 +512,8 @@ private fun TaskListContent(
     }
 
     // Group by status
-    val groups = remember(tasksWithStatus, filter, sort, tagFilter) {
-        groupTasksByStatus(tasksWithStatus, sort)
+    val groups = remember(tasksWithStatus, filter, sort, tagFilter, lang) {
+        groupTasksByStatus(tasksWithStatus, sort, lang)
     }
 
     // Collapse state per group
@@ -547,6 +541,7 @@ private fun TaskListContent(
                 currentSort = sort,
                 tagFilter = tagFilter,
                 allTags = allTags,
+                s = s,
                 onFilterChange = onFilterChange,
                 onSortChange = onSortChange,
                 onTagFilterChange = onTagFilterChange
@@ -557,6 +552,7 @@ private fun TaskListContent(
         item {
             SearchBar(
                 query = searchQuery,
+                s = s,
                 onQueryChange = onSearchQueryChange
             )
         }
@@ -584,14 +580,14 @@ private fun TaskListContent(
                         EmptyTasksIllustration()
                         Spacer(Modifier.height(16.dp))
                         Text(
-                            "¡Todo al día!",
+                            s("task_list_empty_title"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Aún no hay tareas en este espacio. ¡Crea la primera!",
+                            s("task_list_empty_subtitle"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -601,7 +597,7 @@ private fun TaskListContent(
                             onClick = onCreateFirstTask,
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Text("Crear primera tarea", fontWeight = FontWeight.SemiBold)
+                            Text(s("task_list_create_first"), fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -617,10 +613,10 @@ private fun TaskListContent(
                 ) {
                     Text(
                         text = when (filter) {
-                            TaskFilter.PENDING -> "🎉 ¡No hay tareas pendientes! (${state.tasks.size} cargadas)"
-                            TaskFilter.COMPLETED -> "📋 No hay tareas completadas hoy"
-                            TaskFilter.MINE -> "👤 No tienes tareas asignadas"
-                            TaskFilter.ALL -> "📋 No hay tareas aún. ¡Crea la primera!"
+                            TaskFilter.PENDING -> s("task_list_filter_empty_pending").replace("%d", state.tasks.size.toString())
+                            TaskFilter.COMPLETED -> s("tasks_empty_completed")
+                            TaskFilter.MINE -> s("tasks_empty_mine")
+                            TaskFilter.ALL -> s("tasks_empty_all")
                         },
                         modifier = Modifier.padding(24.dp),
                         style = MaterialTheme.typography.bodyLarge,
@@ -704,6 +700,8 @@ private fun TaskCard(
     val totalAssigned = assignments.size
     val isDone = item.isCompletedToday
     val reduceMotion = shouldReduceMotion()
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
     // Al pulsar "Hecho" primero se anima la card (fade out + scale down) y solo
     // entonces se dispara la finalización real, para que la tarea no desaparezca
@@ -793,7 +791,7 @@ private fun TaskCard(
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Text("✅ Hecho", style = MaterialTheme.typography.labelMedium)
+                                Text(s("task_detail_mark_done"), style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -832,14 +830,14 @@ private fun TaskCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Points badge
-                PointsBadge(text = "${task.points} pts")
+                PointsBadge(text = "${task.points} ${s("transfer_points_suffix")}")
 
                 // Frequency badge
                 val freqLabel = when (task.frequency) {
-                    "daily" -> "🔄 Diaria"
-                    "weekly" -> "📅 Semanal"
-                    "monthly" -> if (task.recurrenceDay != null) "📆 Día ${task.recurrenceDay}" else "📆 Mensual"
-                    else -> "• Una vez"
+                    "daily" -> s("task_list_freq_daily")
+                    "weekly" -> s("task_list_freq_weekly")
+                    "monthly" -> if (task.recurrenceDay != null) s("task_list_freq_monthly_day").replace("%d", task.recurrenceDay.toString()) else s("task_list_freq_monthly")
+                    else -> s("task_list_freq_once")
                 }
                 Surface(
                     shape = MaterialTheme.shapes.small,
@@ -894,7 +892,7 @@ private fun TaskCard(
                     )
                 } else {
                     Text(
-                        text = "Sin deadline",
+                        text = s("task_list_no_deadline"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1039,6 +1037,8 @@ private fun GroupHeader(
     isCollapsed: Boolean,
     onToggle: () -> Unit
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
     val semantic = MaterialTheme.semanticColors
     val backgroundColor = when {
         isOverdue -> Coral100
@@ -1099,7 +1099,7 @@ private fun GroupHeader(
             Icon(
                 imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown
                              else Icons.Default.KeyboardArrowUp,
-                contentDescription = if (isCollapsed) "Expandir" else "Colapsar",
+                contentDescription = if (isCollapsed) s("household_task_section_expand") else s("household_task_section_collapse"),
                 tint = contentColor,
                 modifier = Modifier.size(20.dp)
             )
@@ -1114,6 +1114,7 @@ private fun GroupHeader(
 @Composable
 private fun SearchBar(
     query: String,
+    s: (String) -> String,
     onQueryChange: (String) -> Unit
 ) {
     OutlinedTextField(
@@ -1122,11 +1123,11 @@ private fun SearchBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 12.dp),
-        placeholder = { Text("Buscar tareas...") },
+        placeholder = { Text(s("task_list_search_placeholder")) },
         leadingIcon = {
             Icon(
                 imageVector = Icons.Default.Search,
-                contentDescription = "Buscar",
+                contentDescription = s("task_list_search_content_desc"),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
@@ -1135,7 +1136,7 @@ private fun SearchBar(
                 IconButton(onClick = { onQueryChange("") }) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Limpiar búsqueda",
+                        contentDescription = s("task_list_clear_search_content_desc"),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -1161,6 +1162,7 @@ private fun FilterChipsRow(
     currentSort: TaskSort,
     tagFilter: String?,
     allTags: List<String>,
+    s: (String) -> String,
     onFilterChange: (TaskFilter) -> Unit,
     onSortChange: (TaskSort) -> Unit,
     onTagFilterChange: (String?) -> Unit
@@ -1178,7 +1180,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = currentFilter == TaskFilter.PENDING,
                 onClick = { onFilterChange(TaskFilter.PENDING) },
-                label = { Text("Pendientes") },
+                label = { Text(s("task_list_filter_pending")) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Teal100,
                     selectedLabelColor = Teal900
@@ -1187,7 +1189,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = currentFilter == TaskFilter.COMPLETED,
                 onClick = { onFilterChange(TaskFilter.COMPLETED) },
-                label = { Text("Completadas") },
+                label = { Text(s("task_list_filter_completed")) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Teal100,
                     selectedLabelColor = Teal900
@@ -1196,7 +1198,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = currentFilter == TaskFilter.MINE,
                 onClick = { onFilterChange(TaskFilter.MINE) },
-                label = { Text("Mías") },
+                label = { Text(s("task_list_filter_mine")) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Teal100,
                     selectedLabelColor = Teal900
@@ -1205,7 +1207,7 @@ private fun FilterChipsRow(
             FilterChip(
                 selected = currentFilter == TaskFilter.ALL,
                 onClick = { onFilterChange(TaskFilter.ALL) },
-                label = { Text("Todas") },
+                label = { Text(s("task_list_filter_all")) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Teal100,
                     selectedLabelColor = Teal900
@@ -1226,7 +1228,7 @@ private fun FilterChipsRow(
                     FilterChip(
                         selected = tagFilter != null,
                         onClick = { tagExpanded = true },
-                        label = { Text(tagFilter ?: "🏷️ Etiquetas") },
+                        label = { Text(tagFilter ?: s("create_task_section_tags")) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Coral100,
                             selectedLabelColor = Coral800
@@ -1237,7 +1239,7 @@ private fun FilterChipsRow(
                         onDismissRequest = { tagExpanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Todas") },
+                            text = { Text(s("task_list_filter_all")) },
                             onClick = {
                                 onTagFilterChange(null)
                                 tagExpanded = false
@@ -1276,28 +1278,28 @@ private fun FilterChipsRow(
                     onDismissRequest = { expandedSort = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Deadline más próximo") },
+                        text = { Text(s("task_list_sort_deadline_asc")) },
                         onClick = {
                             onSortChange(TaskSort.DEADLINE_ASC)
                             expandedSort = false
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Deadline más lejano") },
+                        text = { Text(s("task_list_sort_deadline_desc")) },
                         onClick = {
                             onSortChange(TaskSort.DEADLINE_DESC)
                             expandedSort = false
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Más puntos") },
+                        text = { Text(s("task_list_sort_points")) },
                         onClick = {
                             onSortChange(TaskSort.POINTS_DESC)
                             expandedSort = false
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Más recientes") },
+                        text = { Text(s("task_list_sort_recent")) },
                         onClick = {
                             onSortChange(TaskSort.CREATED_DESC)
                             expandedSort = false

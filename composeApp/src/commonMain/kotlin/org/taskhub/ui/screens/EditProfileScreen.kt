@@ -92,10 +92,10 @@ class EditProfileScreen : Screen {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Editar perfil", fontWeight = FontWeight.Bold) },
+                    title = { Text(s("edit_profile_title"), fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = { navigator.pop() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, s("nav_back_content_description"))
                         }
                     }
                 )
@@ -124,7 +124,7 @@ class EditProfileScreen : Screen {
                             )
                             Spacer(Modifier.height(16.dp))
                             Button(onClick = { model.loadMyProfile() }) {
-                                Text("Reintentar")
+                                Text(s("tasks_retry"))
                             }
                         }
                     }
@@ -151,7 +151,7 @@ class EditProfileScreen : Screen {
                         )
 
                         Text(
-                            text = "Elige tu avatar",
+                            text = s("edit_profile_choose_avatar"),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -162,7 +162,12 @@ class EditProfileScreen : Screen {
                             onClick = { showEmojiGrid = !showEmojiGrid },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if (avatarEmoji.isNotEmpty()) "Avatar: $avatarEmoji" else "Seleccionar emoji...")
+                            Text(
+                                if (avatarEmoji.isNotEmpty())
+                                    s("edit_profile_avatar_selected").replace("%s", avatarEmoji)
+                                else
+                                    s("edit_profile_select_emoji")
+                            )
                         }
 
                         if (showEmojiGrid) {
@@ -178,7 +183,7 @@ class EditProfileScreen : Screen {
                                             Surface(
                                                 modifier = Modifier
                                                     .size(48.dp)
-                                                    .semantics { contentDescription = "Emoji $emoji" }
+                                                    .semantics { contentDescription = s("edit_profile_emoji_content_desc").replace("%s", emoji) }
                                                     .clickable {
                                                         avatarEmoji = emoji
                                                         showEmojiGrid = false
@@ -208,8 +213,8 @@ class EditProfileScreen : Screen {
                         OutlinedTextField(
                             value = displayName,
                             onValueChange = { displayName = it },
-                            label = { Text("Nombre público") },
-                            placeholder = { Text("Ej: María, Papá...") },
+                            label = { Text(s("edit_profile_name_label")) },
+                            placeholder = { Text(s("edit_profile_name_placeholder")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
@@ -219,8 +224,8 @@ class EditProfileScreen : Screen {
                         OutlinedTextField(
                             value = bio,
                             onValueChange = { if (it.length <= 100) bio = it },
-                            label = { Text("Bio") },
-                            placeholder = { Text("Ej: Papá, profe de mates y cocinero") },
+                            label = { Text(s("edit_profile_bio_label")) },
+                            placeholder = { Text(s("edit_profile_bio_placeholder")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
@@ -231,8 +236,8 @@ class EditProfileScreen : Screen {
                         OutlinedTextField(
                             value = status,
                             onValueChange = { if (it.length <= 80) status = it },
-                            label = { Text("Estado") },
-                            placeholder = { Text("Ej: 🍳 Preparando la cena") },
+                            label = { Text(s("edit_profile_status_label")) },
+                            placeholder = { Text(s("edit_profile_status_placeholder")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -269,7 +274,7 @@ class EditProfileScreen : Screen {
                                     strokeWidth = 2.dp
                                 )
                             } else {
-                                Text("Guardar perfil", style = MaterialTheme.typography.titleMedium)
+                                Text(s("edit_profile_save"), style = MaterialTheme.typography.titleMedium)
                             }
                         }
 

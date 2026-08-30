@@ -11,7 +11,10 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MessageResponse
 import org.taskhub.storage.HouseholdStore
+import org.taskhub.storage.SettingsStore
+import org.taskhub.platform.HapticKind
 import org.taskhub.platform.logAnalyticsEvent
+import org.taskhub.platform.vibrate
 
 sealed class HouseholdUiState {
     data object Idle : HouseholdUiState()
@@ -36,8 +39,13 @@ sealed class MessagesUiState {
 class HouseholdScreenModel(
     private val repo: FirestoreRepository,
     private val householdStore: HouseholdStore,
-    private val authManager: GoogleAuthManager
+    private val authManager: GoogleAuthManager,
+    private val settingsStore: SettingsStore
 ) : ScreenModel {
+
+    private fun buzz(kind: HapticKind) {
+        if (settingsStore.isVibrationEnabled()) vibrate(kind)
+    }
 
     private val _uiState = MutableStateFlow<HouseholdUiState>(HouseholdUiState.Idle)
     val uiState: StateFlow<HouseholdUiState> = _uiState.asStateFlow()
@@ -51,10 +59,12 @@ class HouseholdScreenModel(
                 authManager.syncHouseholdsToCloud()
                 logAnalyticsEvent("household_created")
                 _uiState.value = HouseholdUiState.Success(household)
+                buzz(HapticKind.SUCCESS)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: "Error al crear el espacio"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -76,10 +86,12 @@ class HouseholdScreenModel(
                     _uiState.value = HouseholdUiState.Success(household)
                 }
                 authManager.syncHouseholdsToCloud()
+                buzz(HapticKind.SUCCESS)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: "Código de invitación inválido"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -126,8 +138,10 @@ class HouseholdScreenModel(
                 repo.deleteHousehold(householdId)
                 householdStore.removeHousehold(householdId)
                 authManager.syncHouseholdsToCloud()
+                buzz(HapticKind.WARNING)
                 onSuccess()
             } catch (e: Exception) {
+                buzz(HapticKind.ERROR)
                 onError(e.message ?: "Error al eliminar el espacio")
             }
         }
@@ -154,8 +168,10 @@ class HouseholdScreenModel(
             }
             authManager.syncHouseholdsToCloud()
             if (failed.isEmpty()) {
+                buzz(HapticKind.WARNING)
                 onSuccess()
             } else {
+                buzz(HapticKind.ERROR)
                 onError("No se pudieron eliminar ${failed.size} de ${householdIds.size} espacios")
             }
         }
@@ -171,8 +187,10 @@ class HouseholdScreenModel(
                 repo.leaveHousehold(householdId, authManager.currentUserId())
                 householdStore.removeHousehold(householdId)
                 authManager.syncHouseholdsToCloud()
+                buzz(HapticKind.WARNING)
                 onSuccess()
             } catch (e: Exception) {
+                buzz(HapticKind.ERROR)
                 onError(e.message ?: "Error al salir del espacio")
             }
         }

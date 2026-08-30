@@ -14,7 +14,9 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
@@ -29,6 +31,8 @@ class JoinHouseholdScreen : Screen {
         val memberModel = koinScreenModel<MemberScreenModel>()
         val householdState by householdModel.uiState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var inviteCode by remember { mutableStateOf("") }
         var displayName by remember { mutableStateOf("") }
@@ -71,7 +75,7 @@ class JoinHouseholdScreen : Screen {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TaskHubTopBar(
-                    title = "Unirse a un espacio",
+                    title = s("welcome_join"),
                     onBack = { navigator.pop() }
                 )
                 Column(
@@ -97,7 +101,7 @@ class JoinHouseholdScreen : Screen {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Unirse a un espacio",
+                    text = s("welcome_join"),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -105,8 +109,8 @@ class JoinHouseholdScreen : Screen {
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = if (step == 1) "Paso 1: Introduce el código de invitación"
-                    else "Paso 2: Crea tu perfil",
+                    text = if (step == 1) s("join_household_step1")
+                    else s("join_household_step2"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -118,8 +122,8 @@ class JoinHouseholdScreen : Screen {
                     OutlinedTextField(
                         value = inviteCode,
                         onValueChange = { inviteCode = it.uppercase().take(8) },
-                        label = { Text("Código de invitación") },
-                        placeholder = { Text("Ej: ABC12345") },
+                        label = { Text(s("household_invite_code")) },
+                        placeholder = { Text(s("join_household_code_placeholder")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -149,7 +153,7 @@ class JoinHouseholdScreen : Screen {
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text("Unirse", style = MaterialTheme.typography.titleMedium)
+                            Text(s("join_household_submit"), style = MaterialTheme.typography.titleMedium)
                         }
                     }
 
@@ -175,7 +179,7 @@ class JoinHouseholdScreen : Screen {
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = "✅ Te has unido a:",
+                                text = s("join_household_joined_prefix"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
@@ -192,8 +196,8 @@ class JoinHouseholdScreen : Screen {
                     OutlinedTextField(
                         value = displayName,
                         onValueChange = { displayName = it },
-                        label = { Text("Tu nombre") },
-                        placeholder = { Text("Ej: María") },
+                        label = { Text(s("create_profile_name_label")) },
+                        placeholder = { Text(s("create_profile_name_placeholder")) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = memberState !is MemberUiState.Loading
@@ -202,7 +206,7 @@ class JoinHouseholdScreen : Screen {
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "Rol en el espacio:",
+                        text = s("create_profile_role_label"),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.align(Alignment.Start)
                     )
@@ -216,13 +220,13 @@ class JoinHouseholdScreen : Screen {
                         FilterChip(
                             selected = role == "admin",
                             onClick = { role = "admin" },
-                            label = { Text("👨‍👩‍👧 Admin") },
+                            label = { Text(s("create_profile_role_admin")) },
                             modifier = Modifier.weight(1f)
                         )
                         FilterChip(
                             selected = role == "child",
                             onClick = { role = "child" },
-                            label = { Text("🧒 Niño/a") },
+                            label = { Text(s("member_role_child_short")) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -248,7 +252,7 @@ class JoinHouseholdScreen : Screen {
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text("Entrar al espacio", style = MaterialTheme.typography.titleMedium)
+                            Text(s("join_household_enter_space"), style = MaterialTheme.typography.titleMedium)
                         }
                     }
 

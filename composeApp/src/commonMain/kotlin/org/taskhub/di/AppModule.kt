@@ -53,9 +53,9 @@ val appModule: Module = module {
 
     // ScreenModels (Voyager — each screen gets its own instance via factory)
     factory { HomeScreenModel(repo = get(), householdStore = get()) }
-    factory { HouseholdScreenModel(repo = get(), householdStore = get(), authManager = get()) }
-    factory { MemberScreenModel(repo = get()) }
-    factory { ProfileScreenModel(repo = get()) }
+    factory { HouseholdScreenModel(repo = get(), householdStore = get(), authManager = get(), settingsStore = get()) }
+    factory { MemberScreenModel(repo = get(), settingsStore = get()) }
+    factory { ProfileScreenModel(repo = get(), settingsStore = get()) }
     factory { NotificationScreenModel(repo = get()) }
-    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarSync = get(), adController = get()) }
+    factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarSync = get(), adController = get(), settingsStore = get()) }
 }

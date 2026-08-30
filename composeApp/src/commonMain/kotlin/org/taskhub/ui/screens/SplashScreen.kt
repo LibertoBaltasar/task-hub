@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.taskhub.ui.components.AppLogo
 import org.taskhub.ui.components.shouldReduceMotion
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.Teal800
 import org.taskhub.ui.theme.Coral100
 import androidx.compose.ui.graphics.Color
@@ -23,10 +24,12 @@ import androidx.compose.ui.graphics.Color
  * Splash screen que muestra "TASK HUB" en grande y negrita durante 1.5 segundos
  * antes de pasar a la pantalla principal.
  *
+ * @param lang idioma activo (leído directamente de SettingsStore: este
+ * composable se muestra antes de que LocalAppSettings esté disponible).
  * @param onFinished callback que se invoca cuando terminan los 1.5 segundos
  */
 @Composable
-fun SplashScreen(onFinished: () -> Unit) {
+fun SplashScreen(lang: String, onFinished: () -> Unit) {
     // Animación de fade-in (instantánea si el sistema pide reducir movimiento)
     var visible by remember { mutableStateOf(false) }
     val reduceMotion = shouldReduceMotion()
@@ -76,7 +79,7 @@ fun SplashScreen(onFinished: () -> Unit) {
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "Organiza tu espacio, comparte las tareas",
+                text = AppStrings.get("splash_subtitle", lang),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
                 color = Color.White.copy(alpha = 0.8f),

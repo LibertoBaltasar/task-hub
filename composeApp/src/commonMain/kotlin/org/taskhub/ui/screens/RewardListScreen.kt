@@ -21,8 +21,10 @@ import org.koin.compose.koinInject
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.components.BadgeTone
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardUiState
@@ -34,6 +36,8 @@ data class RewardListScreen(val householdId: String) : Screen {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val memberModel = koinScreenModel<MemberScreenModel>()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -42,7 +46,7 @@ data class RewardListScreen(val householdId: String) : Screen {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Recompensas",
+                    title = s("explore_tab_rewards"),
                     onBack = { navigator.pop() }
                 )
 
@@ -58,6 +62,8 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
     val navigator = LocalNavigator.currentOrThrow
     val rewardState by memberModel.rewardState.collectAsState()
     val memberState by memberModel.uiState.collectAsState()
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
     // Determine if current user is admin
     var isAdmin by remember { mutableStateOf(false) }
@@ -95,7 +101,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                     )
                 ) {
                     Text(
-                        "+ Nueva",
+                        s("tasks_new"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -126,13 +132,13 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                             )
                             Spacer(Modifier.height(16.dp))
                             Text(
-                                text = "No hay recompensas aún",
+                                text = s("reward_list_empty_title"),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                text = if (isAdmin) "Crea la primera recompensa con +" else "El admin aún no ha creado recompensas",
+                                text = if (isAdmin) s("reward_list_empty_admin") else s("reward_list_empty_member"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -185,7 +191,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                         )
                         Spacer(Modifier.height(16.dp))
                         Button(onClick = { memberModel.loadRewards(householdId) }) {
-                            Text("Reintentar")
+                            Text(s("tasks_retry"))
                         }
                     }
                 }
@@ -204,6 +210,8 @@ private fun RewardCard(
     onRedeem: () -> Unit
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -268,7 +276,7 @@ private fun RewardCard(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        "Canjear",
+                        s("member_reward_title"),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -280,7 +288,7 @@ private fun RewardCard(
                     ) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = "Eliminar recompensa",
+                            contentDescription = s("reward_delete_title"),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
@@ -292,19 +300,19 @@ private fun RewardCard(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Eliminar recompensa") },
-            text = { Text("¿Eliminar '${reward.title}'?") },
+            title = { Text(s("reward_delete_title")) },
+            text = { Text(s("reward_delete_confirm").replace("%s", reward.title)) },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteConfirm = false
                     onDelete()
                 }) {
-                    Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                    Text(s("household_delete_btn"), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Cancelar")
+                    Text(s("household_cancel"))
                 }
             }
         )

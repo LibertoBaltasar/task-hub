@@ -294,7 +294,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     }
                                 }
                             ) {
-                                Icon(Icons.Default.Notifications, contentDescription = "Notificaciones")
+                                Icon(Icons.Default.Notifications, contentDescription = s("notifications_title"))
                             }
                             if (notificationUnreadCount > 0) {
                                 PointsBadge(
@@ -307,7 +307,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         }
                         // Settings
                         IconButton(onClick = { showSettings = true }) {
-                            Icon(Icons.Default.Settings, contentDescription = "Ajustes")
+                            Icon(Icons.Default.Settings, contentDescription = s("profile_settings_label"))
                         }
                         // Delete
                         if (isDeleting || isLeaving) {
@@ -318,7 +318,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                             )
                         } else {
                             IconButton(onClick = { showConfirmDialog1 = true }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Eliminar espacio")
+                                Icon(Icons.Default.Delete, contentDescription = s("household_delete_title"))
                             }
                         }
                     }
@@ -388,7 +388,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Spacer(modifier = Modifier.height(16.dp))
 
                                             Text(
-                                                text = "Código de invitación",
+                                                text = s("household_invite_code"),
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.primary,
                                                 textAlign = TextAlign.Center,
@@ -407,7 +407,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Spacer(modifier = Modifier.height(4.dp))
 
                                             Text(
-                                                text = "Comparte este código para invitar miembros",
+                                                text = s("household_share_code"),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.primary,
                                                 textAlign = TextAlign.Center,
@@ -432,7 +432,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             shape = MaterialTheme.shapes.large
                                         ) {
                                             Text(
-                                                text = "Ver Tareas",
+                                                text = s("household_view_tasks_plain"),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -447,7 +447,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             shape = MaterialTheme.shapes.large
                                         ) {
                                             Text(
-                                                text = "Calendario",
+                                                text = s("personal_space_calendar"),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -466,7 +466,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                         shape = MaterialTheme.shapes.large
                                     ) {
                                         Text(
-                                            text = "Estadísticas, ranking y recompensas",
+                                            text = s("household_explore_button"),
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -522,7 +522,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                         shape = MaterialTheme.shapes.large
                                     ) {
                                         Text(
-                                            text = "🚪 Salir del espacio",
+                                            text = s("household_leave_button_full"),
                                             style = MaterialTheme.typography.titleMedium,
                                             color = MaterialTheme.colorScheme.error
                                         )
@@ -555,11 +555,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                                         ) {
-                                            Text("Quitar de mis espacios")
+                                            Text(s("household_remove_ghost"))
                                         }
                                     } else {
                                         Button(onClick = { householdModel.loadHousehold(householdId) }) {
-                                            Text("Reintentar")
+                                            Text(s("tasks_retry"))
                                         }
                                     }
                                 }

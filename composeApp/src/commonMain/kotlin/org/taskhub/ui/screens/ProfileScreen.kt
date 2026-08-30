@@ -78,10 +78,10 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Perfil", fontWeight = FontWeight.Bold) },
+                    title = { Text(s("profile_title"), fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = { navigator.pop() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, s("nav_back_content_description"))
                         }
                     }
                 )
@@ -97,7 +97,7 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                 // Cabecera
                 item {
                     Text(
-                        "Tus espacios",
+                        s("household_list_my"),
                         style = MaterialTheme.typography.titleSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -135,9 +135,9 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Crear nuevo espacio")
+                        Icon(Icons.Default.Add, contentDescription = s("create_household_title"))
                         Spacer(Modifier.width(8.dp))
-                        Text("Crear nuevo espacio")
+                        Text(s("create_household_title"))
                     }
                 }
 
@@ -146,9 +146,9 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         onClick = { navigator.push(JoinHouseholdScreen()) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Home, contentDescription = "Unirse a un espacio")
+                        Icon(Icons.Default.Home, contentDescription = s("welcome_join"))
                         Spacer(Modifier.width(8.dp))
-                        Text("Unirse a un espacio")
+                        Text(s("welcome_join"))
                     }
                 }
 
@@ -160,9 +160,9 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         onClick = { showSettings = true },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Ajustes")
+                        Icon(Icons.Default.Settings, contentDescription = s("profile_settings_label"))
                         Spacer(Modifier.width(8.dp))
-                        Text("Ajustes")
+                        Text(s("profile_settings_label"))
                     }
                 }
             }
@@ -180,6 +180,9 @@ private fun HouseholdProfileCard(
     color: androidx.compose.ui.graphics.Color,
     onNavigate: (() -> Unit)? = null
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
     Card(
         modifier = Modifier.fillMaxWidth().then(
             if (onNavigate != null) Modifier.clickable { onNavigate() } else Modifier
@@ -202,13 +205,13 @@ private fun HouseholdProfileCard(
                 )
                 if (household.isPersonal) {
                     Text(
-                        "Espacio privado · Solo tú",
+                        s("profile_card_private_space"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     Text(
-                        "Código: ${household.inviteCode}",
+                        s("profile_card_code_prefix").replace("%s", household.inviteCode),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -217,7 +220,7 @@ private fun HouseholdProfileCard(
             if (onNavigate != null) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Ir al espacio",
+                    contentDescription = s("profile_card_go_to_space"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
                 )

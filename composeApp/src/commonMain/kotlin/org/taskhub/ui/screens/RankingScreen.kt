@@ -18,9 +18,11 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -29,6 +31,8 @@ data class RankingScreen(val householdId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -37,7 +41,7 @@ data class RankingScreen(val householdId: String) : Screen {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Ranking",
+                    title = s("explore_tab_ranking"),
                     onBack = { navigator.pop() }
                 )
 
@@ -51,6 +55,8 @@ data class RankingScreen(val householdId: String) : Screen {
 @Composable
 internal fun RankingBody(householdId: String) {
     val repo = koinInject<FirestoreRepository>()
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
     var members by remember { mutableStateOf<List<MemberResponse>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -66,7 +72,7 @@ internal fun RankingBody(householdId: String) {
             members = all.sortedByDescending { it.totalPoints }
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = e.message ?: "Error al cargar miembros"
+            errorMessage = e.message ?: s("ranking_error_loading")
         }
         isLoading = false
     }
@@ -93,7 +99,7 @@ internal fun RankingBody(householdId: String) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("❌ $errorMessage", color = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.height(16.dp))
-                    Button(onClick = { coroutineScope.launch { loadRanking() } }) { Text("Reintentar") }
+                    Button(onClick = { coroutineScope.launch { loadRanking() } }) { Text(s("tasks_retry")) }
                 }
             }
         }
@@ -106,14 +112,14 @@ internal fun RankingBody(householdId: String) {
                     Text("🏆", style = MaterialTheme.typography.displayMedium)
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "Aún no hay nadie en el ranking",
+                        s("ranking_empty_title"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Completa tareas para sumar puntos y aparecer aquí.",
+                        s("ranking_empty_subtitle"),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -144,6 +150,9 @@ private fun RankingRow(
     position: Int,
     member: MemberResponse
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
     // Medal colours for top 3
     val medalEmoji = when (position) {
         1 -> "🥇"
@@ -215,7 +224,7 @@ private fun RankingRow(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = if (member.role == "admin") "Admin" else "Niño/a",
+                    text = if (member.role == "admin") s("ranking_role_admin") else s("member_role_child_full"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

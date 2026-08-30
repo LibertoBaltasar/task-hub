@@ -31,7 +31,9 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
 import org.taskhub.network.RecurrenceRules
 import org.taskhub.network.models.TaskResponse
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
 
@@ -68,6 +70,9 @@ data class CalendarScreen(
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
         val listState by model.listState.collectAsState()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+        val lang = appSettings.currentLanguage
 
         LaunchedEffect(householdId) {
             model.setCurrentMemberId(memberId)
@@ -135,7 +140,7 @@ data class CalendarScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 // ── Top bar ─────────────────────────────────
                 TaskHubTopBar(
-                    title = "Calendario",
+                    title = s("personal_space_calendar"),
                     onBack = { navigator.pop() },
                     actions = {
                         TextButton(
@@ -147,7 +152,7 @@ data class CalendarScreen(
                             )
                         ) {
                             Text(
-                                if (mode == CalendarMode.WEEK) "Mes" else "Semana",
+                                if (mode == CalendarMode.WEEK) s("calendar_toggle_month") else s("calendar_toggle_week"),
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -173,7 +178,7 @@ data class CalendarScreen(
                             }
                         },
                         modifier = Modifier.semantics {
-                            contentDescription = if (mode == CalendarMode.WEEK) "Semana anterior" else "Mes anterior"
+                            contentDescription = if (mode == CalendarMode.WEEK) s("calendar_prev_week") else s("calendar_prev_month")
                         }
                     ) {
                         Text("◀", style = MaterialTheme.typography.titleMedium)
@@ -183,10 +188,12 @@ data class CalendarScreen(
                             CalendarMode.WEEK -> {
                                 val monday = getMondayOfWeek(anchorDate)
                                 val sunday = monday.plus(6, DateTimeUnit.DAY)
-                                "Semana del ${monday.dayOfMonth} ${spanishMonthAbbr(monday.month)}"
+                                s("calendar_week_of")
+                                    .replace("%1", monday.dayOfMonth.toString())
+                                    .replace("%2", monthAbbr(monday.month, lang))
                             }
                             CalendarMode.MONTH ->
-                                "${spanishMonthFull(anchorDate.month)} ${anchorDate.year}"
+                                "${monthFull(anchorDate.month, lang)} ${anchorDate.year}"
                         },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
@@ -204,7 +211,7 @@ data class CalendarScreen(
                             }
                         },
                         modifier = Modifier.semantics {
-                            contentDescription = if (mode == CalendarMode.WEEK) "Semana siguiente" else "Mes siguiente"
+                            contentDescription = if (mode == CalendarMode.WEEK) s("calendar_next_week") else s("calendar_next_month")
                         }
                     ) {
                         Text("▶", style = MaterialTheme.typography.titleMedium)
@@ -228,7 +235,7 @@ data class CalendarScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Error: ${state.message}",
+                                text = s("calendar_error_prefix").replace("%s", state.message),
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
@@ -267,10 +274,11 @@ private fun WeekView(
     today: LocalDate,
     onDayClick: (LocalDate) -> Unit
 ) {
+    val lang = LocalAppSettings.current.currentLanguage
     Column(modifier = Modifier.fillMaxSize()) {
         // Day-of-week headers
         Row(modifier = Modifier.fillMaxWidth()) {
-            val headers = listOf("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+            val headers = dayAbbrHeaders(lang)
             headers.forEach { header ->
                 Box(
                     modifier = Modifier
@@ -329,10 +337,11 @@ private fun MonthView(
     today: LocalDate,
     onDayClick: (LocalDate) -> Unit
 ) {
+    val lang = LocalAppSettings.current.currentLanguage
     Column(modifier = Modifier.fillMaxSize()) {
         // Day-of-week headers
         Row(modifier = Modifier.fillMaxWidth()) {
-            val headers = listOf("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+            val headers = dayAbbrHeaders(lang)
             headers.forEach { header ->
                 Box(
                     modifier = Modifier
@@ -571,6 +580,9 @@ private fun DayTasksPopup(
     onDismiss: () -> Unit,
     onTaskClick: (String) -> Unit
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -589,13 +601,13 @@ private fun DayTasksPopup(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${spanishDayName(date.dayOfWeek)} ${date.dayOfMonth}",
+                        text = "${dayFull(date.dayOfWeek, appSettings.currentLanguage)} ${date.dayOfMonth}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onDismiss) {
-                        Text("Cerrar")
+                        Text(s("settings_close"))
                     }
                 }
 
@@ -607,7 +619,7 @@ private fun DayTasksPopup(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Sin tareas para este día",
+                            text = s("calendar_no_tasks_for_day"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyLarge
                         )
@@ -635,6 +647,8 @@ private fun TaskPopupItem(
     entry: DayTaskEntry,
     onClick: () -> Unit
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
     val statusColor = when {
         entry.isCompleted -> CompletedColor
         entry.isOverdue -> OverdueColor
@@ -683,9 +697,9 @@ private fun TaskPopupItem(
                 }
                 // Status label
                 val statusLabel = when {
-                    entry.isCompleted -> "✅ Completada"
-                    entry.isOverdue -> "⚠️ Vencida"
-                    entry.isDueToday -> "📌 Pendiente"
+                    entry.isCompleted -> s("calendar_task_status_completed")
+                    entry.isOverdue -> s("calendar_task_status_overdue")
+                    entry.isDueToday -> s("calendar_task_status_pending")
                     else -> ""
                 }
                 if (statusLabel.isNotEmpty()) {
@@ -906,45 +920,58 @@ private fun groupTasksByDate(
 }
 
 // ────────────────────────────────────────────────────────────
-//  Spanish helpers
+//  Localized date name helpers
 // ────────────────────────────────────────────────────────────
 
-private fun spanishDayName(dayOfWeek: DayOfWeek): String = when (dayOfWeek) {
-    DayOfWeek.MONDAY -> "Lunes"
-    DayOfWeek.TUESDAY -> "Martes"
-    DayOfWeek.WEDNESDAY -> "Miércoles"
-    DayOfWeek.THURSDAY -> "Jueves"
-    DayOfWeek.FRIDAY -> "Viernes"
-    DayOfWeek.SATURDAY -> "Sábado"
-    DayOfWeek.SUNDAY -> "Domingo"
+private fun dayAbbrHeaders(lang: String): List<String> = listOf(
+    AppStrings.get("day_abbr_monday", lang),
+    AppStrings.get("day_abbr_tuesday", lang),
+    AppStrings.get("day_abbr_wednesday", lang),
+    AppStrings.get("day_abbr_thursday", lang),
+    AppStrings.get("day_abbr_friday", lang),
+    AppStrings.get("day_abbr_saturday", lang),
+    AppStrings.get("day_abbr_sunday", lang)
+)
+
+private fun dayFull(dayOfWeek: DayOfWeek, lang: String): String = when (dayOfWeek) {
+    DayOfWeek.MONDAY -> AppStrings.get("recurrence_day_monday", lang)
+    DayOfWeek.TUESDAY -> AppStrings.get("recurrence_day_tuesday", lang)
+    DayOfWeek.WEDNESDAY -> AppStrings.get("recurrence_day_wednesday", lang)
+    DayOfWeek.THURSDAY -> AppStrings.get("recurrence_day_thursday", lang)
+    DayOfWeek.FRIDAY -> AppStrings.get("recurrence_day_friday", lang)
+    DayOfWeek.SATURDAY -> AppStrings.get("recurrence_day_saturday", lang)
+    DayOfWeek.SUNDAY -> AppStrings.get("recurrence_day_sunday", lang)
+    else -> ""
 }
 
-private fun spanishMonthAbbr(month: Month): String = when (month) {
-    Month.JANUARY -> "ene"
-    Month.FEBRUARY -> "feb"
-    Month.MARCH -> "mar"
-    Month.APRIL -> "abr"
-    Month.MAY -> "may"
-    Month.JUNE -> "jun"
-    Month.JULY -> "jul"
-    Month.AUGUST -> "ago"
-    Month.SEPTEMBER -> "sep"
-    Month.OCTOBER -> "oct"
-    Month.NOVEMBER -> "nov"
-    Month.DECEMBER -> "dic"
+private fun monthAbbr(month: Month, lang: String): String = when (month) {
+    Month.JANUARY -> AppStrings.get("month_abbr_january", lang)
+    Month.FEBRUARY -> AppStrings.get("month_abbr_february", lang)
+    Month.MARCH -> AppStrings.get("month_abbr_march", lang)
+    Month.APRIL -> AppStrings.get("month_abbr_april", lang)
+    Month.MAY -> AppStrings.get("month_abbr_may", lang)
+    Month.JUNE -> AppStrings.get("month_abbr_june", lang)
+    Month.JULY -> AppStrings.get("month_abbr_july", lang)
+    Month.AUGUST -> AppStrings.get("month_abbr_august", lang)
+    Month.SEPTEMBER -> AppStrings.get("month_abbr_september", lang)
+    Month.OCTOBER -> AppStrings.get("month_abbr_october", lang)
+    Month.NOVEMBER -> AppStrings.get("month_abbr_november", lang)
+    Month.DECEMBER -> AppStrings.get("month_abbr_december", lang)
+    else -> ""
 }
 
-private fun spanishMonthFull(month: Month): String = when (month) {
-    Month.JANUARY -> "Enero"
-    Month.FEBRUARY -> "Febrero"
-    Month.MARCH -> "Marzo"
-    Month.APRIL -> "Abril"
-    Month.MAY -> "Mayo"
-    Month.JUNE -> "Junio"
-    Month.JULY -> "Julio"
-    Month.AUGUST -> "Agosto"
-    Month.SEPTEMBER -> "Septiembre"
-    Month.OCTOBER -> "Octubre"
-    Month.NOVEMBER -> "Noviembre"
-    Month.DECEMBER -> "Diciembre"
+private fun monthFull(month: Month, lang: String): String = when (month) {
+    Month.JANUARY -> AppStrings.get("month_full_january", lang)
+    Month.FEBRUARY -> AppStrings.get("month_full_february", lang)
+    Month.MARCH -> AppStrings.get("month_full_march", lang)
+    Month.APRIL -> AppStrings.get("month_full_april", lang)
+    Month.MAY -> AppStrings.get("month_full_may", lang)
+    Month.JUNE -> AppStrings.get("month_full_june", lang)
+    Month.JULY -> AppStrings.get("month_full_july", lang)
+    Month.AUGUST -> AppStrings.get("month_full_august", lang)
+    Month.SEPTEMBER -> AppStrings.get("month_full_september", lang)
+    Month.OCTOBER -> AppStrings.get("month_full_october", lang)
+    Month.NOVEMBER -> AppStrings.get("month_full_november", lang)
+    Month.DECEMBER -> AppStrings.get("month_full_december", lang)
+    else -> ""
 }

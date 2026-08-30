@@ -74,8 +74,8 @@ data class TaskDetailScreen(
         if (showDeleteDialog) {
             AlertDialog(
                 onDismissRequest = { showDeleteDialog = false },
-                title = { Text("🗑️ Eliminar tarea") },
-                text = { Text("¿Eliminar esta tarea permanentemente?") },
+                title = { Text(s("task_detail_delete_title")) },
+                text = { Text(s("task_detail_delete_confirm")) },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -86,12 +86,12 @@ data class TaskDetailScreen(
                             contentColor = MaterialTheme.colorScheme.error
                         )
                     ) {
-                        Text("Eliminar")
+                        Text(s("household_delete_btn"))
                     }
                 },
                 dismissButton = {
                     TextButton(onClick = { showDeleteDialog = false }) {
-                        Text("Cancelar")
+                        Text(s("household_cancel"))
                     }
                 }
             )
@@ -114,7 +114,7 @@ data class TaskDetailScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Detalle",
+                    title = s("task_detail_title"),
                     onBack = { navigator.pop() },
                     actions = {
                         IconButton(
@@ -125,10 +125,10 @@ data class TaskDetailScreen(
                                 }
                             }
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Editar")
+                            Icon(Icons.Default.Edit, contentDescription = s("task_detail_edit_content_desc"))
                         }
                         IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Eliminar")
+                            Icon(Icons.Default.Delete, contentDescription = s("household_delete_btn"))
                         }
                     }
                 )
@@ -225,7 +225,7 @@ data class TaskDetailScreen(
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(onClick = { model.loadTaskDetail(householdId, taskId) }) {
-                                    Text("Reintentar")
+                                    Text(s("tasks_retry"))
                                 }
                             }
                         }
@@ -339,14 +339,14 @@ private fun TaskDetailContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        InfoBadge(label = "Puntos", value = "${task.points} ⭐", color = MaterialTheme.colorScheme.primary)
+                        InfoBadge(label = s("public_profile_stat_points"), value = "${task.points} ⭐", color = MaterialTheme.colorScheme.primary)
                         InfoBadge(
-                            label = "Frecuencia",
+                            label = s("task_detail_frequency_label"),
                             value = when (task.frequency) {
-                                "daily" -> "Diaria"
-                                "weekly" -> "Semanal"
-                                "monthly" -> "Mensual"
-                                else -> "Una vez"
+                                "daily" -> s("recurrence_daily")
+                                "weekly" -> s("recurrence_weekly")
+                                "monthly" -> s("recurrence_monthly")
+                                else -> s("recurrence_once")
                             },
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -357,13 +357,13 @@ private fun TaskDetailContent(
                         Spacer(modifier = Modifier.height(8.dp))
                         val daysStr = task.recurrenceDays.joinToString(", ") { day ->
                             when (day) {
-                                1 -> "Lunes"
-                                2 -> "Martes"
-                                3 -> "Miércoles"
-                                4 -> "Jueves"
-                                5 -> "Viernes"
-                                6 -> "Sábado"
-                                7 -> "Domingo"
+                                1 -> s("recurrence_day_monday")
+                                2 -> s("recurrence_day_tuesday")
+                                3 -> s("recurrence_day_wednesday")
+                                4 -> s("recurrence_day_thursday")
+                                5 -> s("recurrence_day_friday")
+                                6 -> s("recurrence_day_saturday")
+                                7 -> s("recurrence_day_sunday")
                                 else -> "?"
                             }
                         }
@@ -378,7 +378,7 @@ private fun TaskDetailContent(
                     if (task.frequency == "monthly" && task.recurrenceDay != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "📆 Cada día ${task.recurrenceDay} del mes",
+                            text = s("task_detail_monthly_recurrence").replace("%d", task.recurrenceDay.toString()),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Teal700
                         )
@@ -410,14 +410,18 @@ private fun TaskDetailContent(
                         HorizontalDivider(color = Teal200)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "⚠️ Penalización por retraso",
+                            text = s("create_task_penalty_section"),
                             style = MaterialTheme.typography.labelLarge,
                             color = Coral600,
                             fontWeight = FontWeight.SemiBold
                         )
                         val penaltyDesc = when (task.penaltyMode) {
-                            "fixed" -> "-${task.penaltyValue} pts por cada ${intervalLabel(task.penaltyInterval)}"
-                            "percentage" -> "-${task.penaltyValue}% por cada ${intervalLabel(task.penaltyInterval)}"
+                            "fixed" -> s("task_detail_penalty_fixed_desc")
+                                .replace("%1", task.penaltyValue.toString())
+                                .replace("%2", intervalLabel(task.penaltyInterval, s))
+                            "percentage" -> s("task_detail_penalty_percent_desc")
+                                .replace("%1", task.penaltyValue.toString())
+                                .replace("%2", intervalLabel(task.penaltyInterval, s))
                             else -> ""
                         }
                         Text(
@@ -427,7 +431,7 @@ private fun TaskDetailContent(
                         )
                         if (task.penaltyMax > 0) {
                             Text(
-                                text = "Tope máximo: -${task.penaltyMax} pts",
+                                text = s("task_detail_penalty_max_desc").replace("%d", task.penaltyMax.toString()),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Coral700
                             )
@@ -445,7 +449,7 @@ private fun TaskDetailContent(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (isCompletedToday) "✅ Completada hoy" else "⏳ Pendiente",
+                    text = if (isCompletedToday) s("task_detail_completed_today") else s("task_detail_status_pending"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (isCompletedToday) Teal600 else Coral600
@@ -463,7 +467,7 @@ private fun TaskDetailContent(
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text("✅ Hecho")
+                            Text(s("task_detail_mark_done"))
                         }
                     }
                 }
@@ -480,13 +484,13 @@ private fun TaskDetailContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Hecha por: ${completer?.displayName ?: "Alguien del espacio"}",
+                            text = s("task_detail_done_by").replace("%s", completer?.displayName ?: s("task_detail_someone_in_space")),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Completado: ${formatDateTime(task.lastCompletedDate!!)}",
+                            text = s("task_detail_completed_at").replace("%s", formatDateTime(task.lastCompletedDate!!)),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -504,11 +508,11 @@ private fun TaskDetailContent(
                     }) {
                         Icon(
                             Icons.Default.Edit,
-                            contentDescription = "Cambiar quién la hizo",
+                            contentDescription = s("task_detail_change_completer_desc"),
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text("Cambiar")
+                        Text(s("task_detail_change_btn"))
                     }
                 }
             }
@@ -539,7 +543,9 @@ private fun TaskDetailContent(
             item {
                 val completedCount = task.subtasks.count { it.completed }
                 Text(
-                    text = "✅ Checklist ($completedCount/${task.subtasks.size})",
+                    text = s("task_detail_checklist_header")
+                        .replace("%1", completedCount.toString())
+                        .replace("%2", task.subtasks.size.toString()),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -574,7 +580,7 @@ private fun TaskDetailContent(
         // ── Pending assignments ──
         item {
             Text(
-                text = "📋 Pendientes (${pendingAssignments.size})",
+                text = s("task_detail_pending_header").replace("%d", pendingAssignments.size.toString()),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -590,7 +596,7 @@ private fun TaskDetailContent(
                     )
                 ) {
                     Text(
-                        text = if (completedAssignments.isNotEmpty()) "✅ ¡Todo completado!" else "📭 Sin asignaciones",
+                        text = if (completedAssignments.isNotEmpty()) s("task_detail_all_completed") else s("task_detail_no_assignments"),
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -616,7 +622,7 @@ private fun TaskDetailContent(
         if (completedAssignments.isNotEmpty()) {
             item {
                 Text(
-                    text = "✅ Completadas (${completedAssignments.size})",
+                    text = s("task_detail_completed_header").replace("%d", completedAssignments.size.toString()),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -641,7 +647,7 @@ private fun TaskDetailContent(
             HorizontalDivider(color = Teal200)
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "💬 Comentarios",
+                text = s("task_detail_comments_title"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -658,7 +664,7 @@ private fun TaskDetailContent(
                     value = newCommentText,
                     onValueChange = onCommentTextChange,
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Añade un comentario...") },
+                    placeholder = { Text(s("task_detail_comment_placeholder")) },
                     maxLines = 2,
                     singleLine = false,
                     supportingText = {
@@ -707,7 +713,7 @@ private fun TaskDetailContent(
                             )
                         ) {
                             Text(
-                                text = "No hay comentarios aún",
+                                text = s("task_detail_no_comments"),
                                 modifier = Modifier.padding(16.dp),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -783,11 +789,11 @@ private fun TaskDetailContent(
         val members = memberMap.values.toList()
         AlertDialog(
             onDismissRequest = { showChangeWhoDialog = false },
-            title = { Text("¿Quién ha hecho la tarea?") },
+            title = { Text(s("task_detail_who_did_title")) },
             text = {
                 Column {
                     Text(
-                        text = "Los puntos se moverán a la persona que elijas.",
+                        text = s("task_detail_who_did_hint"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -821,12 +827,12 @@ private fun TaskDetailContent(
                     },
                     enabled = selectedCompleterId != null && selectedCompleterId != task.completedBy
                 ) {
-                    Text("Guardar")
+                    Text(s("edit_task_submit"))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showChangeWhoDialog = false }) {
-                    Text("Cancelar")
+                    Text(s("household_cancel"))
                 }
             }
         )
@@ -955,6 +961,9 @@ private fun AssignmentCard(
     isLoading: Boolean = false,
     onComplete: (() -> Unit)? = null
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -981,7 +990,7 @@ private fun AssignmentCard(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = if (member?.role == "admin") "Admin" else "Niño/a",
+                        text = if (member?.role == "admin") s("ranking_role_admin") else s("member_role_child_full"),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -999,7 +1008,7 @@ private fun AssignmentCard(
                 if (assignment.dueDate > 0) {
                     val isOverdue = now > assignment.dueDate
                     Text(
-                        text = "⏰ Vence: ${formatDateTime(assignment.dueDate)}",
+                        text = s("task_detail_due_at").replace("%s", formatDateTime(assignment.dueDate)),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isOverdue && showComplete)
                             MaterialTheme.colorScheme.error
@@ -1010,7 +1019,7 @@ private fun AssignmentCard(
                 // Mandatory badge
                 if (assignment.mandatory) {
                     Text(
-                        text = "🔒 Obligatoria",
+                        text = s("task_detail_mandatory_badge"),
                         style = MaterialTheme.typography.labelSmall,
                         color = Coral600
                     )
@@ -1021,14 +1030,14 @@ private fun AssignmentCard(
                     val pts = assignment.pointsAwarded ?: 0
                     val onTime = assignment.onTime ?: true
                     Text(
-                        text = if (onTime) "✅ A tiempo — +$pts pts"
-                        else "⚠️ Tarde — +$pts pts",
+                        text = if (onTime) s("task_detail_on_time_pts").replace("%d", pts.toString())
+                        else s("task_detail_late_pts").replace("%d", pts.toString()),
                         style = MaterialTheme.typography.labelMedium,
                         color = if (onTime) Teal600 else Coral600
                     )
                     if (assignment.completedAt != null) {
                         Text(
-                            text = "Completado: ${formatDateTime(assignment.completedAt!!)}",
+                            text = s("task_detail_completed_at").replace("%s", formatDateTime(assignment.completedAt!!)),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1052,7 +1061,7 @@ private fun AssignmentCard(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("✅ Hecho")
+                        Text(s("task_detail_mark_done"))
                     }
                 }
             } else if (assignment.status == "completed") {
@@ -1109,8 +1118,8 @@ private fun formatDateTime(epochMillis: Long): String {
     return "$day/$month ${hour}:${min}"
 }
 
-private fun intervalLabel(interval: String): String = when (interval) {
-    "week" -> "semana"
-    "month" -> "mes"
-    else -> "día"
+private fun intervalLabel(interval: String, s: (String) -> String): String = when (interval) {
+    "week" -> s("task_detail_interval_week")
+    "month" -> s("task_detail_interval_month")
+    else -> s("task_detail_interval_day")
 }

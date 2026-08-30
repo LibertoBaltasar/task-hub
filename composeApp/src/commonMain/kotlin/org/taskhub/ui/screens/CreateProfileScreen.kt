@@ -14,7 +14,9 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
@@ -29,6 +31,8 @@ data class CreateProfileScreen(val householdId: String) : Screen {
         val memberModel = koinScreenModel<MemberScreenModel>()
         val householdState by householdModel.uiState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var displayName by remember { mutableStateOf("") }
         var role by remember { mutableStateOf("admin") }
@@ -65,7 +69,7 @@ data class CreateProfileScreen(val householdId: String) : Screen {
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TaskHubTopBar(
-                    title = "Crear tu perfil",
+                    title = s("create_profile_title"),
                     onBack = { navigator.pop() }
                 )
                 Column(
@@ -84,7 +88,7 @@ data class CreateProfileScreen(val householdId: String) : Screen {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Crear tu perfil",
+                    text = s("create_profile_title"),
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -99,9 +103,9 @@ data class CreateProfileScreen(val householdId: String) : Screen {
 
                 Text(
                     text = if (householdName != null) {
-                        "Crea tu perfil para el espacio \"$householdName\""
+                        s("create_profile_subtitle_named").replace("%s", householdName)
                     } else {
-                        "Crea tu perfil para este espacio"
+                        s("create_profile_subtitle_generic")
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -112,8 +116,8 @@ data class CreateProfileScreen(val householdId: String) : Screen {
                 OutlinedTextField(
                     value = displayName,
                     onValueChange = { displayName = it },
-                    label = { Text("Tu nombre") },
-                    placeholder = { Text("Ej: María") },
+                    label = { Text(s("create_profile_name_label")) },
+                    placeholder = { Text(s("create_profile_name_placeholder")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -126,7 +130,7 @@ data class CreateProfileScreen(val householdId: String) : Screen {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Rol en el espacio:",
+                    text = s("create_profile_role_label"),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.align(Alignment.Start)
                 )
@@ -140,13 +144,13 @@ data class CreateProfileScreen(val householdId: String) : Screen {
                     FilterChip(
                         selected = role == "admin",
                         onClick = { role = "admin" },
-                        label = { Text("👨‍👩‍👧 Admin") },
+                        label = { Text(s("create_profile_role_admin")) },
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(
                         selected = role == "child",
                         onClick = { role = "child" },
-                        label = { Text("🧒 Niño/a") },
+                        label = { Text(s("member_role_child_short")) },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -172,7 +176,7 @@ data class CreateProfileScreen(val householdId: String) : Screen {
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Crear perfil", style = MaterialTheme.typography.titleMedium)
+                        Text(s("create_profile_submit"), style = MaterialTheme.typography.titleMedium)
                     }
                 }
 

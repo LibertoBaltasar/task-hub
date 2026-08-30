@@ -16,7 +16,9 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.NotificationResponse
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.models.NotificationUiState
 import org.taskhub.ui.theme.*
@@ -35,6 +37,8 @@ data class NotificationListScreen(
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<NotificationScreenModel>()
         val state by model.uiState.collectAsState()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         LaunchedEffect(householdId, memberId) {
             model.loadNotifications(householdId, memberId)
@@ -47,12 +51,12 @@ data class NotificationListScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Notificaciones",
+                    title = s("notifications_title"),
                     onBack = { navigator.pop() }
                 )
 
                 // Content
-                when (val s = state) {
+                when (val st = state) {
                     is NotificationUiState.Loading -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -63,7 +67,7 @@ data class NotificationListScreen(
                     }
 
                     is NotificationUiState.Success -> {
-                        if (s.notifications.isEmpty()) {
+                        if (st.notifications.isEmpty()) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
@@ -75,7 +79,7 @@ data class NotificationListScreen(
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text(
-                                        text = "No tienes notificaciones pendientes",
+                                        text = s("notifications_empty"),
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center
@@ -90,14 +94,14 @@ data class NotificationListScreen(
                             ) {
                                 item {
                                     Text(
-                                        text = "${s.unreadCount} sin leer",
+                                        text = s("notifications_unread_count").replace("%d", st.unreadCount.toString()),
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = if (s.unreadCount > 0) Coral500 else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = if (st.unreadCount > 0) Coral500 else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(bottom = 8.dp)
                                     )
                                 }
 
-                                items(s.notifications, key = { it.id }) { notification ->
+                                items(st.notifications, key = { it.id }) { notification ->
                                     NotificationCard(
                                         notification = notification,
                                         onMarkRead = {
@@ -116,7 +120,7 @@ data class NotificationListScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "❌ ${s.message}",
+                                    text = "❌ ${st.message}",
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = MaterialTheme.colorScheme.error
                                 )
@@ -124,7 +128,7 @@ data class NotificationListScreen(
                                 Button(onClick = {
                                     model.loadNotifications(householdId, memberId)
                                 }) {
-                                    Text("Reintentar")
+                                    Text(s("tasks_retry"))
                                 }
                             }
                         }
@@ -142,6 +146,9 @@ private fun NotificationCard(
     notification: NotificationResponse,
     onMarkRead: () -> Unit
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -184,7 +191,7 @@ private fun NotificationCard(
 
                     // Time ago text
                     Text(
-                        text = formatTimeAgo(notification.createdAt),
+                        text = formatTimeAgo(notification.createdAt, appSettings.currentLanguage),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -206,7 +213,7 @@ private fun NotificationCard(
                         contentPadding = PaddingValues(0.dp)
                     ) {
                         Text(
-                            text = "✓ Marcar como leída",
+                            text = s("notifications_mark_read"),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -220,7 +227,7 @@ private fun NotificationCard(
 /**
  * Simple "time ago" formatter.
  */
-private fun formatTimeAgo(epochMs: Long): String {
+private fun formatTimeAgo(epochMs: Long, lang: String): String {
     if (epochMs == 0L) return ""
     val now = Clock.System.now().toEpochMilliseconds()
     val diffMs = now - epochMs
@@ -229,10 +236,10 @@ private fun formatTimeAgo(epochMs: Long): String {
     val diffDays = diffHours / 24
 
     return when {
-        diffMin < 1 -> "Ahora"
-        diffMin < 60 -> "Hace ${diffMin}m"
-        diffHours < 24 -> "Hace ${diffHours}h"
-        diffDays < 7 -> "Hace ${diffDays}d"
+        diffMin < 1 -> AppStrings.get("time_ago_now", lang)
+        diffMin < 60 -> AppStrings.get("time_ago_minutes", lang).replace("%d", diffMin.toString())
+        diffHours < 24 -> AppStrings.get("time_ago_hours", lang).replace("%d", diffHours.toString())
+        diffDays < 7 -> AppStrings.get("time_ago_days", lang).replace("%d", diffDays.toString())
         else -> {
             val instant = Instant.fromEpochMilliseconds(epochMs)
             val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())

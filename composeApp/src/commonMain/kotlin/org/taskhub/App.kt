@@ -36,16 +36,20 @@ fun App() {
     // ── Fase 1: Splash screen (1.5 segundos) ─────────────────
     var showSplash by remember { mutableStateOf(true) }
 
-    if (showSplash) {
-        SplashScreen(onFinished = { showSplash = false })
-        return
-    }
-
-    // ── Fase 2: App normal ─────────────────────────────────
+    // KoinApplication envuelve también el splash para poder leer el idioma
+    // guardado (SettingsStore) y mostrar el subtítulo en el idioma correcto.
     KoinApplication(application = {
         modules(appModule)
     }) {
         val settingsStore = koinInject<SettingsStore>()
+
+        if (showSplash) {
+            SplashScreen(
+                lang = settingsStore.getLanguage(),
+                onFinished = { showSplash = false }
+            )
+            return@KoinApplication
+        }
 
         // Reactive theme from settings
         var themeType by remember {

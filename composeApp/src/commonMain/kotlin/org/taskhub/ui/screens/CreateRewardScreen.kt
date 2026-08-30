@@ -22,8 +22,10 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.ui.components.BadgeTone
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.RewardActionState
 import org.taskhub.ui.theme.*
@@ -36,6 +38,8 @@ data class CreateRewardScreen(val householdId: String) : Screen {
         val memberModel = koinScreenModel<MemberScreenModel>()
         val actionState by memberModel.rewardActionState.collectAsState()
         val repo = koinInject<FirestoreRepository>()
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var title by remember { mutableStateOf("") }
         var description by remember { mutableStateOf("") }
@@ -68,7 +72,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Nueva recompensa",
+                    title = s("create_reward_title"),
                     onBack = { navigator.pop() }
                 )
 
@@ -96,7 +100,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Ícono",
+                                text = s("create_reward_icon_label"),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -107,7 +111,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                text = "Toca para cambiar",
+                                text = s("create_reward_tap_to_change"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -135,7 +139,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                     Surface(
                                         modifier = Modifier
                                             .size(48.dp)
-                                            .semantics { contentDescription = "Emoji $emoji" }
+                                            .semantics { contentDescription = s("edit_profile_emoji_content_desc").replace("%s", emoji) }
                                             .clickable {
                                                 selectedIcon = emoji
                                                 showEmojiPicker = false
@@ -160,8 +164,8 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                     OutlinedTextField(
                         value = title,
                         onValueChange = { title = it },
-                        label = { Text("Título") },
-                        placeholder = { Text("Ej: 1 hora de videojuegos") },
+                        label = { Text(s("create_reward_title_field")) },
+                        placeholder = { Text(s("create_reward_title_placeholder")) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -175,8 +179,8 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
-                        label = { Text("Descripción (opcional)") },
-                        placeholder = { Text("Elige cuándo y cómo se entrega...") },
+                        label = { Text(s("create_reward_description_label")) },
+                        placeholder = { Text(s("create_reward_description_placeholder")) },
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                         maxLines = 3,
@@ -196,7 +200,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                 costText = newValue
                             }
                         },
-                        label = { Text("Coste en puntos") },
+                        label = { Text(s("create_reward_cost_label")) },
                         placeholder = { Text("50") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -224,7 +228,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Vista previa",
+                                text = s("create_reward_preview_label"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Teal700
                             )
@@ -234,7 +238,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                 style = MaterialTheme.typography.headlineMedium
                             )
                             Text(
-                                text = title.ifEmpty { "Título" },
+                                text = title.ifEmpty { s("create_reward_title_field") },
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -309,7 +313,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                             )
                         } else {
                             Text(
-                                text = "Crear Recompensa",
+                                text = s("create_reward_submit"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )

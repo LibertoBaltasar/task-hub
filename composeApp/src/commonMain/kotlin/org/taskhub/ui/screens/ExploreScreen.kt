@@ -14,7 +14,9 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 
 /**
@@ -32,6 +34,8 @@ data class ExploreScreen(
         val navigator = LocalNavigator.currentOrThrow
         val memberModel = koinScreenModel<MemberScreenModel>()
         var selectedTab by remember { mutableStateOf(0) }
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -39,7 +43,7 @@ data class ExploreScreen(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TaskHubTopBar(
-                    title = "Explorar",
+                    title = s("explore_title"),
                     onBack = { navigator.pop() }
                 )
 
@@ -47,17 +51,17 @@ data class ExploreScreen(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("Estadísticas") }
+                        text = { Text(s("explore_tab_stats")) }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("Ranking") }
+                        text = { Text(s("explore_tab_ranking")) }
                     )
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        text = { Text("Recompensas") }
+                        text = { Text(s("explore_tab_rewards")) }
                     )
                 }
 

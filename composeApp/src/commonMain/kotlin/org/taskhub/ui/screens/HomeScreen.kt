@@ -34,6 +34,7 @@ import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.ShimmerList
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.models.HomeScreenModel
@@ -54,6 +55,7 @@ class HomeScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val householdStore = koinInject<HouseholdStore>()
         val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
         val model = koinScreenModel<HomeScreenModel>()
         val uiState by model.uiState.collectAsState()
         val settingsStore = koinInject<SettingsStore>()
@@ -117,13 +119,10 @@ class HomeScreen : Screen {
                     showGooglePrompt = false
                     settingsStore.setHasSeenGooglePrompt(true)
                 },
-                title = { Text("Guarda tus datos con Google") },
+                title = { Text(s("home_google_prompt_title")) },
                 text = {
                     Column {
-                        Text(
-                            "Inicia sesión con Google para que tus tareas y espacios se " +
-                                "guarden en la nube. Así no los pierdes si cambias de móvil o reinstalas."
-                        )
+                        Text(s("home_google_prompt_body"))
                         if (authState is GoogleAuthState.SigningIn) {
                             Spacer(Modifier.height(16.dp))
                             Row(
@@ -135,7 +134,7 @@ class HomeScreen : Screen {
                                     strokeWidth = 2.dp,
                                     color = Teal600
                                 )
-                                Text("Conectando con Google...")
+                                Text(s("settings_account_connecting"))
                             }
                         }
                         if (authState is GoogleAuthState.Error) {
@@ -156,7 +155,7 @@ class HomeScreen : Screen {
                         enabled = authState !is GoogleAuthState.SigningIn,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Iniciar sesión con Google")
+                        Text(s("settings_account_sign_in_google"))
                     }
                 },
                 dismissButton = {
@@ -166,7 +165,7 @@ class HomeScreen : Screen {
                             settingsStore.setHasSeenGooglePrompt(true)
                         }
                     ) {
-                        Text("Ahora no")
+                        Text(s("home_google_prompt_dismiss"))
                     }
                 }
             )
@@ -186,10 +185,10 @@ class HomeScreen : Screen {
                         IconButton(onClick = {
                             navigator.push(ProfileScreen(households))
                         }) {
-                            Icon(Icons.Default.Person, "Perfil")
+                            Icon(Icons.Default.Person, s("profile_title"))
                         }
                         IconButton(onClick = { showSettings = true }) {
-                            Icon(Icons.Default.Settings, "Ajustes")
+                            Icon(Icons.Default.Settings, s("profile_settings_label"))
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -208,8 +207,8 @@ class HomeScreen : Screen {
                                 },
                                 containerColor = MaterialTheme.colorScheme.secondary,
                                 contentColor = MaterialTheme.colorScheme.onSecondary,
-                                icon = { Icon(Icons.Default.Add, contentDescription = "Crear espacio", modifier = Modifier.size(20.dp)) },
-                                text = { Text("Crear espacio", fontWeight = FontWeight.SemiBold) }
+                                icon = { Icon(Icons.Default.Add, contentDescription = s("welcome_create"), modifier = Modifier.size(20.dp)) },
+                                text = { Text(s("welcome_create"), fontWeight = FontWeight.SemiBold) }
                             )
                             Spacer(Modifier.height(12.dp))
                             ExtendedFloatingActionButton(
@@ -219,8 +218,8 @@ class HomeScreen : Screen {
                                 },
                                 containerColor = MaterialTheme.colorScheme.tertiary,
                                 contentColor = MaterialTheme.colorScheme.onTertiary,
-                                icon = { Icon(Icons.Default.Home, contentDescription = "Unirse a espacio", modifier = Modifier.size(20.dp)) },
-                                text = { Text("Unirse a espacio", fontWeight = FontWeight.SemiBold) }
+                                icon = { Icon(Icons.Default.Home, contentDescription = s("home_fab_join_space"), modifier = Modifier.size(20.dp)) },
+                                text = { Text(s("home_fab_join_space"), fontWeight = FontWeight.SemiBold) }
                             )
                             Spacer(Modifier.height(12.dp))
                         }
@@ -230,9 +229,9 @@ class HomeScreen : Screen {
                         containerColor = MaterialTheme.colorScheme.primary
                     ) {
                         if (showFabMenu) {
-                            Icon(Icons.Default.Close, "Cerrar")
+                            Icon(Icons.Default.Close, s("settings_close"))
                         } else {
-                            Icon(Icons.Default.Add, "Añadir espacio")
+                            Icon(Icons.Default.Add, s("home_fab_add_space"))
                         }
                     }
                 }
@@ -259,14 +258,14 @@ class HomeScreen : Screen {
                         EmptyHouseholdsIllustration()
                         Spacer(Modifier.height(16.dp))
                         Text(
-                            "Crea tu primer espacio",
+                            s("home_empty_title"),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "Organiza las tareas del hogar y suma puntos en equipo.",
+                            s("home_empty_subtitle"),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
@@ -278,7 +277,7 @@ class HomeScreen : Screen {
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Crear espacio", fontWeight = FontWeight.SemiBold)
+                            Text(s("welcome_create"), fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -291,7 +290,9 @@ class HomeScreen : Screen {
                     // Contador total
                     item {
                         Text(
-                            "${uiState.pendingCount} tareas pendientes en ${households.size} espacios",
+                            s("home_pending_count_summary")
+                                .replace("%1", uiState.pendingCount.toString())
+                                .replace("%2", households.size.toString()),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -311,7 +312,7 @@ class HomeScreen : Screen {
                     if (shared.isNotEmpty()) {
                         item(key = "shared_header") {
                             Text(
-                                "Mis espacios",
+                                s("home_my_spaces"),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)

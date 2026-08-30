@@ -37,7 +37,9 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskHistoryResponse
+import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.Achievement
 import org.taskhub.ui.models.AchievementChecker
 import org.taskhub.ui.models.TaskScreenModel
@@ -51,6 +53,8 @@ data class StatsScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val appSettings = LocalAppSettings.current
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -59,7 +63,7 @@ data class StatsScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Estadísticas",
+                    title = s("explore_tab_stats"),
                     onBack = { navigator.pop() }
                 )
 
@@ -73,6 +77,8 @@ data class StatsScreen(
 @Composable
 internal fun StatsBody(householdId: String, memberId: String) {
     val repo = koinInject<FirestoreRepository>()
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
     var statsData by remember { mutableStateOf<MemberStatsData?>(null) }
     var achievements by remember { mutableStateOf<List<Achievement>>(emptyList()) }
@@ -92,13 +98,13 @@ internal fun StatsBody(householdId: String, memberId: String) {
             val member = members.find { it.id == memberId }
 
             if (member != null) {
-                statsData = computeStats(tasks, assignments, history, member)
+                statsData = computeStats(tasks, assignments, history, member, appSettings.currentLanguage)
                 val unlocked = repo.getMemberAchievements(householdId, memberId)
                 achievements = AchievementChecker.getAchievementsWithStatus(unlocked)
             }
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = e.message ?: "Error al cargar estadísticas"
+            errorMessage = e.message ?: s("stats_error_loading")
         }
         isLoading = false
     }
@@ -124,7 +130,7 @@ internal fun StatsBody(householdId: String, memberId: String) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("❌ $errorMessage", color = MaterialTheme.colorScheme.error)
                                 Spacer(Modifier.height(16.dp))
-                                Button(onClick = { coroutineScope.launch { loadStats() } }) { Text("Reintentar") }
+                                Button(onClick = { coroutineScope.launch { loadStats() } }) { Text(s("tasks_retry")) }
                             }
                         }
                     }
@@ -146,7 +152,7 @@ internal fun StatsBody(householdId: String, memberId: String) {
                             // Bar chart: tasks per day
                             item {
                                 BarChartCard(
-                                    title = "Tareas completadas (última semana)",
+                                    title = s("stats_chart_tasks_title"),
                                     data = data.tasksPerDay
                                 )
                             }
@@ -154,7 +160,7 @@ internal fun StatsBody(householdId: String, memberId: String) {
                             // Points chart
                             item {
                                 PointsChartCard(
-                                    title = "Puntos ganados esta semana",
+                                    title = s("stats_chart_points_title"),
                                     dailyPoints = data.dailyPoints
                                 )
                             }
@@ -163,7 +169,7 @@ internal fun StatsBody(householdId: String, memberId: String) {
                             if (data.tasksByTag.isNotEmpty()) {
                                 item {
                                     PieChartCard(
-                                        title = "Distribución por categoría",
+                                        title = s("stats_chart_category_title"),
                                         data = data.tasksByTag
                                     )
                                 }
@@ -183,7 +189,7 @@ internal fun StatsBody(householdId: String, memberId: String) {
                             if (achievements.isNotEmpty()) {
                                 item {
                                     Text(
-                                        text = "🏆 Logros",
+                                        text = s("stats_achievements_title"),
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
                                         modifier = Modifier.padding(top = 8.dp)
@@ -225,7 +231,8 @@ private fun computeStats(
     tasks: List<TaskResponse>,
     assignments: List<TaskAssignmentResponse>,
     history: List<TaskHistoryResponse>,
-    member: MemberResponse
+    member: MemberResponse,
+    lang: String
 ): MemberStatsData {
     val tz = TimeZone.currentSystemDefault()
     val now = Clock.System.now()
@@ -283,7 +290,7 @@ private fun computeStats(
     val completedTasks = completedTaskIds.mapNotNull { taskMap[it] }
     val tagCounts = mutableMapOf<String, Int>()
     for (task in completedTasks) {
-        for (tag in task.tags.ifEmpty { listOf("Sin categoría") }) {
+        for (tag in task.tags.ifEmpty { listOf(AppStrings.get("stats_no_category", lang)) }) {
             tagCounts[tag] = (tagCounts[tag] ?: 0) + 1
         }
     }
@@ -315,6 +322,9 @@ private fun computeStats(
 
 @Composable
 private fun StreakCard(currentStreak: Int, bestStreak: Int) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Coral100),
@@ -330,12 +340,12 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("🔥", style = MaterialTheme.typography.displaySmall)
                 Text(
-                    "Racha actual",
+                    s("stats_current_streak_label"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "$currentStreak días",
+                    s("stats_days_suffix").replace("%d", currentStreak.toString()),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = Coral700
@@ -344,12 +354,12 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("🏆", style = MaterialTheme.typography.displaySmall)
                 Text(
-                    "Mejor racha",
+                    s("stats_best_streak_label"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "$bestStreak días",
+                    s("stats_days_suffix").replace("%d", bestStreak.toString()),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = Teal800
@@ -586,13 +596,16 @@ private fun SummaryStatsCard(
     onTimeRate: Float,
     overdueCount: Int
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                "📋 Resumen",
+                s("stats_summary_title"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
@@ -601,10 +614,10 @@ private fun SummaryStatsCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                StatItem("Tareas", "$totalTasks", "✅")
-                StatItem("Puntos", "$totalPoints", "⭐")
-                StatItem("A tiempo", "${(onTimeRate * 100).toInt()}%", "⏱️")
-                StatItem("Vencidas", "$overdueCount", "⚠️")
+                StatItem(s("stats_summary_tasks"), "$totalTasks", "✅")
+                StatItem(s("stats_summary_points"), "$totalPoints", "⭐")
+                StatItem(s("stats_summary_on_time"), "${(onTimeRate * 100).toInt()}%", "⏱️")
+                StatItem(s("stats_summary_overdue"), "$overdueCount", "⚠️")
             }
         }
     }
