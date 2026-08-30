@@ -27,8 +27,13 @@ class TaskHubFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "New FCM token: $token")
-        // Token is saved by the main app logic; FCM service just receives it.
-        // The app can call a Firestore update to store it per member.
+        // Antes solo se logueaba: el comentario decía "lo guarda la lógica
+        // principal de la app", pero esa lógica no existía en ningún sitio
+        // (verificado por grep) — ningún token llegaba nunca a persistirse,
+        // así que las notificaciones push de "tarea asignada" no podían
+        // funcionar. App.kt sube este valor a Firestore (users/{uid}) en el
+        // arranque, una vez resuelta la identidad del usuario.
+        org.taskhub.platform.AndroidSchedulerHolder.scheduler?.saveFcmToken(token)
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

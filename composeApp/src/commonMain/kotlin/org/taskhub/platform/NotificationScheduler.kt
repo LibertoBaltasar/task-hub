@@ -16,6 +16,9 @@ interface NotificationScheduler {
     fun cancelReminder(taskId: String)
 
     fun saveFcmToken(token: String)
+
+    /** Token FCM persistido localmente, o null si aún no se ha recibido/no aplica (iOS/JVM). */
+    fun getFcmToken(): String?
 }
 
 /** No-op implementation for non-Android platforms. */
@@ -23,6 +26,7 @@ class NoOpNotificationScheduler : NotificationScheduler {
     override fun scheduleReminder(taskId: String, householdId: String, taskTitle: String, dueDateEpochMs: Long) {}
     override fun cancelReminder(taskId: String) {}
     override fun saveFcmToken(token: String) {}
+    override fun getFcmToken(): String? = null
 }
 
 expect fun createNotificationScheduler(): NotificationScheduler

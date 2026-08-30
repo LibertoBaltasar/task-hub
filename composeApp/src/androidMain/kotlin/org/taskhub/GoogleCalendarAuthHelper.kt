@@ -11,6 +11,8 @@ import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.UserRecoverableAuthException
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -35,6 +37,15 @@ object GoogleCalendarAuthHelper {
 
     private var consentLauncher: ActivityResultLauncher<Intent>? = null
     private var pendingConsent: ((Boolean) -> Unit)? = null
+
+    // Serializa las solicitudes de consentimiento: [pendingConsent] es un único
+    // slot compartido, así que dos llamadas concurrentes a [getAccessToken] que
+    // ambas necesiten consentimiento por primera vez podían pisarse (la segunda
+    // sobrescribía el callback de la primera antes de que el usuario respondiera),
+    // dejando la primera corrutina colgada para siempre esperando un resume que
+    // nunca llega. El Mutex obliga a que la segunda espere a que la primera
+    // termine antes de lanzar su propio intent de consentimiento.
+    private val consentMutex = Mutex()
 
     fun register(activity: ComponentActivity) {
         consentLauncher = activity.registerForActivityResult(
@@ -80,13 +91,15 @@ object GoogleCalendarAuthHelper {
         }
 
     /** Launches the consent [intent] from [UserRecoverableAuthException] and awaits the result. */
-    private suspend fun awaitConsent(intent: Intent): Boolean = suspendCancellableCoroutine { cont ->
-        val launcher = consentLauncher
-        if (launcher == null) {
-            cont.resume(false)
-            return@suspendCancellableCoroutine
+    private suspend fun awaitConsent(intent: Intent): Boolean = consentMutex.withLock {
+        suspendCancellableCoroutine { cont ->
+            val launcher = consentLauncher
+            if (launcher == null) {
+                cont.resume(false)
+                return@suspendCancellableCoroutine
+            }
+            pendingConsent = { granted -> cont.resume(granted) }
+            launcher.launch(intent)
         }
-        pendingConsent = { granted -> cont.resume(granted) }
-        launcher.launch(intent)
     }
 }

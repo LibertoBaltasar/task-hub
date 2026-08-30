@@ -24,6 +24,11 @@ fun BannerAd(modifier: Modifier = Modifier) {
                 adUnitId = AdConfig.BANNER_AD_UNIT_ID
                 loadAd(AdRequest.Builder().build())
             }
-        }
+        },
+        // Un AdView envuelve un WebView interno; sin destruirlo explícitamente
+        // al salir de composición, cada entrada/salida del banner en pantalla
+        // filtraba el WebView y los hilos asociados (recomendación oficial de
+        // AdMob: llamar a destroy() cuando la vista deja de usarse).
+        onRelease = { it.destroy() }
     )
 }

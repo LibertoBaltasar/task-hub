@@ -22,6 +22,23 @@ object AppStrings {
             "settings_vibration" to "Vibración",
             "settings_vibration_desc" to "Vibrar al completar una tarea",
 
+            // Cuenta
+            "settings_account_title" to "Cuenta",
+            "settings_account_connected_prefix" to "✅ Conectado como %s",
+            "settings_account_cloud_note" to "Tus datos se guardan en la nube y se recuperan si reinstalas.",
+            "settings_account_sign_out" to "Cerrar sesión",
+            "settings_account_connecting" to "Conectando con Google...",
+            "settings_account_retry" to "Reintentar",
+            "settings_account_no_session" to "Sin sesión: tus datos solo se guardan en este dispositivo.",
+            "settings_account_sign_in_google" to "Iniciar sesión con Google",
+            "settings_account_edit_profile" to "✏️ Editar perfil",
+
+            // Tema del widget
+            "settings_widget_theme_title" to "Tema del widget",
+            "widget_theme_light" to "Claro",
+            "widget_theme_dark" to "Oscuro",
+            "widget_theme_system" to "Sistema",
+
             // Google Calendar
             "calendar_settings_title" to "📅 Google Calendar",
             "calendar_sync_toggle_label" to "Sincronizar tareas con Google Calendar",
@@ -91,6 +108,9 @@ object AppStrings {
             "household_delete_yes" to "Sí, eliminar",
             "household_cancel" to "Cancelar",
             "household_close" to "Cerrar",
+            "household_leave_title" to "Salir del espacio",
+            "household_leave_confirm" to "¿Desvincularte de '%s'? Dejarás de verlo en tu dispositivo. Si eres el último miembro, el espacio se eliminará.",
+            "household_leave_btn" to "Salir",
             "household_retry" to "Reintentar",
             "household_code_label" to "Código de invitación",
 
@@ -182,6 +202,23 @@ object AppStrings {
             "settings_vibration" to "Vibration",
             "settings_vibration_desc" to "Vibrate when completing a task",
 
+            // Account
+            "settings_account_title" to "Account",
+            "settings_account_connected_prefix" to "✅ Signed in as %s",
+            "settings_account_cloud_note" to "Your data is saved to the cloud and recovered if you reinstall.",
+            "settings_account_sign_out" to "Sign out",
+            "settings_account_connecting" to "Connecting to Google...",
+            "settings_account_retry" to "Retry",
+            "settings_account_no_session" to "No session: your data is only saved on this device.",
+            "settings_account_sign_in_google" to "Sign in with Google",
+            "settings_account_edit_profile" to "✏️ Edit profile",
+
+            // Widget theme
+            "settings_widget_theme_title" to "Widget theme",
+            "widget_theme_light" to "Light",
+            "widget_theme_dark" to "Dark",
+            "widget_theme_system" to "System",
+
             // Google Calendar
             "calendar_settings_title" to "📅 Google Calendar",
             "calendar_sync_toggle_label" to "Sync tasks with Google Calendar",
@@ -251,6 +288,9 @@ object AppStrings {
             "household_delete_yes" to "Yes, delete",
             "household_cancel" to "Cancel",
             "household_close" to "Close",
+            "household_leave_title" to "Leave space",
+            "household_leave_confirm" to "Unlink from '%s'? You'll stop seeing it on this device. If you're the last member, the space will be deleted.",
+            "household_leave_btn" to "Leave",
             "household_retry" to "Retry",
             "household_code_label" to "Invite Code",
 

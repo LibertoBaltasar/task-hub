@@ -97,6 +97,8 @@ data class EditTaskScreen(
             )
         }
 
+        var assignmentsLoadFailed by remember { mutableStateOf(false) }
+
         // Precargar fecha límite y asignaciones existentes (para poder editarlas)
         LaunchedEffect(Unit) {
             if (task.dueDate > 0) {
@@ -112,7 +114,12 @@ data class EditTaskScreen(
                     mandatory = assignments.firstOrNull()?.mandatory ?: false
                 }
             } catch (_: Exception) {
-                // Sin asignaciones → todo vacío
+                // Una subcolección vacía NO lanza excepción en Firestore (devuelve
+                // documents: []); un fallo aquí es un error real de red, no "sin
+                // asignaciones", así que avisamos en vez de dejar el formulario en
+                // silencio con selectedMembers vacío como si la tarea no tuviera
+                // asignaciones cuando en realidad podrían existir pero no cargaron.
+                assignmentsLoadFailed = true
             }
         }
 
@@ -206,7 +213,10 @@ data class EditTaskScreen(
                                         dueDate = dueDate
                                     )
                                 },
-                                enabled = actionState !is TaskActionState.Loading && title.isNotBlank(),
+                                enabled = actionState !is TaskActionState.Loading &&
+                                    title.isNotBlank() &&
+                                    pointsText.toIntOrNull() != null &&
+                                    (!hasDeadline || deadlineTime.isValidTimeFormat()),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.primary
                                 )
@@ -564,6 +574,13 @@ data class EditTaskScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        if (assignmentsLoadFailed) {
+                            Text(
+                                text = "⚠️ No se pudieron cargar las asignaciones actuales. Guardar podría dejar la tarea sin asignar.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
 
                     // Members list
@@ -575,6 +592,7 @@ data class EditTaskScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
+                                                .heightIn(min = 48.dp)
                                                 .clickable {
                                                     selectedMembers = if (member.id in selectedMembers) {
                                                         selectedMembers - member.id

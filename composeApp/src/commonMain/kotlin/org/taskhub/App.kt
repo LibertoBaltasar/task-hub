@@ -18,6 +18,7 @@ import org.koin.compose.KoinApplication
 import org.koin.compose.koinInject
 import org.taskhub.di.appModule
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.platform.NotificationScheduler
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.AppSettingsState
@@ -32,7 +33,7 @@ import org.taskhub.ui.theme.Teal600
 
 @Composable
 fun App() {
-    // ── Fase 1: Splash screen (5 segundos) ─────────────────
+    // ── Fase 1: Splash screen (1.5 segundos) ─────────────────
     var showSplash by remember { mutableStateOf(true) }
 
     if (showSplash) {
@@ -94,6 +95,7 @@ fun App() {
                 val householdStore = koinInject<HouseholdStore>()
                 val repo = koinInject<FirestoreRepository>()
                 val authManager = koinInject<GoogleAuthManager>()
+                val notificationScheduler = koinInject<NotificationScheduler>()
 
                 var initialScreen by remember { mutableStateOf<Screen?>(null) }
 
@@ -137,6 +139,20 @@ fun App() {
                     // Cubre hogares creados/unidos en OTRO dispositivo con la
                     // misma cuenta de Google (antes solo se restauraban al re-loguearse).
                     authManager.restoreFromCloudOnStartup()
+
+                    // ── Subir el token FCM del dispositivo (si hay uno persistido) ──
+                    // Sin esto, el token quedaba solo en SharedPreferences y el
+                    // backend nunca podía dirigir un push de "tarea asignada" a
+                    // este dispositivo. Best-effort: nunca bloquea el arranque.
+                    try {
+                        val uid = repo.getLocalId()
+                        val fcmToken = notificationScheduler.getFcmToken()
+                        if (uid != null && fcmToken != null) {
+                            repo.saveFcmToken(uid, fcmToken)
+                        }
+                    } catch (_: Exception) {
+                        // Offline/transitorio: se reintenta en el próximo arranque.
+                    }
 
                     // ── Ir siempre a HomeScreen ───────────────────────
                     initialScreen = HomeScreen()

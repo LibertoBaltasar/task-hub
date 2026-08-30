@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Excluye TODAS las SharedPreferences del backup automático (Android <12,
+  android:fullBackupContent). SettingsStore guarda ahí, en claro, tokens
+  sensibles (refresh token de Firebase Auth, access/refresh token de Google
+  Calendar) — sin esta exclusión, allowBackup="true" los incluía en la copia
+  de seguridad a Google Drive (y en `adb backup`), permitiendo restaurar la
+  sesión del usuario en otro dispositivo a partir de esa copia.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" />
+</full-backup-content>

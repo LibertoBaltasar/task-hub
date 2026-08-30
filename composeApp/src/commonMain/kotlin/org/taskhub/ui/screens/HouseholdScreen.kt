@@ -172,12 +172,13 @@ data class HouseholdScreen(val householdId: String) : Screen {
 
         // ── Dialogs ──
         if (showQrDialog && inviteCode.isNotEmpty()) {
-            QrShareDialog(inviteCode = inviteCode, onDismiss = { showQrDialog = false })
+            QrShareDialog(inviteCode = inviteCode, s = s, onDismiss = { showQrDialog = false })
         }
 
         if (showConfirmDialog1) {
             DeleteHouseholdConfirmDialog1(
                 householdName = householdName,
+                s = s,
                 onDismiss = { showConfirmDialog1 = false },
                 onConfirm = {
                     showConfirmDialog1 = false
@@ -189,6 +190,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         if (showConfirmDialog2) {
             DeleteHouseholdConfirmDialog2(
                 householdName = householdName,
+                s = s,
                 onDismiss = { showConfirmDialog2 = false },
                 onConfirm = {
                     showConfirmDialog2 = false
@@ -210,6 +212,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         if (showLeaveDialog) {
             LeaveHouseholdDialog(
                 householdName = householdName,
+                s = s,
                 onDismiss = { showLeaveDialog = false },
                 onConfirm = {
                     showLeaveDialog = false

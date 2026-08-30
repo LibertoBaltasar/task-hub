@@ -27,13 +27,19 @@ object AdControllerImpl : AdController {
     @Volatile
     private var lastShownAtMs: Long = 0L
 
+    /** Evita disparar cargas duplicadas mientras una ya está en curso. */
+    @Volatile
+    private var isLoading: Boolean = false
+
     init {
         loadInterstitial()
     }
 
     /** Carga un interstitial nuevo y lo deja listo para mostrar. */
     private fun loadInterstitial() {
+        if (isLoading) return
         val context = AndroidContextHolder.context ?: return
+        isLoading = true
 
         InterstitialAd.load(
             context,
@@ -41,6 +47,7 @@ object AdControllerImpl : AdController {
             AdRequest.Builder().build(),
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: InterstitialAd) {
+                    isLoading = false
                     interstitialAd = ad
                     // Al descartarse el anuncio, se recarga el siguiente
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
@@ -52,6 +59,11 @@ object AdControllerImpl : AdController {
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
+                    // Antes, si la primera carga fallaba (típico sin red al
+                    // arrancar), interstitialAd se quedaba en null para siempre:
+                    // ningún llamador reintentaba. maybeShowInterstitial() ahora
+                    // reintenta la carga la próxima vez que se necesite.
+                    isLoading = false
                     interstitialAd = null
                 }
             }
@@ -59,7 +71,11 @@ object AdControllerImpl : AdController {
     }
 
     override fun maybeShowInterstitial() {
-        val ad = interstitialAd ?: return
+        val ad = interstitialAd
+        if (ad == null) {
+            loadInterstitial()
+            return
+        }
 
         val now = System.currentTimeMillis()
         if (now - lastShownAtMs < INTERSTITIAL_COOLDOWN_MS) return

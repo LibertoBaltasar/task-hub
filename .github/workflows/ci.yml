@@ -32,6 +32,18 @@ jobs:
       - name: Build composeApp (JVM)
         run: ./gradlew :composeApp:jvmJar
 
+      # El target JVM NO compila androidMain (MainActivity, Workers, Analytics,
+      # AdMob...): antes CI podía estar en verde con androidMain roto. Los
+      # runners ubuntu-latest de GitHub traen el Android SDK preinstalado, así
+      # que no hace falta configurarlo aparte.
+      - name: Build composeApp (Android)
+        run: ./gradlew :composeApp:compileDebugKotlinAndroid
+
+      # Tests puros de commonTest (FirestoreParsers, PointsRules, RecurrenceRules):
+      # antes nunca se ejecutaban en CI pese a existir.
+      - name: Run tests (JVM)
+        run: ./gradlew :composeApp:jvmTest
+
       - name: Lint — detekt
-        run: ./gradlew :composeApp:detekt || true
+        run: ./gradlew :composeApp:detekt
         continue-on-error: true

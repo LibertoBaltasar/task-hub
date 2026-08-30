@@ -326,6 +326,26 @@ class FirestoreRepository(
     }
 
     /**
+     * Sube el token de notificaciones push (FCM) del dispositivo actual al
+     * perfil global del usuario (users/{uid}.fcmToken), para que un backend/
+     * Cloud Function pueda dirigirle un push (p.ej. "tarea asignada"). Se
+     * limita a los campos fcmToken/fcmTokenUpdatedAt vía updateMask para no
+     * pisar otros campos del perfil (displayName, avatar, etc.).
+     */
+    suspend fun saveFcmToken(uid: String, token: String) {
+        val fields = mapOf(
+            "fcmToken" to FirestoreValue(stringValue = token),
+            "fcmTokenUpdatedAt" to FirestoreValue(integerValue = Clock.System.now().toEpochMilliseconds().toString())
+        )
+        client.patch("$baseUrl/users/$uid") {
+            withAuth()
+            parameter("updateMask.fieldPaths", "fcmToken,fcmTokenUpdatedAt")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /**
      * Recupera de Firestore los IDs de hogares guardados para el usuario.
      * Devuelve lista vacía si no existe el documento users/{uid}.
      */

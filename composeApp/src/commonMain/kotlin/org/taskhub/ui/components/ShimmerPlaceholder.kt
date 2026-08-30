@@ -19,15 +19,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 
 /**
  * Brush de gradiente animado que se desplaza en diagonal, para simular
  * el efecto "shimmer" sobre un placeholder mientras carga contenido real.
+ *
+ * Respeta la preferencia de "reducir movimiento" del sistema: en ese caso
+ * devuelve un color sólido en vez de animar el barrido indefinidamente (era
+ * la única animación decorativa de la app que no consultaba esta señal).
  */
 @Composable
 fun rememberShimmerBrush(): Brush {
     val colorScheme = MaterialTheme.colorScheme
+    val baseColor = colorScheme.surfaceVariant
+    if (shouldReduceMotion()) {
+        return SolidColor(baseColor)
+    }
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translateAnim by transition.animateFloat(
         initialValue = 0f,
@@ -38,7 +47,6 @@ fun rememberShimmerBrush(): Brush {
         ),
         label = "shimmerTranslate"
     )
-    val baseColor = colorScheme.surfaceVariant
     val highlightColor = colorScheme.surfaceVariant.copy(alpha = 0.4f)
     return Brush.linearGradient(
         colors = listOf(baseColor, highlightColor, baseColor),

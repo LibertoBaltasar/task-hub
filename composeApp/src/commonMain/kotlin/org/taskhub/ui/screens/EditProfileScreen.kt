@@ -13,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -176,6 +178,7 @@ class EditProfileScreen : Screen {
                                             Surface(
                                                 modifier = Modifier
                                                     .size(48.dp)
+                                                    .semantics { contentDescription = "Emoji $emoji" }
                                                     .clickable {
                                                         avatarEmoji = emoji
                                                         showEmojiGrid = false

@@ -72,17 +72,17 @@ fun SettingsSheet(
         Spacer(Modifier.height(24.dp))
 
         // ── Cuenta de Google ──────────────────────────────
-        SettingsSection(title = "Cuenta") {
+        SettingsSection(title = s("settings_account_title")) {
             when (val state = authState) {
                 is GoogleAuthState.SignedIn -> {
                     Text(
-                        text = "✅ Conectado como ${state.email ?: "Google"}",
+                        text = s("settings_account_connected_prefix").replace("%s", state.email ?: "Google"),
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Tus datos se guardan en la nube y se recuperan si reinstalas.",
+                        text = s("settings_account_cloud_note"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -91,7 +91,7 @@ fun SettingsSheet(
                         onClick = { authManager.signOut() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Cerrar sesión")
+                        Text(s("settings_account_sign_out"))
                     }
                 }
 
@@ -105,7 +105,7 @@ fun SettingsSheet(
                             strokeWidth = 2.dp,
                             color = Teal600
                         )
-                        Text("Conectando con Google...")
+                        Text(s("settings_account_connecting"))
                     }
                 }
 
@@ -120,13 +120,13 @@ fun SettingsSheet(
                         onClick = { authManager.signIn() },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Reintentar")
+                        Text(s("settings_account_retry"))
                     }
                 }
 
                 else -> {
                     Text(
-                        text = "Sin sesión: tus datos solo se guardan en este dispositivo.",
+                        text = s("settings_account_no_session"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -136,7 +136,7 @@ fun SettingsSheet(
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
-                        Text("Iniciar sesión con Google")
+                        Text(s("settings_account_sign_in_google"))
                     }
                 }
             }
@@ -150,7 +150,7 @@ fun SettingsSheet(
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("✏️ Editar perfil")
+                Text(s("settings_account_edit_profile"))
             }
         }
 
@@ -295,17 +295,17 @@ fun SettingsSheet(
 
         // ── Theme ────────────────────────────────────────
         SettingsSection(title = s("settings_theme")) {
-            ThemeOption(
+            RadioOptionRow(
                 label = s("theme_default"),
                 selected = appSettings.currentTheme == TaskHubThemeType.DEFAULT,
                 onClick = { appSettings.onThemeChanged(TaskHubThemeType.DEFAULT) }
             )
-            ThemeOption(
+            RadioOptionRow(
                 label = s("theme_naturaleza"),
                 selected = appSettings.currentTheme == TaskHubThemeType.NATURALEZA,
                 onClick = { appSettings.onThemeChanged(TaskHubThemeType.NATURALEZA) }
             )
-            ThemeOption(
+            RadioOptionRow(
                 label = s("theme_minimal"),
                 selected = appSettings.currentTheme == TaskHubThemeType.MINIMAL,
                 onClick = { appSettings.onThemeChanged(TaskHubThemeType.MINIMAL) }
@@ -316,12 +316,12 @@ fun SettingsSheet(
 
         // ── Language ─────────────────────────────────────
         SettingsSection(title = s("settings_language")) {
-            LanguageOption(
+            RadioOptionRow(
                 label = s("lang_spanish"),
                 selected = appSettings.currentLanguage == "es",
                 onClick = { appSettings.onLanguageChanged("es") }
             )
-            LanguageOption(
+            RadioOptionRow(
                 label = s("lang_english"),
                 selected = appSettings.currentLanguage == "en",
                 onClick = { appSettings.onLanguageChanged("en") }
@@ -331,9 +331,9 @@ fun SettingsSheet(
         Spacer(Modifier.height(24.dp))
 
         // ── Widget Theme ────────────────────────────────
-        SettingsSection(title = "Tema del widget") {
-            WidgetThemeOption(
-                label = "Claro",
+        SettingsSection(title = s("settings_widget_theme_title")) {
+            RadioOptionRow(
+                label = s("widget_theme_light"),
                 selected = widgetTheme == "light",
                 onClick = {
                     widgetTheme = "light"
@@ -341,8 +341,8 @@ fun SettingsSheet(
                     saveWidgetThemeToCache("light")
                 }
             )
-            WidgetThemeOption(
-                label = "Oscuro",
+            RadioOptionRow(
+                label = s("widget_theme_dark"),
                 selected = widgetTheme == "dark",
                 onClick = {
                     widgetTheme = "dark"
@@ -350,8 +350,8 @@ fun SettingsSheet(
                     saveWidgetThemeToCache("dark")
                 }
             )
-            WidgetThemeOption(
-                label = "Sistema",
+            RadioOptionRow(
+                label = s("widget_theme_system"),
                 selected = widgetTheme == "system",
                 onClick = {
                     widgetTheme = "system"
@@ -482,8 +482,13 @@ private fun SettingsSection(
     }
 }
 
+/**
+ * Fila de opción con RadioButton reutilizada por los 3 selectores de esta
+ * pantalla (tema, idioma, tema del widget) — antes eran tres composables
+ * idénticos letra por letra (ThemeOption/LanguageOption/WidgetThemeOption).
+ */
 @Composable
-private fun ThemeOption(
+private fun RadioOptionRow(
     label: String,
     selected: Boolean,
     onClick: () -> Unit
@@ -491,62 +496,7 @@ private fun ThemeOption(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            colors = RadioButtonDefaults.colors(
-                selectedColor = Teal600
-            )
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge
-        )
-    }
-}
-
-@Composable
-private fun LanguageOption(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onClick,
-            colors = RadioButtonDefaults.colors(
-                selectedColor = Teal600
-            )
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge
-        )
-    }
-}
-
-@Composable
-private fun WidgetThemeOption(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick)
             .padding(vertical = 8.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically

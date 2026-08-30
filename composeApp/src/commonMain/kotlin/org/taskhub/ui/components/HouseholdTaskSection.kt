@@ -65,6 +65,7 @@ fun HouseholdTaskSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .clickable { expanded = !expanded },
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -106,6 +107,7 @@ fun HouseholdTaskSection(
                 Column {
                     Spacer(Modifier.height(8.dp))
 
+                    val currentError = error
                     when {
                         isLoading -> {
                             Box(
@@ -119,9 +121,9 @@ fun HouseholdTaskSection(
                                 )
                             }
                         }
-                        error != null -> {
+                        currentError != null -> {
                             Text(
-                                text = error!!,
+                                text = currentError,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -163,6 +165,7 @@ private fun TaskRow(task: TaskResponse, onClick: () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
             .clickable(onClick = onClick),
         color = MaterialTheme.colorScheme.surface
     ) {

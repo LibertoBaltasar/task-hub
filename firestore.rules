@@ -3,7 +3,43 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v2)
+    //  Task Hub — Reglas de seguridad (v3 — NO DESPLEGADO)
+    //
+    //  ⚠️ Este archivo se editó como parte de la auditoría de
+    //  2026-08-30 (ver docs/audit-2026-08-30.md) pero NO se ha
+    //  desplegado a Firebase — hazlo manualmente (PATCH, no POST,
+    //  ver CLAUDE.md) tras revisar el impacto en la UI descrito abajo.
+    //
+    //  Cambios respecto a v2 (cierran huecos encontrados en la auditoría):
+    //   - members/{mid}: antes CUALQUIER miembro podía update/delete el
+    //     documento de CUALQUIER otro miembro sin restricción de campos,
+    //     así que un perfil "child" podía auto-ascenderse a "role: admin"
+    //     o forjar su propio totalPoints/streak vía REST directo. Ahora
+    //     un miembro normal solo puede tocar SU PROPIO documento y nunca
+    //     su campo `role`; cambiar el rol de otro requiere ser admin/owner.
+    //   - members/{mid} (auto-alta con código de invitación): antes no
+    //     validaba el resto de campos del documento nuevo, permitiendo
+    //     unirse ya como "admin" con totalPoints arbitrario. Ahora exige
+    //     role="child" y contadores en 0 en el create.
+    //   - taskHistory/rewards: antes cualquier miembro podía editar/borrar
+    //     el historial (rompe la integridad de puntos/estadísticas) o
+    //     crear/editar recompensas (la UI ya restringe esto a admin/owner,
+    //     pero la regla no lo hacía cumplir). Ahora solo admin/owner puede
+    //     modificar/borrar taskHistory y escribir rewards.
+    //
+    //  Limitación arquitectónica conocida (no resuelta aquí): sin Cloud
+    //  Functions no es posible validar en la regla que un incremento de
+    //  totalPoints se corresponde con una tarea realmente completada —
+    //  un miembro podría seguir editando SU PROPIO totalPoints a mano vía
+    //  REST directo. Cerrarlo del todo requeriría mover esa escritura a
+    //  un backend/Cloud Function. Ver docs/audit-2026-08-30.md.
+    //
+    //  IMPORTANTE — impacto en la app actual antes de desplegar:
+    //   - `reassignTaskCompletion` (TaskDetailScreen, "cambiar quién hizo
+    //     la tarea") escribe en taskHistory; con esta regla solo funciona
+    //     si quien lo hace es admin/owner. Si se usa desde miembros no-admin
+    //     en producción, gatéalo en la UI antes de desplegar, o relaja esa
+    //     regla a isMember(hid).
     //
     //  Modelo de acceso:
     //   - Todo acceso requiere autenticación (request.auth != null).
@@ -37,6 +73,21 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/households/$(hid)/members/$(request.auth.uid));
     }
 
+    function myMemberDoc(hid) {
+      return get(/databases/$(database)/documents/households/$(hid)/members/$(request.auth.uid));
+    }
+
+    // Miembro con rol "admin" vinculado a una cuenta (distinto del owner).
+    function isAdminMember(hid) {
+      return isMember(hid) && myMemberDoc(hid).data.role == "admin";
+    }
+
+    // "Confía" en owner o admin — son quienes gestionan roles/contenido
+    // sensible del hogar en la UI (crear recompensas, cambiar roles, etc.).
+    function isTrusted(hid) {
+      return isOwner(hid) || isAdminMember(hid);
+    }
+
     // ── users/{uid}: solo el propio usuario ────────────────────
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
@@ -68,17 +119,35 @@ service cloud.firestore {
     // ── members/{mid} ──────────────────────────────────────────
     match /households/{hid}/members/{mid} {
       allow read: if isMember(hid) || isOwner(hid);
+
       allow create: if signedIn() && (
           isOwner(hid)
-          || isMember(hid)
-          // auto-alta: el UID que se crea aporta el código de invitación válido
+          || isAdminMember(hid)
+          // auto-alta: el UID que se crea aporta el código de invitación
+          // válido; se fuerza role="child" y contadores en 0 para que nadie
+          // pueda entrar ya como admin o con saldo/racha inventados.
           || (request.auth.uid == mid
-              && request.resource.data.inviteCode == householdDoc(hid).data.inviteCode)
+              && request.resource.data.inviteCode == householdDoc(hid).data.inviteCode
+              && request.resource.data.role == "child"
+              && request.resource.data.totalPoints == 0
+              && request.resource.data.currentStreak == 0
+              && request.resource.data.bestStreak == 0)
         );
-      allow update, delete: if isMember(hid) || isOwner(hid);
+
+      // El dueño del documento (mismo UID) puede actualizar su propio perfil
+      // y sus contadores (puntos/rachas/agradecimientos) — así es como el
+      // cliente los incrementa hoy sin backend propio — pero NUNCA su
+      // `role`: eso solo lo cambia el admin/owner (o el propio abandono,
+      // que usa `leftAt` bajo el mismo dueño y tampoco toca `role`).
+      allow update: if isTrusted(hid)
+        || (
+          request.auth.uid == mid
+          && request.resource.data.role == resource.data.role
+        );
+      allow delete: if isTrusted(hid);
     }
 
-    // ── Contenido del hogar: solo miembros/propietario ─────────
+    // ── Contenido del hogar ──────────────────────────────────────
     match /households/{hid}/tasks/{tid} {
       allow read, write: if isMember(hid) || isOwner(hid);
     }
@@ -88,17 +157,26 @@ service cloud.firestore {
     match /households/{hid}/tasks/{tid}/comments/{cid} {
       allow read, write: if isMember(hid) || isOwner(hid);
     }
+    // El historial es el registro de auditoría de puntos/estadísticas:
+    // cualquier miembro puede CREAR una entrada (se genera al completar una
+    // tarea, en su propio dispositivo), pero editar/borrar una entrada ya
+    // existente (p.ej. para manipular StatsScreen) se restringe a admin/owner.
     match /households/{hid}/taskHistory/{thid} {
-      allow read, write: if isMember(hid) || isOwner(hid);
+      allow read, create: if isMember(hid) || isOwner(hid);
+      allow update, delete: if isTrusted(hid);
     }
     match /households/{hid}/notifications/{nid} {
       allow read, write: if isMember(hid) || isOwner(hid);
     }
+    // La UI ya restringe "crear recompensa" a admin/owner (RewardListScreen);
+    // la regla ahora lo hace cumplir también a nivel de datos.
     match /households/{hid}/rewards/{rid} {
-      allow read, write: if isMember(hid) || isOwner(hid);
+      allow read: if isMember(hid) || isOwner(hid);
+      allow write: if isTrusted(hid);
     }
     match /households/{hid}/rewardRedemptions/{rrid} {
-      allow read, write: if isMember(hid) || isOwner(hid);
+      allow read, create: if isMember(hid) || isOwner(hid);
+      allow update, delete: if isTrusted(hid);
     }
     match /households/{hid}/members/{mid}/achievements/{achid} {
       allow read, write: if isMember(hid) || isOwner(hid);

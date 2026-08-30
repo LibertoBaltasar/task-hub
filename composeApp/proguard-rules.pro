@@ -22,8 +22,26 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
-# Keep all our data models (Firestore DTOs + network responses)
--keep class org.taskhub.network.** { *; }
+# Keep all our data models (Firestore DTOs + network responses).
+# NOTA: antes había también un `-keep class org.taskhub.network.** { *; }`
+# que mantenía SIN ofuscar ni encoger todo el paquete network (incluida la
+# lógica de negocio de FirestoreRepository, no solo los DTOs serializables),
+# anulando gran parte del beneficio de R8 y facilitando la ingeniería inversa
+# de los endpoints/lógica de puntos. Los DTOs (FirestoreValue, TaskResponse...)
+# ya quedan protegidos por las reglas de kotlinx.serialization de arriba
+# (aplican a todo org.taskhub.**) + las líneas explícitas de abajo.
+-keep class org.taskhub.network.FirestoreValue { *; }
+-keep class org.taskhub.network.FirestoreArrayValue { *; }
+-keep class org.taskhub.network.FirestoreMapValue { *; }
+-keep class org.taskhub.network.FirestoreDocument { *; }
+-keep class org.taskhub.network.FirestoreDocumentResponse { *; }
+-keep class org.taskhub.network.FirestoreListResponse { *; }
+-keep class org.taskhub.network.FirestoreErrorEnvelope { *; }
+-keep class org.taskhub.network.FirestoreErrorBody { *; }
+-keep class org.taskhub.network.FirebaseAuthRequest { *; }
+-keep class org.taskhub.network.FirebaseAuthResponse { *; }
+-keep class org.taskhub.network.SignInWithIdpRequest { *; }
+-keep class org.taskhub.network.TokenRefreshResponse { *; }
 -keep class org.taskhub.network.models.** { *; }
 -keep class org.taskhub.storage.SavedHousehold { *; }
 

@@ -27,13 +27,14 @@ import org.taskhub.ui.models.DonateActionState
 @Composable
 fun QrShareDialog(
     inviteCode: String,
+    s: (String) -> String,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                "Código de invitación",
+                s("household_invite_title"),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -61,7 +62,7 @@ fun QrShareDialog(
                 Spacer(Modifier.height(8.dp))
 
                 Text(
-                    text = "Comparte este código para invitar miembros",
+                    text = s("household_share_code"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -73,19 +74,18 @@ fun QrShareDialog(
                 onClick = {
                     logAnalyticsEvent("invite_code_shared")
                     shareText(
-                        "Únete a mi espacio en Task Hub: $inviteCode. " +
-                            "Descárgala en: https://play.google.com/store/apps/details?id=org.taskhub",
-                        "Invitación a Task Hub"
+                        s("household_share_message").replace("%s", inviteCode),
+                        s("household_share_subject")
                     )
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("Compartir")
+                Text(s("household_share"))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cerrar")
+                Text(s("household_close"))
             }
         }
     )
@@ -97,23 +97,24 @@ fun QrShareDialog(
 @Composable
 fun DeleteHouseholdConfirmDialog1(
     householdName: String,
+    s: (String) -> String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Eliminar espacio") },
+        title = { Text(s("household_delete_title")) },
         text = {
-            Text("¿Eliminar '$householdName'? Esta acción no se puede deshacer.")
+            Text(s("household_delete_confirm_1").replace("%s", householdName))
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Eliminar", color = MaterialTheme.colorScheme.error)
+                Text(s("household_delete_btn"), color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text(s("household_cancel"))
             }
         }
     )
@@ -125,23 +126,24 @@ fun DeleteHouseholdConfirmDialog1(
 @Composable
 fun DeleteHouseholdConfirmDialog2(
     householdName: String,
+    s: (String) -> String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("¿Estás completamente seguro?") },
+        title = { Text(s("household_delete_confirm_2")) },
         text = {
-            Text("Se perderán todas las tareas y miembros de '$householdName'.")
+            Text(s("household_delete_confirm_2_desc").replace("%s", householdName))
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Sí, eliminar", color = MaterialTheme.colorScheme.error)
+                Text(s("household_delete_yes"), color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text(s("household_cancel"))
             }
         }
     )
@@ -153,26 +155,24 @@ fun DeleteHouseholdConfirmDialog2(
 @Composable
 fun LeaveHouseholdDialog(
     householdName: String,
+    s: (String) -> String,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Salir del espacio") },
+        title = { Text(s("household_leave_title")) },
         text = {
-            Text(
-                "¿Desvincularte de '$householdName'? Dejarás de verlo en tu " +
-                    "dispositivo. Si eres el último miembro, el espacio se eliminará."
-            )
+            Text(s("household_leave_confirm").replace("%s", householdName))
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text("Salir", color = MaterialTheme.colorScheme.error)
+                Text(s("household_leave_btn"), color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text(s("household_cancel"))
             }
         }
     )

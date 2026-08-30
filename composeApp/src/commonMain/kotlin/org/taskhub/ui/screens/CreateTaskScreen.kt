@@ -168,7 +168,10 @@ data class CreateTaskScreen(
                                         dueDate = dueDate
                                     )
                                 },
-                                enabled = actionState !is TaskActionState.Loading && title.isNotBlank(),
+                                enabled = actionState !is TaskActionState.Loading &&
+                                    title.isNotBlank() &&
+                                    pointsText.toIntOrNull() != null &&
+                                    (!hasDeadline || deadlineTime.isValidTimeFormat()),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.primary
                                 )
@@ -559,6 +562,7 @@ data class CreateTaskScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
+                                                .heightIn(min = 48.dp)
                                                 .clickable {
                                                     selectedMembers = if (member.id in selectedMembers) {
                                                         selectedMembers - member.id

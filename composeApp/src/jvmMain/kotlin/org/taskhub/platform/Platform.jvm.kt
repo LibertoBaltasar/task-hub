@@ -14,7 +14,12 @@ actual fun updateWidgetPendingTasks(taskList: String) {
 }
 
 actual fun launchGoogleSignIn() {
-    // JVM: Google Sign-In not supported — no-op
+    // JVM/Desktop: Google Sign-In no está implementado todavía. Sin esto,
+    // GoogleAuthManager.signIn()/linkCalendar() se quedaban colgados para
+    // siempre en SigningIn (GoogleSignInResultHolder.result nunca volvía a
+    // emitir). Señalizar "sin token" desbloquea el flujo (vuelve a Anonymous)
+    // en vez de colgarlo.
+    GoogleSignInResultHolder.setResult("")
 }
 
 actual suspend fun getGoogleCalendarAccessToken(): String? {

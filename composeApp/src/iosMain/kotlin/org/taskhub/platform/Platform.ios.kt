@@ -14,7 +14,13 @@ actual fun updateWidgetPendingTasks(taskList: String) {
 }
 
 actual fun launchGoogleSignIn() {
-    // iOS: Google Sign-In not supported — no-op
+    // iOS: Google Sign-In no está implementado todavía. Sin esto,
+    // GoogleAuthManager.signIn()/linkCalendar() se quedaban colgados para
+    // siempre en SigningIn (GoogleSignInResultHolder.result nunca volvía a
+    // emitir), incluido cada vez que el usuario pulsaba "Vincular Google
+    // Calendar" desde Ajustes o el detalle de una tarea. Señalizar "sin
+    // token" desbloquea el flujo (vuelve a Anonymous) en vez de colgarlo.
+    GoogleSignInResultHolder.setResult("")
 }
 
 actual suspend fun getGoogleCalendarAccessToken(): String? {

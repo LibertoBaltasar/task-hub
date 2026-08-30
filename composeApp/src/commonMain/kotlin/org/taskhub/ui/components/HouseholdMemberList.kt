@@ -45,6 +45,7 @@ fun LazyListScope.householdMemberList(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .clickable(onClick = onToggleExpanded),
             verticalAlignment = Alignment.CenterVertically
         ) {

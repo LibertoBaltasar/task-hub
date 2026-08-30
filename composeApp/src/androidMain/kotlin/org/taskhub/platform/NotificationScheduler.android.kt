@@ -36,7 +36,7 @@ class AndroidNotificationScheduler(private val context: Context) : NotificationS
         prefs.edit().putString("fcm_token", token).apply()
     }
 
-    fun getFcmToken(): String? = prefs.getString("fcm_token", null)
+    override fun getFcmToken(): String? = prefs.getString("fcm_token", null)
 }
 
 /** Singleton holder — initialized from MainActivity.onCreate(). */
