@@ -148,7 +148,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(rState.rewards) { reward ->
+                        items(rState.rewards, key = { it.id }) { reward ->
                             RewardCard(
                                 reward = reward,
                                 isAdmin = isAdmin,

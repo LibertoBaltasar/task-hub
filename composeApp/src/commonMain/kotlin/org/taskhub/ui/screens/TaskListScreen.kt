@@ -351,8 +351,21 @@ private fun spanishMonthName(month: Month): String = when (month) {
 //  Group tasks by status (not instances — calculated locally)
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Comparador según la opción de orden elegida por el usuario en el menú
+ * desplegable. Antes se ignoraba por completo: el icono del menú cambiaba
+ * pero la lista siempre se ordenaba por fecha límite + puntos.
+ */
+private fun taskComparator(sort: TaskSort): Comparator<TaskWithStatus> = when (sort) {
+    TaskSort.DEADLINE_ASC -> compareBy { if (it.task.dueDate > 0) it.task.dueDate else Long.MAX_VALUE }
+    TaskSort.DEADLINE_DESC -> compareByDescending { it.task.dueDate }
+    TaskSort.POINTS_DESC -> compareByDescending { it.task.points }
+    TaskSort.CREATED_DESC -> compareByDescending { it.task.createdAt }
+}
+
 private fun groupTasksByStatus(
-    items: List<TaskWithStatus>
+    items: List<TaskWithStatus>,
+    sort: TaskSort
 ): List<TaskGroup> {
     val dueItems = items.filter { it.isDueToday && !it.isCompletedToday }
     val overdueItems = dueItems.filter { it.isOverdue }
@@ -360,13 +373,11 @@ private fun groupTasksByStatus(
     val completedToday = items.filter { it.isCompletedToday }
 
     val groups = mutableListOf<TaskGroup>()
+    val comparator = taskComparator(sort)
 
     // Overdue
     if (overdueItems.isNotEmpty()) {
-        val sorted = overdueItems.sortedWith(
-            compareBy<TaskWithStatus> { it.task.dueDate }
-                .thenByDescending { it.task.points }
-        )
+        val sorted = overdueItems.sortedWith(comparator)
         groups.add(TaskGroup(
             label = "Vencidas",
             sortKey = 0,
@@ -383,10 +394,7 @@ private fun groupTasksByStatus(
         val today = Clock.System.now().toLocalDateTime(tz).date
         val dow = today.dayOfWeek
         val dayStr = spanishDayName(dow)
-        val sorted = pendingToday.sortedWith(
-            compareBy<TaskWithStatus> { it.task.dueDate }
-                .thenByDescending { it.task.points }
-        )
+        val sorted = pendingToday.sortedWith(comparator)
         groups.add(TaskGroup(
             label = "Hoy · $dayStr ${today.dayOfMonth}",
             sortKey = 1,
@@ -497,7 +505,7 @@ private fun TaskListContent(
 
     // Group by status
     val groups = remember(tasksWithStatus, filter, sort, tagFilter) {
-        groupTasksByStatus(tasksWithStatus)
+        groupTasksByStatus(tasksWithStatus, sort)
     }
 
     // Collapse state per group

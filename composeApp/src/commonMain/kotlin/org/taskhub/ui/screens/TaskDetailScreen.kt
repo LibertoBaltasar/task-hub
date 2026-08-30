@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
@@ -544,7 +545,7 @@ private fun TaskDetailContent(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            items(task.subtasks) { st ->
+            items(task.subtasks, key = { it.id }) { st ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -598,7 +599,7 @@ private fun TaskDetailContent(
                 }
             }
         } else {
-            items(pendingAssignments) { assignment ->
+            items(pendingAssignments, key = { it.id }) { assignment ->
                 val member = memberMap[assignment.memberId]
                 AssignmentCard(
                     assignment = assignment,
@@ -622,7 +623,7 @@ private fun TaskDetailContent(
                 )
             }
 
-            items(completedAssignments) { assignment ->
+            items(completedAssignments, key = { it.id }) { assignment ->
                 val member = memberMap[assignment.memberId]
                 AssignmentCard(
                     assignment = assignment,
@@ -673,10 +674,7 @@ private fun TaskDetailContent(
                     onClick = onAddComment,
                     enabled = newCommentText.isNotBlank()
                 ) {
-                    Text(
-                        "📤",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = s("messages_send"))
                 }
             }
         }
@@ -718,7 +716,7 @@ private fun TaskDetailContent(
                         }
                     }
                 } else {
-                    items(commentsState.comments) { comment ->
+                    items(commentsState.comments, key = { it.id }) { comment ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(

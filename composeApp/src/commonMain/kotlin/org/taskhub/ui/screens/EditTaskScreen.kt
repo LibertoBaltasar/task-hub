@@ -313,7 +313,7 @@ data class EditTaskScreen(
                     }
 
                     if (subtasks.isNotEmpty()) {
-                        items(subtasks) { st ->
+                        items(subtasks, key = { it.id }) { st ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically

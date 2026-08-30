@@ -76,6 +76,16 @@ class HomeScreen : Screen {
             model.loadAllTasks()
         }
 
+        // Cierra el prompt de Google solo cuando el login realmente tiene éxito.
+        // Antes se cerraba de forma síncrona al pulsar el botón, así que si el
+        // login fallaba el usuario nunca llegaba a ver el estado SigningIn/Error
+        // (el diálogo ya había desaparecido).
+        LaunchedEffect(authState) {
+            if (showGooglePrompt && authState is GoogleAuthState.SignedIn) {
+                showGooglePrompt = false
+            }
+        }
+
         // Settings dialog
         if (showSettings) {
             Dialog(
@@ -141,7 +151,6 @@ class HomeScreen : Screen {
                     Button(
                         onClick = {
                             settingsStore.setHasSeenGooglePrompt(true)
-                            showGooglePrompt = false
                             authManager.signIn()
                         },
                         enabled = authState !is GoogleAuthState.SigningIn,

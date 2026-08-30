@@ -194,6 +194,7 @@ class MemberScreenModel(
         memberId: String,
         pointsSpent: Int
     ) {
+        if (_rewardActionState.value == RewardActionState.Loading) return // evita doble-tap / doble descuento
         screenModelScope.launch {
             _rewardActionState.value = RewardActionState.Loading
             try {
@@ -222,6 +223,7 @@ class MemberScreenModel(
     val donateActionState: StateFlow<DonateActionState> = _donateActionState.asStateFlow()
 
     fun appreciateMember(householdId: String, fromMemberId: String, toMemberId: String, amount: Int) {
+        if (_appreciateActionState.value == AppreciateActionState.Loading) return
         screenModelScope.launch {
             _appreciateActionState.value = AppreciateActionState.Loading
             when (val result = repo.appreciateMember(householdId, fromMemberId, toMemberId, amount)) {
@@ -237,6 +239,7 @@ class MemberScreenModel(
     }
 
     fun donatePoints(householdId: String, fromMemberId: String, toMemberId: String, amount: Int) {
+        if (_donateActionState.value == DonateActionState.Loading) return
         screenModelScope.launch {
             _donateActionState.value = DonateActionState.Loading
             when (val result = repo.donatePoints(householdId, fromMemberId, toMemberId, amount)) {

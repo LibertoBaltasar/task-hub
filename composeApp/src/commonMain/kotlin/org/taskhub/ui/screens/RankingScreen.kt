@@ -127,7 +127,7 @@ internal fun RankingBody(householdId: String) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(members) { index, member ->
+                itemsIndexed(members, key = { _, member -> member.id }) { index, member ->
                     RankingRow(
                         position = index + 1,
                         member = member

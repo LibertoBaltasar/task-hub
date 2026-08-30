@@ -119,7 +119,10 @@ data class FieldReference(
 
 @Serializable
 data class FirebaseAuthRequest(
-    val returnSecureToken: Boolean = true
+    // Sin valor por defecto: con encodeDefaults=false, un default aquí haría que
+    // kotlinx.serialization OMITA el campo del body (mismo pitfall ya resuelto en
+    // SignInWithIdpRequest), y el alta anónima fallaría silenciosamente sin idToken.
+    val returnSecureToken: Boolean
 )
 
 /** Serializer que acepta tanto string como número para expiresIn. */

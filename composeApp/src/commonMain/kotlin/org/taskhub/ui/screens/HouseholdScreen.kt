@@ -90,43 +90,54 @@ data class HouseholdScreen(val householdId: String) : Screen {
             memberModel.loadMembers(householdId)
         }
 
-        // Backfillea eventos de Calendar pendientes (best-effort, nunca bloquea la UI)
-        LaunchedEffect(householdState) {
+        // Backfillea eventos de Calendar pendientes (best-effort, nunca bloquea la UI).
+        // Clave = solo el id (no el objeto household completo): así no se relanza
+        // cada vez que cambia otro campo del hogar (p.ej. al renombrarlo), solo al
+        // entrar en Success por primera vez para este id.
+        val successHouseholdId = (householdState as? HouseholdUiState.Success)?.household?.id
+        LaunchedEffect(successHouseholdId) {
             val hState = householdState
             if (hState is HouseholdUiState.Success) {
                 calendarSync.reconcile(householdId, hState.household.name, hState.household.isPersonal)
             }
         }
 
-        // Poll for notification unread count every 30 seconds
-        var memberId by remember { mutableStateOf("") }
+        // Determina si el usuario actual es admin (por su identidad).
         LaunchedEffect(memberState) {
             if (memberState is MemberUiState.Success) {
                 val members = (memberState as MemberUiState.Success).members
-                memberId = members.firstOrNull()?.id ?: ""
-                // Determinar si el usuario actual es admin (por su identidad)
                 val localId = repo.getLocalId()
                 val myMember = members.firstOrNull { it.userId == localId } ?: members.firstOrNull()
                 isAdmin = myMember?.role == "admin"
             }
         }
-        LaunchedEffect(householdId, memberId) {
-            if (memberId.isNotEmpty()) {
-                notificationModel.refreshUnreadCount(householdId, memberId)
-                while (true) {
-                    kotlinx.coroutines.delay(30_000L)
-                    notificationModel.refreshUnreadCount(householdId, memberId)
-                }
-            }
-        }
 
-        // ── Chat de mensajes ──
-        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+        // ── Identidad del usuario actual en este hogar ──
+        // ÚNICA fuente de verdad para "qué miembro soy yo": antes, la navegación
+        // a Tareas/Calendario/Explorar y el createdBy al crear tareas usaban
+        // members.firstOrNull()?.id (el PRIMER miembro de la lista, no el mío),
+        // así que en un hogar compartido cualquiera que no fuera el primer
+        // miembro veía datos ajenos. resolveCurrentMember() sí resuelve al
+        // usuario autenticado.
         var currentMemberId by remember { mutableStateOf("") }
         LaunchedEffect(householdId) {
             currentMemberId = repo.resolveCurrentMember(householdId)
         }
         val myMember = (memberState as? MemberUiState.Success)?.members?.firstOrNull { it.id == currentMemberId }
+
+        // ── Chat de mensajes ──
+        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
+        // Poll for notification unread count every 30 seconds
+        LaunchedEffect(householdId, currentMemberId) {
+            if (currentMemberId.isNotEmpty()) {
+                notificationModel.refreshUnreadCount(householdId, currentMemberId)
+                while (true) {
+                    kotlinx.coroutines.delay(30_000L)
+                    notificationModel.refreshUnreadCount(householdId, currentMemberId)
+                }
+            }
+        }
 
         // Cierra los diálogos y limpia el estado de acción al completarse con éxito.
         LaunchedEffect(appreciateActionState) {
@@ -281,7 +292,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         Box {
                             IconButton(
                                 onClick = {
-                                    val mid = memberId
+                                    val mid = currentMemberId
                                     if (mid.isNotEmpty()) {
                                         navigator.push(NotificationListScreen(householdId, mid))
                                     }
@@ -418,9 +429,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     ) {
                                         Button(
                                             onClick = {
-                                                val mState = memberState
-                                                val mid = if (mState is MemberUiState.Success) mState.members.firstOrNull()?.id else null
-                                                navigator.push(TaskListScreen(householdId, mid))
+                                                navigator.push(TaskListScreen(householdId, currentMemberId.ifEmpty { null }))
                                             },
                                             modifier = Modifier.weight(1f),
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
@@ -435,9 +444,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
 
                                         Button(
                                             onClick = {
-                                                val mState = memberState
-                                                val mid = (mState as? MemberUiState.Success)?.members?.firstOrNull()?.id
-                                                navigator.push(CalendarScreen(householdId, mid))
+                                                navigator.push(CalendarScreen(householdId, currentMemberId.ifEmpty { null }))
                                             },
                                             modifier = Modifier.weight(1f),
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -456,9 +463,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                 item {
                                     Button(
                                         onClick = {
-                                            val mState = memberState
-                                            val mid = (mState as? MemberUiState.Success)?.members?.firstOrNull()?.id ?: ""
-                                            navigator.push(ExploreScreen(householdId, mid))
+                                            navigator.push(ExploreScreen(householdId, currentMemberId))
                                         },
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
@@ -488,7 +493,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                         navigator.push(
                                             CreateTaskScreen(
                                                 householdId = householdId,
-                                                createdBy = memberId,
+                                                createdBy = currentMemberId,
                                                 preselectedMemberId = member.id
                                             )
                                         )

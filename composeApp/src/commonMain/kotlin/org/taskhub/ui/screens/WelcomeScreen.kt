@@ -174,7 +174,10 @@ class WelcomeScreen : Screen {
                     Spacer(modifier = Modifier.height(32.dp))
 
                     Text(
-                        text = "v0.1.0",
+                        // Sin acceso multiplataforma trivial al versionName de Gradle desde
+                        // commonMain: recuerda actualizar este literal en cada
+                        // "chore: bump versión X.Y.Z" (ver CLAUDE.md).
+                        text = "v0.7.22",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

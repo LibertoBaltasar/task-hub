@@ -34,6 +34,14 @@ data class MemberRewardScreen(
 
         var showConfirmDialog by remember { mutableStateOf(false) }
 
+        // Sin esto, memberState se queda para siempre en MemberUiState.Idle
+        // (Voyager crea una instancia nueva de MemberScreenModel por pantalla):
+        // currentMember era siempre null, memberPoints siempre 0 y el canje
+        // aparecía como "Puntos insuficientes" aunque el usuario tuviera saldo.
+        LaunchedEffect(householdId) {
+            memberModel.loadMembers(householdId)
+        }
+
         // Find member and their points
         val currentMember = when (val mState = memberState) {
             is MemberUiState.Success -> mState.members.find { it.id == memberId }

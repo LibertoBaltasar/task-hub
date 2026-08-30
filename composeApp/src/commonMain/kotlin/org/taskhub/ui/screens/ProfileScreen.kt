@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -81,7 +81,7 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                     title = { Text("Perfil", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = { navigator.pop() }) {
-                            Icon(Icons.Default.ArrowBack, "Volver")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
                         }
                     }
                 )
@@ -117,7 +117,7 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
 
                 // Hogares compartidos
                 val shared = households.filter { !it.isPersonal }
-                items(shared) { household ->
+                items(shared, key = { it.id }) { household ->
                     HouseholdProfileCard(
                         household = household,
                         icon = Icons.Default.Edit,
@@ -216,7 +216,7 @@ private fun HouseholdProfileCard(
             }
             if (onNavigate != null) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Ir al espacio",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier

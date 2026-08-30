@@ -139,15 +139,24 @@ class HouseholdScreenModel(
         onError: (String) -> Unit
     ) {
         screenModelScope.launch {
-            try {
-                for (id in householdIds) {
+            // Acumula éxitos/fallos por id en vez de abortar en el primer error:
+            // antes, un fallo a mitad de la lista dejaba los ids anteriores ya
+            // borrados pero informaba de un error genérico, sin decir cuáles se
+            // eliminaron y cuáles no.
+            val failed = mutableListOf<String>()
+            for (id in householdIds) {
+                try {
                     repo.deleteHousehold(id)
                     householdStore.removeHousehold(id)
+                } catch (_: Exception) {
+                    failed += id
                 }
-                authManager.syncHouseholdsToCloud()
+            }
+            authManager.syncHouseholdsToCloud()
+            if (failed.isEmpty()) {
                 onSuccess()
-            } catch (e: Exception) {
-                onError(e.message ?: "Error al eliminar los espacios")
+            } else {
+                onError("No se pudieron eliminar ${failed.size} de ${householdIds.size} espacios")
             }
         }
     }
@@ -202,13 +211,15 @@ class HouseholdScreenModel(
     fun sendMessage(householdId: String, memberId: String) {
         val text = _newMessageText.value.trim()
         if (text.isEmpty() || memberId.isEmpty()) return
+        // Limpiar de forma optimista ANTES de la llamada de red: evita que un
+        // doble tap en "Enviar" lea el mismo texto dos veces y lo duplique.
+        _newMessageText.value = ""
         screenModelScope.launch {
             try {
                 val authorName = repo.getMembers(householdId)
                     .firstOrNull { it.id == memberId }
                     ?.displayName ?: ""
                 repo.sendMessage(householdId, memberId, authorName, text)
-                _newMessageText.value = ""
                 loadMessages(householdId)
             } catch (e: Exception) {
                 _messagesUiState.value = MessagesUiState.Error(

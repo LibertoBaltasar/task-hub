@@ -16,6 +16,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -188,7 +190,7 @@ internal fun StatsBody(householdId: String, memberId: String) {
                                     )
                                 }
 
-                                items(achievements) { achievement ->
+                                items(achievements, key = { it.id }) { achievement ->
                                     AchievementCard(achievement)
                                 }
                             }
@@ -371,8 +373,19 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
             val barColor = Teal500
             val textMeasurer = rememberTextMeasurer()
             val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Los Canvas de esta pantalla no tienen ningún texto alternativo:
+            // para un lector de pantalla, las tres tarjetas de estadísticas son
+            // invisibles/mudas sin esto.
+            val chartDescription = remember(data) {
+                data.joinToString(", ") { "${it.dayLabel}: ${it.count}" }
+            }
 
-            Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .semantics { contentDescription = "$title. $chartDescription" }
+            ) {
                 val chartWidth = size.width
                 val chartHeight = size.height - 30f
                 val barCount = data.size
@@ -440,8 +453,16 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
             val lineColor = Coral500
             val pointColor = Coral600
             val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val chartDescription = remember(dailyPoints) {
+                dailyPoints.joinToString(", ") { "${it.dayLabel}: ${it.points}" }
+            }
 
-            Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp)
+                    .semantics { contentDescription = "$title. $chartDescription" }
+            ) {
                 val chartWidth = size.width
                 val chartHeight = size.height - 30f
                 val padding = 20f
@@ -505,13 +526,20 @@ private fun PieChartCard(title: String, data: List<TagCount>) {
 
             val colors = listOf(Teal500, Coral500, Teal300, Coral300, Teal700, Coral700)
             val total = data.sumOf { it.count }.toFloat().coerceAtLeast(1f)
+            val chartDescription = remember(data) {
+                data.joinToString(", ") { "${it.tag}: ${it.count}" }
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Pie chart
-                Canvas(modifier = Modifier.size(140.dp)) {
+                Canvas(
+                    modifier = Modifier
+                        .size(140.dp)
+                        .semantics { contentDescription = "$title. $chartDescription" }
+                ) {
                     var startAngle = -90f
                     data.forEachIndexed { index, tagCount ->
                         val sweep = (tagCount.count.toFloat() / total) * 360f

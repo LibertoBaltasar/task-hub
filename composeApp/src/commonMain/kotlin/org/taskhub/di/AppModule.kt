@@ -11,7 +11,6 @@ import org.taskhub.platform.createAdController
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
-import org.taskhub.storage.ThemeStore
 import org.taskhub.ui.models.CalendarSyncManager
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.HouseholdScreenModel
@@ -33,9 +32,6 @@ val appModule: Module = module {
 
     // User settings (theme, language, notifications)
     single { SettingsStore(settings = get()) }
-
-    // Theme persistence
-    single { ThemeStore(settings = get()) }
 
     // Network — talks directly to Firestore REST API
     single { FirestoreRepository(taskCache = get(), settingsStore = get()) }

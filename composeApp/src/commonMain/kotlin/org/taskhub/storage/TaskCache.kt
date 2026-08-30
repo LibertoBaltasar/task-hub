@@ -73,4 +73,19 @@ class TaskCache(private val settings: Settings) {
             null
         }
     }
+
+    // ── Invalidation ────────────────────────────────────────
+
+    /**
+     * Borra toda la caché local de un hogar (tareas, datos del hogar, miembros).
+     * Debe llamarse al borrar el hogar o al abandonarlo — de lo contrario, sus
+     * datos quedan huérfanos en disco indefinidamente aunque [HouseholdStore]
+     * ya no lo liste, y una futura reutilización del mismo ID (poco probable
+     * pero posible) vería datos obsoletos.
+     */
+    fun clearHousehold(householdId: String) {
+        settings.remove("cache_tasks_$householdId")
+        settings.remove("cache_household_$householdId")
+        settings.remove("cache_members_$householdId")
+    }
 }

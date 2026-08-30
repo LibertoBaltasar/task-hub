@@ -2,6 +2,7 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -188,8 +189,15 @@ class TaskScreenModel(
 
     // ── Load tasks ──────────────────────────────────────────
 
+    private var loadTasksJob: Job? = null
+
     fun loadTasks(householdId: String) {
-        screenModelScope.launch {
+        // Cancela la carga anterior en curso: sin esto, dos loadTasks() solapadas
+        // (p.ej. pull-to-refresh seguido de un cambio de filtro) pueden resolverse
+        // fuera de orden y la respuesta más antigua sobrescribe con datos stale
+        // el StateFlow tras la más reciente.
+        loadTasksJob?.cancel()
+        loadTasksJob = screenModelScope.launch {
             _listState.value = TaskListUiState.Loading
             try {
                 val tasks = repo.getTasks(householdId)
@@ -266,6 +274,7 @@ class TaskScreenModel(
         dueDate: Long,
         assignmentRotation: List<AssignmentSlot> = emptyList()
     ) {
+        if (_actionState.value == TaskActionState.Loading) return
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
@@ -326,18 +335,30 @@ class TaskScreenModel(
 
     // ── Complete task (sets lastCompletedDate) ───────────────
 
-    /** Info for undo: saved before completing so we can revert. */
+    /**
+     * Info for undo: saved before completing so we can revert not just the
+     * "completada" flag sino también los puntos/racha que otorgó completarla
+     * — de lo contrario, completar+deshacer en bucle permite farmear puntos
+     * y racha sin límite (la tarea vuelve a estar disponible mientras el
+     * usuario conserva las recompensas de cada intento).
+     */
     data class UndoState(
         val householdId: String,
         val taskId: String,
+        val memberId: String,
         val previousLastCompletedDate: Long?,
-        val previousCompletedBy: String? = null
+        val previousCompletedBy: String?,
+        val pointsAwarded: Int,
+        val previousStreak: Int,
+        val previousBestStreak: Int,
+        val previousLastStreakDate: Long
     )
 
     private val _undoState = MutableStateFlow<UndoState?>(null)
     val undoState: StateFlow<UndoState?> = _undoState.asStateFlow()
 
     fun completeTask(householdId: String, taskId: String) {
+        if (_actionState.value == TaskActionState.Loading) return // evita doble-tap / doble suma de puntos
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
@@ -352,11 +373,20 @@ class TaskScreenModel(
                 val tasks = repo.getTasks(householdId)
                 val task = tasks.find { it.id == taskId }
                     ?: throw IllegalStateException("Tarea no encontrada")
+                val memberBefore = repo.getMembers(householdId).find { it.id == memberId }
 
-                // Save undo info BEFORE completing
-                val previousLcd = task.lastCompletedDate
-                val previousCompletedBy = task.completedBy
-                _undoState.value = UndoState(householdId, taskId, previousLcd, previousCompletedBy)
+                // Save undo info BEFORE completing (puntos/racha previos incluidos)
+                _undoState.value = UndoState(
+                    householdId = householdId,
+                    taskId = taskId,
+                    memberId = memberId,
+                    previousLastCompletedDate = task.lastCompletedDate,
+                    previousCompletedBy = task.completedBy,
+                    pointsAwarded = task.points,
+                    previousStreak = memberBefore?.currentStreak ?: 0,
+                    previousBestStreak = memberBefore?.bestStreak ?: 0,
+                    previousLastStreakDate = memberBefore?.lastStreakDate ?: 0L
+                )
 
                 repo.completeTask(
                     householdId = householdId,
@@ -377,10 +407,18 @@ class TaskScreenModel(
                     }
                 } catch (_: Exception) { }
 
-                // Update streak for the current member
+                // Update streak + achievements reusing memberBefore (evita 2
+                // lecturas extra de getMembers): la racha aún no se ha tocado
+                // en el servidor, así que memberBefore es el estado correcto de
+                // partida; el total de puntos post-premio se calcula en local.
                 try {
-                    updateMemberStreak(householdId, memberId)
-                    checkAndAwardAchievements(householdId, memberId)
+                    if (memberBefore != null) {
+                        val streakUpdated = updateMemberStreak(householdId, memberBefore)
+                        val memberForAchievements = streakUpdated.copy(
+                            totalPoints = memberBefore.totalPoints + task.points
+                        )
+                        checkAndAwardAchievements(householdId, memberForAchievements)
+                    }
                 } catch (_: Exception) { }
 
                 _actionState.value = TaskActionState.Success
@@ -400,18 +438,27 @@ class TaskScreenModel(
         }
     }
 
-    /** Undo a task completion: restore previous lastCompletedDate. */
+    /** Undo a task completion: restore previous lastCompletedDate, points and streak. */
     fun undoCompleteTask() {
         val state = _undoState.value ?: return
         _undoState.value = null
         screenModelScope.launch {
             try {
-                // Revert lastCompletedDate on the task
                 repo.revertTaskCompletion(
                     state.householdId,
                     state.taskId,
                     state.previousLastCompletedDate,
                     state.previousCompletedBy
+                )
+                // Revertir también los puntos y la racha otorgados al completar
+                // (ver KDoc de [UndoState]).
+                repo.addMemberPoints(state.householdId, state.memberId, -state.pointsAwarded)
+                repo.updateMemberStreak(
+                    householdId = state.householdId,
+                    memberId = state.memberId,
+                    currentStreak = state.previousStreak,
+                    bestStreak = state.previousBestStreak,
+                    lastStreakDate = state.previousLastStreakDate
                 )
             } catch (_: Exception) {
                 // Non-critical — task stays completed
@@ -436,6 +483,7 @@ class TaskScreenModel(
         taskPoints: Int,
         newMemberId: String
     ) {
+        if (_reassignState.value == TaskActionState.Loading) return
         screenModelScope.launch {
             _reassignState.value = TaskActionState.Loading
             try {
@@ -464,6 +512,7 @@ class TaskScreenModel(
         assignmentId: String,
         assignment: TaskAssignmentResponse
     ) {
+        if (_actionState.value == TaskActionState.Loading) return
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
@@ -524,6 +573,7 @@ class TaskScreenModel(
         mandatory: Boolean,
         dueDate: Long
     ) {
+        if (_actionState.value == TaskActionState.Loading) return
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
@@ -562,6 +612,7 @@ class TaskScreenModel(
         mandatory: Boolean = false,
         dueDate: Long = 0
     ) {
+        if (_actionState.value == TaskActionState.Loading) return
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
@@ -620,6 +671,7 @@ class TaskScreenModel(
     // ── Delete task ──────────────────────────────────────────
 
     fun deleteTask(householdId: String, taskId: String) {
+        if (_actionState.value == TaskActionState.Loading) return
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
@@ -665,12 +717,15 @@ class TaskScreenModel(
     fun addComment(householdId: String, taskId: String) {
         val text = _newCommentText.value.trim()
         if (text.isEmpty()) return
+        // Limpiar el campo de forma optimista, ANTES de la llamada de red: si no,
+        // un doble tap en "Enviar" antes de que la primera petición complete lee
+        // el mismo texto dos veces y envía el comentario duplicado.
+        _newCommentText.value = ""
         screenModelScope.launch {
             _commentsState.value = CommentsUiState.Loading
             try {
                 val authorName = resolveCurrentMemberName(householdId)
                 repo.addComment(householdId, taskId, authorName, text)
-                _newCommentText.value = ""
                 // Reload comments
                 loadComments(householdId, taskId)
             } catch (e: Exception) {
@@ -726,21 +781,22 @@ class TaskScreenModel(
      * - If yesterday -> streak++
      * - If older -> streak = 1 (new streak)
      * - If same day -> no change (already counted)
+     *
+     * Recibe [member] ya cargado (en vez de volver a pedirlo a Firestore) y
+     * devuelve la versión actualizada, para que el llamador pueda encadenar
+     * [checkAndAwardAchievements] sin otra llamada de red redundante.
      */
-    private suspend fun updateMemberStreak(householdId: String, memberId: String) {
+    private suspend fun updateMemberStreak(householdId: String, member: MemberResponse): MemberResponse {
         val tz = TimeZone.currentSystemDefault()
         val now = Clock.System.now()
         val today = now.toLocalDateTime(tz).date
-
-        val members = repo.getMembers(householdId)
-        val member = members.find { it.id == memberId } ?: return
 
         val lastDateEpoch = member.lastStreakDate
         val todayEpoch = today.atStartOfDayIn(tz).toEpochMilliseconds()
 
         if (lastDateEpoch >= todayEpoch) {
             // Already counted today
-            return
+            return member
         }
 
         val newStreak: Int
@@ -765,30 +821,30 @@ class TaskScreenModel(
 
         repo.updateMemberStreak(
             householdId = householdId,
-            memberId = memberId,
+            memberId = member.id,
             currentStreak = newStreak,
             bestStreak = newBest,
             lastStreakDate = todayEpoch
         )
+        return member.copy(currentStreak = newStreak, bestStreak = newBest, lastStreakDate = todayEpoch)
     }
 
     /**
      * Check for newly unlocked achievements after completing a task.
+     * Recibe [member] ya actualizado (puntos/racha post-premio) para no volver
+     * a pedirlo a Firestore.
      */
-    private suspend fun checkAndAwardAchievements(householdId: String, memberId: String) {
+    private suspend fun checkAndAwardAchievements(householdId: String, member: MemberResponse) {
         val tz = TimeZone.currentSystemDefault()
         val now = Clock.System.now()
         val currentHour = now.toLocalDateTime(tz).hour
 
-        val members = repo.getMembers(householdId)
-        val member = members.find { it.id == memberId } ?: return
-
         val assignments = repo.getAllAssignments(householdId)
         val completedCount = assignments.count {
-            it.memberId == memberId && it.status == "completed"
+            it.memberId == member.id && it.status == "completed"
         }
 
-        val alreadyUnlocked = repo.getMemberAchievements(householdId, memberId)
+        val alreadyUnlocked = repo.getMemberAchievements(householdId, member.id)
 
         val newlyUnlocked = AchievementChecker.checkNewAchievements(
             totalTasksCompleted = completedCount,
@@ -800,7 +856,7 @@ class TaskScreenModel(
 
         for (achievementId in newlyUnlocked) {
             try {
-                repo.addMemberAchievement(householdId, memberId, achievementId)
+                repo.addMemberAchievement(householdId, member.id, achievementId)
             } catch (_: Exception) {
                 // Non-critical failure
             }
@@ -829,11 +885,17 @@ class TaskScreenModel(
 
     // ── Toggle subtask ──────────────────────────────────────
 
+    // Tareas con un toggle de subtarea en curso: evita el lost-update de marcar
+    // dos subtareas de la misma tarea con taps rápidos (la segunda llamada leía
+    // la lista antes de que la primera escritura se confirmara y la sobrescribía).
+    private val subtaskTogglesInFlight = mutableSetOf<String>()
+
     fun toggleSubtask(householdId: String, taskId: String, subtaskId: String) {
+        if (taskId in subtaskTogglesInFlight) return
+        subtaskTogglesInFlight += taskId
         screenModelScope.launch {
             try {
-                val tasks = repo.getTasks(householdId)
-                val task = tasks.find { it.id == taskId } ?: return@launch
+                val task = repo.getTask(householdId, taskId)
                 val updatedSubtasks = task.subtasks.map { st ->
                     if (st.id == subtaskId) st.copy(completed = !st.completed) else st
                 }
@@ -842,6 +904,8 @@ class TaskScreenModel(
                 loadTaskDetail(householdId, taskId)
             } catch (_: Exception) {
                 // Non-critical; detail will be stale until next load
+            } finally {
+                subtaskTogglesInFlight -= taskId
             }
         }
     }
@@ -850,6 +914,19 @@ class TaskScreenModel(
         _listState.value = TaskListUiState.Idle
         _detailState.value = TaskDetailUiState.Idle
         _actionState.value = TaskActionState.Idle
+        _reassignState.value = TaskActionState.Idle
+        _undoState.value = null
+        _myAssignment.value = null
+        _filter.value = TaskFilter.PENDING
+        _sort.value = TaskSort.DEADLINE_ASC
+        _selectedTagFilter.value = null
+        _searchQuery.value = ""
+        _currentMemberId.value = null
+        _isOffline.value = false
+        _allTags.value = emptyList()
+        _commentsState.value = CommentsUiState.Idle
+        _newCommentText.value = ""
+        _calendarActionState.value = CalendarActionState.Idle
     }
 
     // ── Google Calendar ──────────────────────────────────────
@@ -873,7 +950,16 @@ class TaskScreenModel(
      * con el flag "vinculado" si el token resultó revocado).
      */
     fun syncTaskToCalendarNow(householdId: String, task: TaskResponse) {
-        val assignment = _myAssignment.value ?: return
+        val assignment = _myAssignment.value
+        if (assignment == null) {
+            // Antes retornaba en silencio, dejando el botón "Sincronizar ahora"
+            // sin ningún feedback si el usuario lo pulsa antes de que se resuelva
+            // su asignación (o si la tarea no está asignada a él).
+            _calendarActionState.value = CalendarActionState.Error(
+                "No se pudo determinar tu asignación para esta tarea"
+            )
+            return
+        }
         screenModelScope.launch {
             _calendarActionState.value = CalendarActionState.Sending
             try {

@@ -2,6 +2,7 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -46,8 +47,14 @@ class HomeScreenModel(
      * Carga las tareas pendientes de todos los hogares y
      * actualiza el widget con la lista combinada.
      */
+    private var loadAllTasksJob: Job? = null
+
     fun loadAllTasks() {
-        screenModelScope.launch {
+        // Cancela la carga anterior: sin esto, dos loadAllTasks() solapadas
+        // podrían resolverse fuera de orden y la más antigua sobrescribiría
+        // el estado con datos obsoletos después de la más reciente.
+        loadAllTasksJob?.cancel()
+        loadAllTasksJob = screenModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
             try {

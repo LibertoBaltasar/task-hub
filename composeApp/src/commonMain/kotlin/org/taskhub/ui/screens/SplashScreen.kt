@@ -20,10 +20,10 @@ import org.taskhub.ui.theme.Coral100
 import androidx.compose.ui.graphics.Color
 
 /**
- * Splash screen que muestra "TASK HUB" en grande y negrita durante 5 segundos
+ * Splash screen que muestra "TASK HUB" en grande y negrita durante 1.5 segundos
  * antes de pasar a la pantalla principal.
  *
- * @param onFinished callback que se invoca cuando terminan los 5 segundos
+ * @param onFinished callback que se invoca cuando terminan los 1.5 segundos
  */
 @Composable
 fun SplashScreen(onFinished: () -> Unit) {
@@ -35,7 +35,7 @@ fun SplashScreen(onFinished: () -> Unit) {
         animationSpec = tween(durationMillis = if (reduceMotion) 0 else 800)
     )
 
-    // Al montar: activa el fade-in y programa el callback a los 5s
+    // Al montar: activa el fade-in y programa el callback a los 1.5s
     LaunchedEffect(Unit) {
         visible = true
         delay(1500)

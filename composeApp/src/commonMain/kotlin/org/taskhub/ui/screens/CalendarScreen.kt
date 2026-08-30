@@ -74,11 +74,21 @@ data class CalendarScreen(
 
         var mode by remember { mutableStateOf(CalendarMode.WEEK) }
 
-        // Anchor date: the "focus" date we use to compute week/month ranges
-        val now = remember { Clock.System.now() }
         val tz = remember { TimeZone.currentSystemDefault() }
+        // "Hoy", recalculado cada minuto: si la pantalla se deja abierta cruzando
+        // la medianoche, el resaltado de "hoy" en semana/mes no se quedaba
+        // clavado en la fecha con la que se abrió la pantalla.
+        var today by remember { mutableStateOf(Clock.System.now().toLocalDateTime(tz).date) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(60_000L)
+                today = Clock.System.now().toLocalDateTime(tz).date
+            }
+        }
+
+        // Anchor date: the "focus" date we use to compute week/month ranges
         var anchorDate by remember {
-            mutableStateOf(now.toLocalDateTime(tz).date)
+            mutableStateOf(today)
         }
 
         // ── Computed week / month ranges ────────────────────
@@ -217,13 +227,13 @@ data class CalendarScreen(
                             CalendarMode.WEEK -> WeekView(
                                 weekRange = weekRange,
                                 tasksByDate = tasksByDate,
-                                today = now.toLocalDateTime(tz).date,
+                                today = today,
                                 onDayClick = { selectedDay = it }
                             )
                             CalendarMode.MONTH -> MonthView(
                                 monthGrid = monthRange,
                                 tasksByDate = tasksByDate,
-                                today = now.toLocalDateTime(tz).date,
+                                today = today,
                                 onDayClick = { selectedDay = it }
                             )
                         }
@@ -588,7 +598,7 @@ private fun DayTasksPopup(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(tasks) { entry ->
+                        items(tasks, key = { it.task.id }) { entry ->
                             TaskPopupItem(
                                 entry = entry,
                                 onClick = { onTaskClick(entry.task.id) }

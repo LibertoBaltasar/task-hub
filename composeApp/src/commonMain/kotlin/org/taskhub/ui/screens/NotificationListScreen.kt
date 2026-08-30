@@ -97,7 +97,7 @@ data class NotificationListScreen(
                                     )
                                 }
 
-                                items(s.notifications) { notification ->
+                                items(s.notifications, key = { it.id }) { notification ->
                                     NotificationCard(
                                         notification = notification,
                                         onMarkRead = {
