@@ -13,6 +13,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import org.taskhub.ui.i18n.AppStrings
 
 /**
  * Barra superior única y accesible de Task Hub.
@@ -34,6 +35,7 @@ fun TaskHubTopBar(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    val lang = LocalAppSettings.current.currentLanguage
     CenterAlignedTopAppBar(
         title = {
             Text(
@@ -46,7 +48,10 @@ fun TaskHubTopBar(
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = AppStrings.get("nav_back_content_description", lang),
+                    )
                 }
             }
         },

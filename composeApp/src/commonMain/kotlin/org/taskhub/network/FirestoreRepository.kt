@@ -40,7 +40,7 @@ import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
-import kotlin.random.Random
+import org.taskhub.platform.secureRandomInt
 
 /**
  * Talks directly to Firestore REST API — no Ktor server needed.
@@ -1355,6 +1355,14 @@ class FirestoreRepository(
      * Mark a task as completed today. Sets lastCompletedDate, awards points, and records history.
      * Devuelve el `completedAt` (epoch millis) usado, para que el caller pueda
      * localizar después el registro de `taskHistory` creado (p.ej. al deshacer).
+     *
+     * NO es atómica de extremo a extremo (3 escrituras HTTP secuenciales): un
+     * fallo de red a mitad de secuencia deja estado parcial, mitigado por la
+     * guarda de reentrancia de `TaskScreenModel` pero no eliminado. Evaluado y
+     * descartado usar el endpoint `:commit` con `fieldTransforms` para
+     * hacerlo transaccional — ver `docs/atomicidad-commit-pendiente.md` para
+     * el motivo (no se puede verificar el payload contra la API real en este
+     * entorno) y los pasos para hacerlo con seguridad en el futuro.
      */
     suspend fun completeTask(
         householdId: String,
@@ -1482,6 +1490,10 @@ class FirestoreRepository(
      * y se los suma al nuevo, manteniendo coherentes totalPoints, completedBy
      * y el registro de historial correspondiente. Si la tarea no estaba
      * completada (completedBy null), solo fija el nuevo miembro sin transferir.
+     *
+     * NO es atómica de extremo a extremo (hasta 4 escrituras HTTP
+     * secuenciales): ver la nota de atomicidad en [completeTask] y
+     * `docs/atomicidad-commit-pendiente.md`.
      */
     suspend fun reassignTaskCompletion(
         householdId: String,
@@ -2437,7 +2449,7 @@ class FirestoreRepository(
 
     private fun generateInviteCode(): String {
         val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        return (1..8).map { chars[Random.nextInt(chars.length)] }.joinToString("")
+        return (1..8).map { chars[secureRandomInt(chars.length)] }.joinToString("")
     }
 
     companion object {

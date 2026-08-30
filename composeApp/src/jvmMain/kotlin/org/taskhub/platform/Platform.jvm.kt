@@ -1,5 +1,7 @@
 package org.taskhub.platform
 
+import java.security.SecureRandom
+
 actual fun shareText(text: String, title: String) {
     // TODO: JVM/Desktop implementation
     println("shareText not implemented on JVM: $title")
@@ -26,3 +28,7 @@ actual suspend fun getGoogleCalendarAccessToken(): String? {
     // JVM: Google Sign-In not supported — no-op
     return null
 }
+
+private val secureRandom = SecureRandom()
+
+actual fun secureRandomInt(bound: Int): Int = secureRandom.nextInt(bound)

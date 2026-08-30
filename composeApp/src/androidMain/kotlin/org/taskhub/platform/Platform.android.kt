@@ -6,6 +6,7 @@ import android.app.Activity
 import org.taskhub.TaskHubWidgetProvider
 import org.taskhub.GoogleSignInHelper
 import org.taskhub.GoogleCalendarAuthHelper
+import java.security.SecureRandom
 
 actual fun shareText(text: String, title: String) {
     val context = AndroidContextHolder.context ?: return
@@ -52,6 +53,10 @@ actual suspend fun getGoogleCalendarAccessToken(): String? {
     val context = AndroidContextHolder.context ?: return null
     return GoogleCalendarAuthHelper.getAccessToken(context)
 }
+
+private val secureRandom = SecureRandom()
+
+actual fun secureRandomInt(bound: Int): Int = secureRandom.nextInt(bound)
 
 /** Simple static context holder set from MainActivity. */
 object AndroidContextHolder {

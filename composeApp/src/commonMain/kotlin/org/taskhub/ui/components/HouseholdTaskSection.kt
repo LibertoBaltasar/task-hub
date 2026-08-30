@@ -22,6 +22,7 @@ import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.storage.SavedHousehold
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.screens.TaskDetailScreen
 import org.taskhub.ui.theme.Coral500
 import org.taskhub.ui.theme.Teal600
@@ -33,6 +34,8 @@ fun HouseholdTaskSection(
 ) {
     val repo = koinInject<FirestoreRepository>()
     val navigator = LocalNavigator.currentOrThrow
+    val lang = LocalAppSettings.current.currentLanguage
+    val s = { key: String -> AppStrings.get(key, lang) }
 
     var tasks by remember { mutableStateOf<List<TaskResponse>>(emptyList()) }
     var expanded by remember { mutableStateOf(true) }
@@ -47,7 +50,7 @@ fun HouseholdTaskSection(
                 .take(5)
             error = null
         } catch (e: Exception) {
-            error = "Error al cargar tareas"
+            error = s("household_task_section_error")
         }
         isLoading = false
     }
@@ -90,7 +93,7 @@ fun HouseholdTaskSection(
                 )
                 if (!isLoading && error == null) {
                     Text(
-                        text = "${tasks.size} pendientes",
+                        text = s("household_task_section_pending_count").replace("%d", "${tasks.size}"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -99,7 +102,7 @@ fun HouseholdTaskSection(
                 Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowUp
                                  else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) "Colapsar" else "Expandir"
+                    contentDescription = if (expanded) s("household_task_section_collapse") else s("household_task_section_expand")
                 )
             }
 
@@ -130,8 +133,8 @@ fun HouseholdTaskSection(
                         }
                         tasks.isEmpty() -> {
                             Text(
-                                text = if (household.isPersonal) "No tienes tareas personales"
-                                       else "No hay tareas pendientes",
+                                text = if (household.isPersonal) s("household_task_section_empty_personal")
+                                       else s("household_task_section_empty_shared"),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 8.dp)
@@ -152,7 +155,7 @@ fun HouseholdTaskSection(
                         onClick = { onViewAll(household.id) },
                         modifier = Modifier.align(Alignment.End)
                     ) {
-                        Text("Ver todas →")
+                        Text(s("household_task_section_view_all"))
                     }
                 }
             }
@@ -162,6 +165,7 @@ fun HouseholdTaskSection(
 
 @Composable
 private fun TaskRow(task: TaskResponse, onClick: () -> Unit) {
+    val lang = LocalAppSettings.current.currentLanguage
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -204,7 +208,7 @@ private fun TaskRow(task: TaskResponse, onClick: () -> Unit) {
             }
             if (task.dueDate > 0) {
                 Text(
-                    text = formatDueDate(task.dueDate),
+                    text = formatDueDate(task.dueDate, lang),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -213,13 +217,13 @@ private fun TaskRow(task: TaskResponse, onClick: () -> Unit) {
     }
 }
 
-private fun formatDueDate(epochMillis: Long): String {
+private fun formatDueDate(epochMillis: Long, lang: String): String {
     val now = Clock.System.now().toEpochMilliseconds()
     val diffDays = (epochMillis - now) / (24 * 60 * 60 * 1000)
     return when {
-        diffDays < 0 -> "Vencida"
-        diffDays == 0L -> "Hoy"
-        diffDays == 1L -> "Mañana"
+        diffDays < 0 -> AppStrings.get("due_date_overdue", lang)
+        diffDays == 0L -> AppStrings.get("tasks_due_today", lang)
+        diffDays == 1L -> AppStrings.get("due_date_tomorrow", lang)
         else -> {
             val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(epochMillis)
             val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())

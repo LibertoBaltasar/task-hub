@@ -1,5 +1,10 @@
 package org.taskhub.platform
 
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.refTo
+import platform.Security.SecRandomCopyBytes
+import platform.Security.kSecRandomDefault
+
 actual fun shareText(text: String, title: String) {
     // TODO: iOS implementation using UIActivityViewController
     println("shareText not implemented on iOS: $title")
@@ -26,4 +31,11 @@ actual fun launchGoogleSignIn() {
 actual suspend fun getGoogleCalendarAccessToken(): String? {
     // iOS: Google Sign-In not supported — no-op
     return null
+}
+
+@OptIn(ExperimentalForeignApi::class)
+actual fun secureRandomInt(bound: Int): Int {
+    val bytes = ByteArray(1)
+    SecRandomCopyBytes(kSecRandomDefault, 1UL, bytes.refTo(0))
+    return (bytes[0].toInt() and 0xFF) % bound
 }

@@ -50,7 +50,7 @@ fun LazyListScope.householdMemberList(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "👥 Miembros",
+                text = s("household_members"),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
@@ -108,14 +108,14 @@ fun LazyListScope.householdMemberList(
                             Text("👥", style = MaterialTheme.typography.displayMedium)
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                "Aún no hay miembros en este espacio",
+                                s("household_member_list_empty_title"),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Comparte el código de invitación para que se unan.",
+                                s("household_member_list_empty_desc"),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -125,7 +125,7 @@ fun LazyListScope.householdMemberList(
                                 onClick = onInviteClick,
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("Invitar miembros", fontWeight = FontWeight.SemiBold)
+                                Text(s("household_member_list_invite_cta"), fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -157,7 +157,7 @@ fun LazyListScope.householdMemberList(
                     )
                 ) {
                     Text(
-                        text = "Error: ${memberState.message}",
+                        text = s("household_member_list_error").replace("%s", memberState.message),
                         modifier = Modifier.padding(16.dp),
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -218,7 +218,7 @@ private fun MemberCard(
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = if (member.role == "admin") "Administrador" else "Niño/a",
+                        text = if (member.role == "admin") s("member_role_admin_full") else s("member_role_child_full"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -226,7 +226,7 @@ private fun MemberCard(
 
                 // Points badge
                 PointsBadge(
-                    text = "${member.totalPoints} pts",
+                    text = "${member.totalPoints} ${s("transfer_points_suffix")}",
                     modifier = Modifier
                 )
             }
@@ -243,21 +243,21 @@ private fun MemberCard(
                     var roleMenuExpanded by remember { mutableStateOf(false) }
                     Box {
                         OutlinedButton(onClick = { roleMenuExpanded = true }) {
-                            Text(if (member.role == "admin") "👑 Admin" else "🧒 Niño/a")
+                            Text(if (member.role == "admin") s("member_role_admin_short") else s("member_role_child_short"))
                         }
                         DropdownMenu(
                             expanded = roleMenuExpanded,
                             onDismissRequest = { roleMenuExpanded = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("👑 Admin") },
+                                text = { Text(s("member_role_admin_short")) },
                                 onClick = {
                                     roleMenuExpanded = false
                                     if (member.role != "admin") onRoleChange("admin")
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text("🧒 Niño/a") },
+                                text = { Text(s("member_role_child_short")) },
                                 onClick = {
                                     roleMenuExpanded = false
                                     if (member.role != "child") onRoleChange("child")
@@ -271,7 +271,7 @@ private fun MemberCard(
                     onClick = onCreateTask,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("+ Tarea")
+                    Text(s("member_create_task_short"))
                 }
             }
 

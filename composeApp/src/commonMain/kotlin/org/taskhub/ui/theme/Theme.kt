@@ -79,6 +79,21 @@ val Brown900 = Color(0xFF3E2723)
 val Earth50 = Color(0xFFF9F5F0)
 val Earth100 = Color(0xFFF0E6D8)
 
+// ── Variantes ajustadas para contraste WCAG AA (>=4.5:1) ──
+// Estas NO sustituyen a los swatches de arriba (que se siguen usando tal
+// cual en el resto de la UI): son shades ligeramente más oscuros que sólo
+// se usan en los roles de colorScheme donde el swatch original quedaba por
+// debajo de 4.5:1 frente a su "on" color emparejado.
+private val TealOnPrimaryDarkAA = Color(0xFF004F3F) // era Teal900 (005A48), 3.94:1 sobre Teal300 -> 4.59:1
+private val TealPrimaryContainerDarkAA = Color(0xFF00715C) // era Teal800 (007660), 4.22:1 sobre Teal100 -> 4.51:1
+private val TealSecondaryContainerDarkAA = Color(0xFF007C69) // era Teal700 (008772), 3.99:1 sobre Teal50 -> 4.60:1
+private val TealOnSecondaryContainerLightAA = Color(0xFF007C69) // era Teal700 (008772), 3.99:1 sobre Teal50 -> 4.60:1
+private val GreenOnPrimaryDarkAA = Color(0xFF18531C) // era Green900 (1B5E20), 3.91:1 sobre Green300 -> 4.55:1
+private val GreenPrimaryContainerDarkAA = Color(0xFF29702D) // era Green800 (2E7D32), 3.81:1 sobre Green100 -> 4.53:1
+private val GreenTertiaryContainerDarkAA = Color(0xFF317C35) // era Green700 (388E3C), 3.66:1 sobre Green50 -> 4.59:1
+private val GreenTertiaryLightAA = Color(0xFF358639) // era Green700 (388E3C), 4.12:1 sobre blanco -> 4.54:1
+private val BrownOnSecondaryDarkAA = Color(0xFF36221F) // era Brown900 (3E2723), 4.18:1 sobre Brown300 -> 4.51:1
+
 // ── Minimal colors ────────────────────────────────────────
 
 val MonoWhite = Color(0xFFFFFFFF)
@@ -102,7 +117,7 @@ private val DefaultLightColorScheme = lightColorScheme(
     secondary = Teal800,
     onSecondary = Color.White,
     secondaryContainer = Teal50,
-    onSecondaryContainer = Teal700,
+    onSecondaryContainer = TealOnSecondaryContainerLightAA,
 
     tertiary = Coral700,
     onTertiary = Color.White,
@@ -127,13 +142,13 @@ private val DefaultLightColorScheme = lightColorScheme(
 
 private val DefaultDarkColorScheme = darkColorScheme(
     primary = Teal300,
-    onPrimary = Teal900,
-    primaryContainer = Teal800,
+    onPrimary = TealOnPrimaryDarkAA,
+    primaryContainer = TealPrimaryContainerDarkAA,
     onPrimaryContainer = Teal100,
 
     secondary = Teal200,
     onSecondary = Teal900,
-    secondaryContainer = Teal700,
+    secondaryContainer = TealSecondaryContainerDarkAA,
     onSecondaryContainer = Teal50,
 
     tertiary = Coral300,
@@ -170,7 +185,7 @@ private val NaturalezaLightColorScheme = lightColorScheme(
     secondaryContainer = Brown100,
     onSecondaryContainer = Brown900,
 
-    tertiary = Green700,
+    tertiary = GreenTertiaryLightAA,
     onTertiary = Color.White,
     tertiaryContainer = Green50,
     onTertiaryContainer = Green800,
@@ -193,18 +208,18 @@ private val NaturalezaLightColorScheme = lightColorScheme(
 
 private val NaturalezaDarkColorScheme = darkColorScheme(
     primary = Green300,
-    onPrimary = Green900,
-    primaryContainer = Green800,
+    onPrimary = GreenOnPrimaryDarkAA,
+    primaryContainer = GreenPrimaryContainerDarkAA,
     onPrimaryContainer = Green100,
 
     secondary = Brown300,
-    onSecondary = Brown900,
+    onSecondary = BrownOnSecondaryDarkAA,
     secondaryContainer = Brown700,
     onSecondaryContainer = Brown100,
 
     tertiary = Green200,
     onTertiary = Green900,
-    tertiaryContainer = Green700,
+    tertiaryContainer = GreenTertiaryContainerDarkAA,
     onTertiaryContainer = Green50,
 
     error = Color(0xFFFFB4AB),

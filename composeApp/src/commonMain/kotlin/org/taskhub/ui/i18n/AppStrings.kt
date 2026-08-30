@@ -187,6 +187,31 @@ object AppStrings {
             "transfer_error_member_not_found" to "Miembro no encontrado",
             "appreciate_error_limit" to "Límite semanal alcanzado",
             "donate_error_insufficient_balance" to "Saldo insuficiente",
+
+            // Lista de miembros del hogar (HouseholdMemberList.kt)
+            "household_member_list_empty_title" to "Aún no hay miembros en este espacio",
+            "household_member_list_empty_desc" to "Comparte el código de invitación para que se unan.",
+            "household_member_list_invite_cta" to "Invitar miembros",
+            "household_member_list_error" to "Error: %s",
+            "member_role_admin_full" to "Administrador",
+            "member_role_child_full" to "Niño/a",
+            "member_role_admin_short" to "👑 Admin",
+            "member_role_child_short" to "🧒 Niño/a",
+            "member_create_task_short" to "+ Tarea",
+
+            // Sección de tareas del hogar (HouseholdTaskSection.kt)
+            "household_task_section_error" to "Error al cargar tareas",
+            "household_task_section_pending_count" to "%d pendientes",
+            "household_task_section_collapse" to "Colapsar",
+            "household_task_section_expand" to "Expandir",
+            "household_task_section_empty_personal" to "No tienes tareas personales",
+            "household_task_section_empty_shared" to "No hay tareas pendientes",
+            "household_task_section_view_all" to "Ver todas →",
+            "due_date_overdue" to "Vencida",
+            "due_date_tomorrow" to "Mañana",
+
+            // Barra superior (TaskHubTopBar.kt)
+            "nav_back_content_description" to "Volver",
         ),
         "en" to mapOf(
             // Settings
@@ -368,6 +393,31 @@ object AppStrings {
             "transfer_error_member_not_found" to "Member not found",
             "appreciate_error_limit" to "Weekly limit reached",
             "donate_error_insufficient_balance" to "Insufficient balance",
+
+            // Household member list (HouseholdMemberList.kt)
+            "household_member_list_empty_title" to "No members in this space yet",
+            "household_member_list_empty_desc" to "Share the invite code so they can join.",
+            "household_member_list_invite_cta" to "Invite members",
+            "household_member_list_error" to "Error: %s",
+            "member_role_admin_full" to "Admin",
+            "member_role_child_full" to "Child",
+            "member_role_admin_short" to "👑 Admin",
+            "member_role_child_short" to "🧒 Child",
+            "member_create_task_short" to "+ Task",
+
+            // Household task section (HouseholdTaskSection.kt)
+            "household_task_section_error" to "Failed to load tasks",
+            "household_task_section_pending_count" to "%d pending",
+            "household_task_section_collapse" to "Collapse",
+            "household_task_section_expand" to "Expand",
+            "household_task_section_empty_personal" to "You have no personal tasks",
+            "household_task_section_empty_shared" to "No pending tasks",
+            "household_task_section_view_all" to "View all →",
+            "due_date_overdue" to "Overdue",
+            "due_date_tomorrow" to "Tomorrow",
+
+            // Top bar (TaskHubTopBar.kt)
+            "nav_back_content_description" to "Back",
         )
     )
 

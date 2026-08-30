@@ -25,6 +25,14 @@ expect fun launchGoogleSignIn()
 expect suspend fun getGoogleCalendarAccessToken(): String?
 
 /**
+ * Índice aleatorio criptográficamente seguro en [0, bound). Usar en vez de
+ * kotlin.random.Random para valores con implicaciones de seguridad (p.ej.
+ * códigos de invitación a hogar), ya que Random no es un CSPRNG y sus
+ * salidas son predecibles a partir de pocas observaciones.
+ */
+expect fun secureRandomInt(bound: Int): Int
+
+/**
  * Debug flag — true in debug builds, false in release.
  * Used to guard println() logs and debug UI elements (red counter, etc.).
  * Set from MainActivity in onCreate() via BuildConfig.DEBUG.
