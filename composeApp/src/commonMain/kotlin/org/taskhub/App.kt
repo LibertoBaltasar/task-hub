@@ -63,11 +63,6 @@ fun App() {
             mutableStateOf(settingsStore.getLanguage())
         }
 
-        // CSV export callback — default no-op unless overridden by a screen
-        var exportCsvCallback by remember {
-            mutableStateOf<(() -> Unit)?>(null)
-        }
-
         val appSettings = remember(themeType, currentLanguage) {
             AppSettingsState(
                 currentLanguage = currentLanguage,
@@ -85,8 +80,7 @@ fun App() {
                 onLanguageChanged = { newLang ->
                     currentLanguage = newLang
                     settingsStore.setLanguage(newLang)
-                },
-                onExportCsv = { exportCsvCallback?.invoke() }
+                }
             )
         }
 

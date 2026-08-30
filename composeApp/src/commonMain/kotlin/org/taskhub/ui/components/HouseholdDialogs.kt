@@ -258,6 +258,7 @@ fun DonateDialog(
         cancelLabel = s("transfer_cancel"),
         errorText = (state as? DonateActionState.Error)?.let { s(it.messageKey) },
         isLoading = state is DonateActionState.Loading,
+        emptyBudgetText = s("donate_no_balance"),
         onConfirm = onConfirm,
         onDismiss = onDismiss
     )

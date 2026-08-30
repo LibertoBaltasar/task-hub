@@ -17,7 +17,6 @@ import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.theme.TaskHubThemeType
-import org.taskhub.ui.theme.Teal600
 import org.taskhub.platform.saveWidgetThemeToCache
 
 /**
@@ -103,7 +102,7 @@ fun SettingsSheet(
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2.dp,
-                            color = Teal600
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Text(s("settings_account_connecting"))
                     }
@@ -188,7 +187,7 @@ fun SettingsSheet(
                             settingsStore.setCalendarSyncEnabled(it)
                         },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = Teal600,
+                            checkedThumbColor = MaterialTheme.colorScheme.primary,
                             checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
                         )
                     )
@@ -284,7 +283,7 @@ fun SettingsSheet(
                         settingsStore.setNotificationsEnabled(enabled)
                     },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Teal600,
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
                         checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 )
@@ -395,7 +394,7 @@ fun SettingsSheet(
                         settingsStore.setSoundEnabled(it)
                     },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Teal600,
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
                         checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 )
@@ -425,7 +424,7 @@ fun SettingsSheet(
                         settingsStore.setVibrationEnabled(it)
                     },
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Teal600,
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
                         checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
                     )
                 )
@@ -505,7 +504,7 @@ private fun RadioOptionRow(
             selected = selected,
             onClick = onClick,
             colors = RadioButtonDefaults.colors(
-                selectedColor = Teal600
+                selectedColor = MaterialTheme.colorScheme.primary
             )
         )
         Spacer(Modifier.width(8.dp))

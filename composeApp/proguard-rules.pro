@@ -58,8 +58,12 @@
 -keep class cafe.adriel.voyager.** { *; }
 
 # ── Compose ──────────────────────────────────────────────────────────────────
+# Sin -keep de paquete completo: Jetpack Compose / Compose Multiplatform ya
+# incluyen sus propias consumer-rules.pro dentro de cada AAR, que AGP fusiona
+# automáticamente. Mantener aquí `androidx.compose.** { *; }` era redundante
+# y anulaba gran parte del beneficio de R8 (mismo problema, a mayor escala,
+# que el ya corregido para org.taskhub.network — ver comentario más arriba).
 -dontwarn androidx.compose.**
--keep class androidx.compose.** { *; }
 
 # ── kotlinx.datetime ─────────────────────────────────────────────────────────
 -keep class kotlinx.datetime.** { *; }
@@ -68,9 +72,9 @@
 -keep class io.github.g0dkar.qrcode.** { *; }
 
 # ── Firebase / Google Play Services ──────────────────────────────────────────
--keep class com.google.firebase.** { *; }
+# Sin -keep de paquete completo: estos SDKs traen sus propias consumer-rules.pro
+# empaquetadas desde hace años (mismo razonamiento que Compose, arriba).
 -dontwarn com.google.firebase.**
--keep class com.google.android.gms.** { *; }
 -dontwarn com.google.android.gms.**
 
 # ── AndroidX WorkManager ─────────────────────────────────────────────────────
@@ -91,7 +95,12 @@
 -keep class org.taskhub.MainActivity { *; }
 -keep class org.taskhub.TaskHubApplication { *; }
 
-# ── Remove debug logging in release ──────────────────────────────────────────
+# ── Eliminar null-checks de Kotlin en release (no es logging pese al título
+#    original de esta sección) ───────────────────────────────────────────────
+# Decisión consciente: R8 elimina en release las comprobaciones de nulidad que
+# el compilador de Kotlin inserta para parámetros no-nulos. Ahorra tamaño/
+# rendimiento a cambio de que un `null` inesperado (interop Java, reflexión)
+# falle más adentro del código con un stacktrace menos claro que en debug.
 -assumenosideeffects class kotlin.jvm.internal.Intrinsics {
     static void checkNotNullParameter(...);
 }

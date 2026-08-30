@@ -67,6 +67,8 @@ class HomeScreenModel(
                                 repo.getTasks(h.id)
                                     .filter { isPending(it) }
                                     .map { h.id to it }
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
                             } catch (_: Exception) {
                                 // Silently skip households that fail (offline, deleted, etc.)
                                 emptyList()
@@ -92,6 +94,11 @@ class HomeScreenModel(
                     householdTasks = sorted.groupBy({ it.first }, { it.second }),
                     pendingCount = sorted.size
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Relanzar: si no, una loadAllTasks() más reciente que ya canceló
+                // este Job ve su propia cancelación como un error normal aquí y
+                // puede sobrescribir el resultado correcto de la carga nueva.
+                throw e
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,

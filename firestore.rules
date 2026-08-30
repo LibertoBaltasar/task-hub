@@ -19,13 +19,33 @@ service cloud.firestore {
     //     su campo `role`; cambiar el rol de otro requiere ser admin/owner.
     //   - members/{mid} (auto-alta con código de invitación): antes no
     //     validaba el resto de campos del documento nuevo, permitiendo
-    //     unirse ya como "admin" con totalPoints arbitrario. Ahora exige
-    //     role="child" y contadores en 0 en el create.
+    //     unirse con totalPoints arbitrario. Ahora exige contadores en 0
+    //     y que `userId` coincida con el UID que se está creando (evita
+    //     que alguien se auto-registre suplantando el userId de otro
+    //     usuario, lo que confundiría a resolveCurrentMember()/isMember()
+    //     del lado del cliente). El rol SÍ puede elegirse libremente
+    //     ("child" o "admin") porque JoinHouseholdScreen.kt lo permite
+    //     explícitamente (p. ej. el segundo progenitor uniéndose como
+    //     admin a un hogar ya creado) — restringir a solo "child" aquí
+    //     rompería ese flujo real de la app.
     //   - taskHistory/rewards: antes cualquier miembro podía editar/borrar
     //     el historial (rompe la integridad de puntos/estadísticas) o
     //     crear/editar recompensas (la UI ya restringe esto a admin/owner,
     //     pero la regla no lo hacía cumplir). Ahora solo admin/owner puede
     //     modificar/borrar taskHistory y escribir rewards.
+    //   - isMember()/isAdminMember(): antes solo comprobaban exists() sobre
+    //     el documento del miembro. Como abandonar un hogar es un soft-delete
+    //     (leftAt = now, el documento NUNCA se borra — ver
+    //     FirestoreRepository.deleteMember), un ex-miembro conservaba acceso
+    //     de lectura/escritura completo al hogar del que se fue, para
+    //     siempre. Ahora isMember() exige además leftAt == 0 (con default 0
+    //     vía get() para no romper a miembros activos creados antes de que
+    //     existiera este campo, que no lo tienen).
+    //   - notifications/{nid}: antes cualquier miembro podía marcar como
+    //     leída o BORRAR las notificaciones de cualquier OTRO miembro (el
+    //     campo memberId no se comprobaba). Ahora solo el propio
+    //     destinatario (o admin/owner, para poder gestionar notificaciones
+    //     de perfiles "hijo/a" sin cuenta propia) puede modificar/borrar.
     //
     //  Limitación arquitectónica conocida (no resuelta aquí): sin Cloud
     //  Functions no es posible validar en la regla que un incremento de
@@ -70,7 +90,11 @@ service cloud.firestore {
 
     function isMember(hid) {
       return signedIn()
-        && exists(/databases/$(database)/documents/households/$(hid)/members/$(request.auth.uid));
+        && exists(/databases/$(database)/documents/households/$(hid)/members/$(request.auth.uid))
+        // leftAt > 0 = abandonó el hogar (soft-delete, el doc nunca se borra
+        // — ver FirestoreRepository.deleteMember). get(..., 0) por defecto:
+        // los miembros activos creados antes de este campo no lo tienen.
+        && myMemberDoc(hid).data.get('leftAt', 0) == 0;
     }
 
     function myMemberDoc(hid) {
@@ -124,11 +148,15 @@ service cloud.firestore {
           isOwner(hid)
           || isAdminMember(hid)
           // auto-alta: el UID que se crea aporta el código de invitación
-          // válido; se fuerza role="child" y contadores en 0 para que nadie
-          // pueda entrar ya como admin o con saldo/racha inventados.
+          // válido; se fuerza `userId == request.auth.uid` (nadie puede
+          // auto-registrarse suplantando el userId de otro usuario) y
+          // contadores en 0 para que nadie pueda entrar ya con saldo/racha
+          // inventados. El rol SÍ es libre ("child"/"admin"): JoinHouseholdScreen
+          // permite elegirlo explícitamente al unirse por código.
           || (request.auth.uid == mid
               && request.resource.data.inviteCode == householdDoc(hid).data.inviteCode
-              && request.resource.data.role == "child"
+              && request.resource.data.userId == request.auth.uid
+              && request.resource.data.role in ["child", "admin"]
               && request.resource.data.totalPoints == 0
               && request.resource.data.currentStreak == 0
               && request.resource.data.bestStreak == 0)
@@ -165,8 +193,15 @@ service cloud.firestore {
       allow read, create: if isMember(hid) || isOwner(hid);
       allow update, delete: if isTrusted(hid);
     }
+    // Cada notificación va dirigida a un miembro (`memberId`). Lectura/creación
+    // amplias (dashboard familiar), pero modificar/borrar la notificación de
+    // OTRO miembro se restringe a admin/owner (necesario para gestionar
+    // notificaciones de perfiles "hijo/a" sin cuenta propia) o al propio
+    // destinatario.
     match /households/{hid}/notifications/{nid} {
-      allow read, write: if isMember(hid) || isOwner(hid);
+      allow read, create: if isMember(hid) || isOwner(hid);
+      allow update, delete: if isTrusted(hid)
+        || (isMember(hid) && resource.data.memberId == request.auth.uid);
     }
     // La UI ya restringe "crear recompensa" a admin/owner (RewardListScreen);
     // la regla ahora lo hace cumplir también a nivel de datos.

@@ -75,8 +75,19 @@ class GoogleAuthManager(
         }
     }
 
-    /** Lanza el flujo de Google Sign-In (abre el selector de cuenta). */
+    /**
+     * Lanza el flujo de Google Sign-In (abre el selector de cuenta).
+     *
+     * Guarda de reentrancia: si ya hay un flujo en curso (doble-tap en
+     * "Vincular con Google", o [linkCalendar] invocado dos veces casi a la vez
+     * desde Ajustes y desde el detalle de una tarea), una segunda llamada NO
+     * relanza el flujo nativo ni resetea [GoogleSignInResultHolder] — eso
+     * dejaría el resultado del primer flujo (que puede llegar después del
+     * reset) sin nadie que lo recoja, colgando ese `state.first { ... }` en
+     * [linkCalendar] para siempre.
+     */
     fun signIn() {
+        if (_state.value is GoogleAuthState.SigningIn) return
         _state.value = GoogleAuthState.SigningIn
         GoogleSignInResultHolder.reset()
         launchGoogleSignIn()

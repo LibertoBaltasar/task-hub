@@ -470,7 +470,7 @@ private fun TaskDetailContent(
             }
         }
 
-        if (isCompletedToday && task.lastCompletedDate != null) {
+        if (isCompletedToday) {
             item {
                 val completer = task.completedBy?.let { memberMap[it] }
                 Row(

@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -160,15 +162,20 @@ data class CalendarScreen(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = {
-                        anchorDate = when (mode) {
-                            CalendarMode.WEEK -> anchorDate.minus(7, DateTimeUnit.DAY)
-                            CalendarMode.MONTH -> {
-                                val ym = anchorDate.minus(1, DateTimeUnit.MONTH)
-                                LocalDate(ym.year, ym.month, 1)
+                    TextButton(
+                        onClick = {
+                            anchorDate = when (mode) {
+                                CalendarMode.WEEK -> anchorDate.minus(7, DateTimeUnit.DAY)
+                                CalendarMode.MONTH -> {
+                                    val ym = anchorDate.minus(1, DateTimeUnit.MONTH)
+                                    LocalDate(ym.year, ym.month, 1)
+                                }
                             }
+                        },
+                        modifier = Modifier.semantics {
+                            contentDescription = if (mode == CalendarMode.WEEK) "Semana anterior" else "Mes anterior"
                         }
-                    }) {
+                    ) {
                         Text("◀", style = MaterialTheme.typography.titleMedium)
                     }
                     Text(
@@ -186,15 +193,20 @@ data class CalendarScreen(
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center
                     )
-                    TextButton(onClick = {
-                        anchorDate = when (mode) {
-                            CalendarMode.WEEK -> anchorDate.plus(7, DateTimeUnit.DAY)
-                            CalendarMode.MONTH -> {
-                                val ym = anchorDate.plus(1, DateTimeUnit.MONTH)
-                                LocalDate(ym.year, ym.month, 1)
+                    TextButton(
+                        onClick = {
+                            anchorDate = when (mode) {
+                                CalendarMode.WEEK -> anchorDate.plus(7, DateTimeUnit.DAY)
+                                CalendarMode.MONTH -> {
+                                    val ym = anchorDate.plus(1, DateTimeUnit.MONTH)
+                                    LocalDate(ym.year, ym.month, 1)
+                                }
                             }
+                        },
+                        modifier = Modifier.semantics {
+                            contentDescription = if (mode == CalendarMode.WEEK) "Semana siguiente" else "Mes siguiente"
                         }
-                    }) {
+                    ) {
                         Text("▶", style = MaterialTheme.typography.titleMedium)
                     }
                 }
@@ -278,10 +290,17 @@ private fun WeekView(
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-        // 7 day columns
+        // 7 day columns.
+        // Modifier.height(IntrinsicSize.Min) es necesario para que
+        // DayColumn.fillMaxHeight() (dentro) funcione: bajo un
+        // verticalScroll() sin acotar (maxHeight = Infinity), fillMaxHeight()
+        // se vuelve un no-op y cada columna se ajusta solo a su propio
+        // contenido — las 7 columnas no comparten altura y el resaltado de
+        // "hoy" queda recortado al contenido en vez de cubrir toda la fila.
         Row(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
                 .verticalScroll(rememberScrollState())
         ) {
             weekRange.forEach { date ->

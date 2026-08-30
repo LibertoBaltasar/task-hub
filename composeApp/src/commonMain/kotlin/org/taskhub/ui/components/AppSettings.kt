@@ -11,8 +11,7 @@ data class AppSettingsState(
     val currentLanguage: String,
     val currentTheme: TaskHubThemeType,
     val onThemeChanged: (TaskHubThemeType) -> Unit,
-    val onLanguageChanged: (String) -> Unit,
-    val onExportCsv: () -> Unit
+    val onLanguageChanged: (String) -> Unit
 )
 
 val LocalAppSettings = compositionLocalOf<AppSettingsState> {

@@ -223,6 +223,12 @@ class TaskScreenModel(
                 _allTags.value = tagSet.toList().sorted()
 
                 _listState.value = TaskListUiState.Success(tasks, assignments, members)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Relanzar: si no, una loadTasks() más reciente que ya canceló este
+                // Job ve su propia cancelación tratada como un error normal aquí
+                // (ver `loadTasksJob?.cancel()` arriba) y puede sobrescribir el
+                // resultado correcto de la carga nueva con un "Error" obsoleto.
+                throw e
             } catch (e: Exception) {
                 _isOffline.value = true
                 _listState.value = TaskListUiState.Error(
@@ -351,7 +357,9 @@ class TaskScreenModel(
         val pointsAwarded: Int,
         val previousStreak: Int,
         val previousBestStreak: Int,
-        val previousLastStreakDate: Long
+        val previousLastStreakDate: Long,
+        /** `completedAt` devuelto por [FirestoreRepository.completeTask] — localiza el registro de taskHistory a borrar al deshacer. */
+        val completedAt: Long
     )
 
     private val _undoState = MutableStateFlow<UndoState?>(null)
@@ -385,18 +393,27 @@ class TaskScreenModel(
                     pointsAwarded = task.points,
                     previousStreak = memberBefore?.currentStreak ?: 0,
                     previousBestStreak = memberBefore?.bestStreak ?: 0,
-                    previousLastStreakDate = memberBefore?.lastStreakDate ?: 0L
+                    previousLastStreakDate = memberBefore?.lastStreakDate ?: 0L,
+                    completedAt = 0L
                 )
 
-                repo.completeTask(
+                val completedAt = repo.completeTask(
                     householdId = householdId,
                     taskId = taskId,
                     memberId = memberId,
                     taskPoints = task.points
                 )
+                _undoState.value = _undoState.value?.copy(completedAt = completedAt)
 
-                // Cancel any scheduled reminder for this task
-                notificationScheduler.cancelReminder(taskId)
+                // Cancel any scheduled reminder for this task.
+                // La tarea ya está completada y los puntos ya se otorgaron en el
+                // servidor en este punto: un fallo aquí (WorkManager/AlarmManager)
+                // es un efecto secundario no crítico, nunca debe marcar la acción
+                // como error (eso invitaría a reintentar completeTask() y duplicar
+                // los puntos ya otorgados).
+                try {
+                    notificationScheduler.cancelReminder(taskId)
+                } catch (_: Exception) { }
 
                 // Tarea hecha → borrar el evento de Calendar vinculado, si lo hay
                 try {
@@ -423,12 +440,14 @@ class TaskScreenModel(
 
                 _actionState.value = TaskActionState.Success
 
-                // Registrar el evento (métrica clave de engagement/racha)
-                logAnalyticsEvent("task_completed")
-
-                // Mostrar interstitial tras completar una tarea con éxito
-                // (respeta el cooldown interno; no-op en plataformas sin AdMob)
-                adController.maybeShowInterstitial()
+                // Registrar el evento (métrica clave de engagement/racha) y mostrar
+                // el interstitial son efectos secundarios no críticos — un fallo
+                // aquí (analytics no inicializado, error interno de AdMob) no debe
+                // sobrescribir el TaskActionState.Success que ya se ha publicado.
+                try {
+                    logAnalyticsEvent("task_completed")
+                    adController.maybeShowInterstitial()
+                } catch (_: Exception) { }
             } catch (e: Exception) {
                 _undoState.value = null
                 _actionState.value = TaskActionState.Error(
@@ -438,20 +457,22 @@ class TaskScreenModel(
         }
     }
 
-    /** Undo a task completion: restore previous lastCompletedDate, points and streak. */
+    /**
+     * Undo a task completion: restore previous points, streak and lastCompletedDate.
+     *
+     * Orden deliberado: puntos/racha/historial se revierten ANTES que el flag de
+     * completada de la tarea. Si una escritura falla a mitad de camino (red), el
+     * peor caso posible es que la tarea SIGA marcada como completada con los
+     * puntos ya revertidos (recuperable reintentando el undo) — nunca que quede
+     * "pendiente" mientras el miembro conserva los puntos, que permitiría
+     * volver a completarla y duplicar el premio (el mismo bug que UndoState fue
+     * diseñado para evitar, ver su KDoc).
+     */
     fun undoCompleteTask() {
         val state = _undoState.value ?: return
         _undoState.value = null
         screenModelScope.launch {
             try {
-                repo.revertTaskCompletion(
-                    state.householdId,
-                    state.taskId,
-                    state.previousLastCompletedDate,
-                    state.previousCompletedBy
-                )
-                // Revertir también los puntos y la racha otorgados al completar
-                // (ver KDoc de [UndoState]).
                 repo.addMemberPoints(state.householdId, state.memberId, -state.pointsAwarded)
                 repo.updateMemberStreak(
                     householdId = state.householdId,
@@ -460,8 +481,17 @@ class TaskScreenModel(
                     bestStreak = state.previousBestStreak,
                     lastStreakDate = state.previousLastStreakDate
                 )
+                if (state.completedAt != 0L) {
+                    repo.deleteTaskHistoryRecord(state.householdId, state.taskId, state.completedAt)
+                }
+                repo.revertTaskCompletion(
+                    state.householdId,
+                    state.taskId,
+                    state.previousLastCompletedDate,
+                    state.previousCompletedBy
+                )
             } catch (_: Exception) {
-                // Non-critical — task stays completed
+                // Non-critical — la tarea puede quedar como completada (ver KDoc arriba)
             }
         }
     }
@@ -911,6 +941,10 @@ class TaskScreenModel(
     }
 
     fun reset() {
+        // Cancela una loadTasks() en vuelo: si no, puede resolver después de este
+        // reset() y sobrescribir el Idle recién puesto con datos del hogar anterior
+        // (reutilización del ScreenModel al cambiar de hogar).
+        loadTasksJob?.cancel()
         _listState.value = TaskListUiState.Idle
         _detailState.value = TaskDetailUiState.Idle
         _actionState.value = TaskActionState.Idle

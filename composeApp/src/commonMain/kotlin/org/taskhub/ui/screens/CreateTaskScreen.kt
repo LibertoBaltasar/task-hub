@@ -170,7 +170,7 @@ data class CreateTaskScreen(
                                 },
                                 enabled = actionState !is TaskActionState.Loading &&
                                     title.isNotBlank() &&
-                                    pointsText.toIntOrNull() != null &&
+                                    (pointsText.toIntOrNull() ?: -1) > 0 &&
                                     (!hasDeadline || deadlineTime.isValidTimeFormat()),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.primary
@@ -345,10 +345,12 @@ data class CreateTaskScreen(
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            isError = pointsText.toIntOrNull() == null,
+                            isError = (pointsText.toIntOrNull() ?: -1) <= 0,
                             supportingText = {
                                 if (pointsText.toIntOrNull() == null) {
                                     Text("Debe ser un número")
+                                } else if ((pointsText.toIntOrNull() ?: -1) <= 0) {
+                                    Text("Debe ser mayor que 0")
                                 }
                             }
                         )
@@ -934,8 +936,17 @@ private fun QuickTemplatesSection(
 internal fun String.isValidDateFormat(): Boolean =
     Regex("""\d{4}-\d{2}-\d{2}""").matches(this)
 
-internal fun String.isValidTimeFormat(): Boolean =
-    Regex("""\d{2}:\d{2}""").matches(this)
+internal fun String.isValidTimeFormat(): Boolean {
+    // No basta con el formato (dos dígitos:dos dígitos): "99:99" también lo
+    // cumple pero LocalDateTime(...) en parseDeadline() lanza
+    // IllegalArgumentException con una hora/minuto fuera de rango — sin esta
+    // validación, el botón Crear/Guardar quedaba habilitado y pulsar crasheaba.
+    val match = Regex("""(\d{2}):(\d{2})""").matchEntire(this) ?: return false
+    val (hourStr, minuteStr) = match.destructured
+    val hour = hourStr.toIntOrNull() ?: return false
+    val minute = minuteStr.toIntOrNull() ?: return false
+    return hour in 0..23 && minute in 0..59
+}
 
 internal fun parseDeadline(dateStr: String, timeStr: String): Long {
     val parts = dateStr.split("-")

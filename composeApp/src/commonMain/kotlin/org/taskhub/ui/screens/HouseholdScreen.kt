@@ -75,9 +75,8 @@ data class HouseholdScreen(val householdId: String) : Screen {
         var showSettings by remember { mutableStateOf(false) }
         val appSettings = LocalAppSettings.current
 
-        // Miembros desplegable + rol actual del usuario
+        // Miembros desplegable
         var membersExpanded by remember { mutableStateOf(false) }
-        var isAdmin by remember { mutableStateOf(false) }
 
         // Agradecer / Donar puntos entre miembros
         var appreciateTarget by remember { mutableStateOf<MemberResponse?>(null) }
@@ -102,28 +101,22 @@ data class HouseholdScreen(val householdId: String) : Screen {
             }
         }
 
-        // Determina si el usuario actual es admin (por su identidad).
-        LaunchedEffect(memberState) {
-            if (memberState is MemberUiState.Success) {
-                val members = (memberState as MemberUiState.Success).members
-                val localId = repo.getLocalId()
-                val myMember = members.firstOrNull { it.userId == localId } ?: members.firstOrNull()
-                isAdmin = myMember?.role == "admin"
-            }
-        }
-
         // ── Identidad del usuario actual en este hogar ──
         // ÚNICA fuente de verdad para "qué miembro soy yo": antes, la navegación
         // a Tareas/Calendario/Explorar y el createdBy al crear tareas usaban
         // members.firstOrNull()?.id (el PRIMER miembro de la lista, no el mío),
         // así que en un hogar compartido cualquiera que no fuera el primer
         // miembro veía datos ajenos. resolveCurrentMember() sí resuelve al
-        // usuario autenticado.
+        // usuario autenticado. isAdmin también se deriva de aquí (antes tenía
+        // su propio LaunchedEffect con el mismo patrón buggy de "primer
+        // miembro de la lista" como fallback, pudiendo mostrar/ocultar
+        // controles de admin para la persona equivocada).
         var currentMemberId by remember { mutableStateOf("") }
         LaunchedEffect(householdId) {
             currentMemberId = repo.resolveCurrentMember(householdId)
         }
         val myMember = (memberState as? MemberUiState.Success)?.members?.firstOrNull { it.id == currentMemberId }
+        val isAdmin = myMember?.role == "admin"
 
         // ── Chat de mensajes ──
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }

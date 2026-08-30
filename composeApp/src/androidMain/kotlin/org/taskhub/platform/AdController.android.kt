@@ -49,11 +49,26 @@ object AdControllerImpl : AdController {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     isLoading = false
                     interstitialAd = ad
-                    // Al descartarse el anuncio, se recarga el siguiente
+                    // Al descartarse el anuncio, se recarga el siguiente. También
+                    // hay que recargar si el anuncio falla al MOSTRARSE (Activity
+                    // fuera de primer plano en ese instante, anuncio ya consumido,
+                    // error del SDK): sin este callback, `interstitialAd` se queda
+                    // apuntando a un anuncio inválido para siempre y
+                    // maybeShowInterstitial() nunca vuelve a llamar a
+                    // loadInterstitial() (la guarda `if (ad == null)` no se cumple).
                     ad.fullScreenContentCallback = object : FullScreenContentCallback() {
                         override fun onAdDismissedFullScreenContent() {
                             interstitialAd = null
                             loadInterstitial()
+                        }
+
+                        override fun onAdFailedToShowFullScreenContent(error: com.google.android.gms.ads.AdError) {
+                            interstitialAd = null
+                            loadInterstitial()
+                        }
+
+                        override fun onAdShowedFullScreenContent() {
+                            lastShownAtMs = System.currentTimeMillis()
                         }
                     }
                 }
@@ -83,7 +98,9 @@ object AdControllerImpl : AdController {
         // Se necesita una Activity en primer plano para mostrar el anuncio
         val activity = AndroidContextHolder.activity ?: return
 
-        lastShownAtMs = now
+        // lastShownAtMs se fija en onAdShowedFullScreenContent(), no aquí: si
+        // ad.show() falla (ver onAdFailedToShowFullScreenContent arriba), el
+        // cooldown de 120s no debe arrancar para un anuncio que nunca se vio.
         ad.show(activity)
     }
 

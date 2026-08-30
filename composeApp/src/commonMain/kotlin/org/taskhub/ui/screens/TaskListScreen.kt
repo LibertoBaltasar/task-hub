@@ -107,8 +107,19 @@ data class TaskListScreen(
 
         // Reload when action completes
         LaunchedEffect(actionState) {
-            if (actionState is TaskActionState.Success) {
+            val state = actionState
+            if (state is TaskActionState.Success) {
                 model.loadTasks(householdId)
+                model.resetActionState()
+            } else if (state is TaskActionState.Error) {
+                // Sin esto, un fallo al completar una tarea (p.ej. red) no mostraba
+                // ningún mensaje y la card de TaskCard se quedaba invisible/deshabilitada
+                // para siempre (isCompleting/loadingTaskIds nunca se resetean por sí
+                // solos — ver el TaskActionState.Error pasado a TaskListContent abajo).
+                snackbarHostState.showSnackbar(
+                    message = "❌ ${state.message}",
+                    duration = SnackbarDuration.Short
+                )
                 model.resetActionState()
             }
         }
@@ -210,6 +221,7 @@ data class TaskListScreen(
                     is TaskListUiState.Success -> {
                         TaskListContent(
                             state = state,
+                            actionErrorSignal = actionState as? TaskActionState.Error,
                             filter = filter,
                             sort = sort,
                             tagFilter = tagFilter,
@@ -430,6 +442,8 @@ private fun groupTasksByStatus(
 @Composable
 private fun TaskListContent(
     state: TaskListUiState.Success,
+    /** No-null cada vez que completar una tarea falla: limpia los spinners "en curso". */
+    actionErrorSignal: TaskActionState.Error?,
     filter: TaskFilter,
     sort: TaskSort,
     tagFilter: String?,
@@ -513,6 +527,14 @@ private fun TaskListContent(
 
     // Track which tasks are being completed (loading state)
     val loadingTaskIds = remember { mutableStateMapOf<String, Boolean>() }
+
+    // Si completar una tarea falla, la card correspondiente quedaba con su
+    // spinner/animación de salida bloqueados para siempre (nada los reseteaba
+    // ante un error, solo ante éxito) — ver `isCompleting`/`onComplete` en
+    // TaskCard más abajo, que observan `actionErrorSignal` para recuperarse.
+    LaunchedEffect(actionErrorSignal) {
+        if (actionErrorSignal != null) loadingTaskIds.clear()
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -640,6 +662,7 @@ private fun TaskListContent(
                             assignments = assignmentsByTask[item.task.id] ?: emptyList(),
                             memberMap = memberMap,
                             isLoading = loadingTaskIds[item.task.id] == true,
+                            hasError = actionErrorSignal != null,
                             onClick = { onTaskClick(item.task) },
                             onComplete = if (item.isDueToday && !item.isCompletedToday) {
                                 {
@@ -670,6 +693,7 @@ private fun TaskCard(
     assignments: List<TaskAssignmentResponse>,
     memberMap: Map<String, MemberResponse>,
     isLoading: Boolean,
+    hasError: Boolean,
     onClick: () -> Unit,
     onComplete: (() -> Unit)?,
     modifier: Modifier = Modifier
@@ -689,6 +713,12 @@ private fun TaskCard(
         // La card puede reutilizarse (misma key) al moverse de grupo — una vez el
         // backend confirma el completado, se libera la animación de salida.
         if (isDone) isCompleting = false
+    }
+    LaunchedEffect(hasError) {
+        // Sin esto, un fallo de red al completar dejaba la card en animación de
+        // salida permanente (cardAlpha=0f, clickable deshabilitado) y ningún
+        // camino la recuperaba, porque solo `isDone` (éxito) reseteaba isCompleting.
+        if (hasError) isCompleting = false
     }
     LaunchedEffect(isCompleting) {
         if (isCompleting) {

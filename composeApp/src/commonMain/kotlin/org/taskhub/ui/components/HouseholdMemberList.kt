@@ -131,7 +131,7 @@ fun LazyListScope.householdMemberList(
                     }
                 }
             } else {
-                items(memberState.members) { member ->
+                items(memberState.members, key = { it.id }) { member ->
                     MemberCard(
                         member = member,
                         isAdmin = isAdmin,

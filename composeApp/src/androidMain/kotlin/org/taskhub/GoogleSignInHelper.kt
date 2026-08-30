@@ -63,8 +63,19 @@ object GoogleSignInHelper {
 
         // Sign out first so the user sees the account picker every time
         client.signOut().addOnCompleteListener {
-            val signInIntent = client.signInIntent
-            signInLauncher?.launch(signInIntent)
+            // El callback de signOut() es asíncrono: la Activity pudo destruirse
+            // (o `register()` no haberse llamado aún) entre la llamada a launch()
+            // y que este callback se dispare. Sin esta guarda, un launcher nulo
+            // deja GoogleSignInResultHolder sin ningún resultado — el StateFlow
+            // se queda en null para siempre y la UI se cuelga en "Conectando con
+            // Google..." (mismo síntoma que el bug ya corregido más abajo, por
+            // una ruta distinta).
+            val launcher = signInLauncher
+            if (launcher == null) {
+                GoogleSignInResultHolder.setResult("")
+                return@addOnCompleteListener
+            }
+            launcher.launch(client.signInIntent)
         }
     }
 

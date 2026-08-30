@@ -26,7 +26,11 @@ class TaskHubFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        Log.d(TAG, "New FCM token: $token")
+        // No se loguea el token en sí: es una credencial de targeting de push
+        // (permite enviar notificaciones a este dispositivo concreto) y el
+        // proyecto no tiene ninguna regla R8 que elimine android.util.Log en
+        // release, así que quedaría en Logcat también en builds de producción.
+        Log.d(TAG, "New FCM token received (length=${token.length})")
         // Antes solo se logueaba: el comentario decía "lo guarda la lógica
         // principal de la app", pero esa lógica no existía en ningún sitio
         // (verificado por grep) — ningún token llegaba nunca a persistirse,

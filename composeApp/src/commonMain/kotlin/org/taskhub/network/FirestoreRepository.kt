@@ -1351,13 +1351,17 @@ class FirestoreRepository(
         return toTaskResponse(response, householdId)
     }
 
-    /** Mark a task as completed today. Sets lastCompletedDate, awards points, and records history. */
+    /**
+     * Mark a task as completed today. Sets lastCompletedDate, awards points, and records history.
+     * Devuelve el `completedAt` (epoch millis) usado, para que el caller pueda
+     * localizar después el registro de `taskHistory` creado (p.ej. al deshacer).
+     */
     suspend fun completeTask(
         householdId: String,
         taskId: String,
         memberId: String,
         taskPoints: Int
-    ) {
+    ): Long {
         val now = Clock.System.now().toEpochMilliseconds()
 
         // 1. Update lastCompletedDate + completedBy on the task.
@@ -1387,12 +1391,16 @@ class FirestoreRepository(
             completedAt = now,
             onTime = true
         )
+
+        return now
     }
 
     /**
      * Revert a task completion — used by the undo feature.
-     * Restores the previous lastCompletedDate on the task document.
-     * Does NOT revert points/history (keeping it simple).
+     * Restores the previous lastCompletedDate/completedBy on the task document.
+     * No revierte puntos/racha/historial por sí sola — eso lo hace el caller
+     * (ver [TaskScreenModel.undoCompleteTask]: `addMemberPoints`, `updateMemberStreak`
+     * y [deleteTaskHistoryRecord]).
      */
     suspend fun revertTaskCompletion(
         householdId: String,
@@ -1518,6 +1526,23 @@ class FirestoreRepository(
     }
 
     /**
+     * Localiza el registro de `taskHistory` de una compleción concreta
+     * (identificada por taskId + completedAt). null si no existe.
+     */
+    private suspend fun findTaskHistoryRecord(
+        householdId: String,
+        taskId: String,
+        completedAt: Long
+    ): TaskHistoryResponse? {
+        val history = try {
+            getTaskHistory(householdId)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        return history.firstOrNull { it.taskId == taskId && it.completedAt == completedAt }
+    }
+
+    /**
      * Actualiza el memberId del registro de historial de una compleción concreta
      * (identificada por taskId + completedAt). Se usa al corregir quién hizo una
      * tarea. No-op si no existe el registro.
@@ -1528,19 +1553,31 @@ class FirestoreRepository(
         completedAt: Long,
         newMemberId: String
     ) {
-        val history = try {
-            getTaskHistory(householdId)
-        } catch (_: Exception) {
-            emptyList()
-        }
-        val record = history.firstOrNull { it.taskId == taskId && it.completedAt == completedAt }
-            ?: return
+        val record = findTaskHistoryRecord(householdId, taskId, completedAt) ?: return
         val fields = mapOf("memberId" to FirestoreValue(stringValue = newMemberId))
         client.patch("$baseUrl/households/$householdId/taskHistory/${record.id}") {
             withAuth()
             parameter("updateMask.fieldPaths", "memberId")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /**
+     * Borra el registro de `taskHistory` de una compleción concreta (identificada
+     * por taskId + completedAt). Se usa al deshacer una compleción (undo): sin
+     * esto, el registro queda huérfano con puntos que ya no corresponden al total
+     * real del miembro (que sí se revierte), desincronizando las estadísticas
+     * (StatsScreen) que agregan desde `taskHistory`. No-op si no existe el registro.
+     */
+    suspend fun deleteTaskHistoryRecord(householdId: String, taskId: String, completedAt: Long) {
+        val record = findTaskHistoryRecord(householdId, taskId, completedAt) ?: return
+        try {
+            client.delete("$baseUrl/households/$householdId/taskHistory/${record.id}") {
+                withAuth()
+            }
+        } catch (_: Exception) {
+            // No crítico: si ya no existe (o falla), el undo de puntos/racha sigue en pie.
         }
     }
 

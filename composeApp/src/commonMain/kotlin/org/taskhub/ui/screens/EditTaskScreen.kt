@@ -215,7 +215,7 @@ data class EditTaskScreen(
                                 },
                                 enabled = actionState !is TaskActionState.Loading &&
                                     title.isNotBlank() &&
-                                    pointsText.toIntOrNull() != null &&
+                                    (pointsText.toIntOrNull() ?: -1) > 0 &&
                                     (!hasDeadline || deadlineTime.isValidTimeFormat()),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.primary
@@ -375,10 +375,12 @@ data class EditTaskScreen(
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            isError = pointsText.toIntOrNull() == null,
+                            isError = (pointsText.toIntOrNull() ?: -1) <= 0,
                             supportingText = {
                                 if (pointsText.toIntOrNull() == null) {
                                     Text("Debe ser un número")
+                                } else if ((pointsText.toIntOrNull() ?: -1) <= 0) {
+                                    Text("Debe ser mayor que 0")
                                 }
                             }
                         )

@@ -89,15 +89,15 @@ jobs:
             -PversionCodeOverride="${{ steps.version.outputs.version_code }}"
 
       # ── Determinar track ────────────────────────────────
+      # El trigger de push solo admite tags "vX.Y.Z" (sin sufijo -alpha/-beta,
+      # ver el patrón de la línea 6), así que un push de tag SIEMPRE publica en
+      # "internal". Para publicar en "alpha"/"production" usa workflow_dispatch
+      # y elige el track ahí explícitamente.
       - name: Determine track
         id: track
         run: |
           if [ -n "${{ inputs.track }}" ]; then
             echo "track=${{ inputs.track }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == *"-alpha"* ]]; then
-            echo "track=alpha" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.ref }}" == *"-beta"* ]]; then
-            echo "track=internal" >> $GITHUB_OUTPUT
           else
             echo "track=internal" >> $GITHUB_OUTPUT
           fi
@@ -142,3 +142,11 @@ jobs:
           name: task-hub-${{ steps.version.outputs.version_name }}.aab
           path: composeApp/build/outputs/bundle/release/composeApp-release.aab
           retention-days: 30
+
+      # ── Limpieza ─────────────────────────────────────────
+      # El runner de ubuntu-latest es una VM efímera de un solo uso que se
+      # destruye al terminar el job, pero se borra igualmente como defensa en
+      # profundidad (p. ej. por si en el futuro se usa un runner autoalojado).
+      - name: Clean up keystore
+        if: always()
+        run: rm -f composeApp/upload-keystore.jks
