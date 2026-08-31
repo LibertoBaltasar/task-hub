@@ -17,9 +17,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.MemberUiState
-import org.taskhub.ui.theme.Coral100
-import org.taskhub.ui.theme.Teal100
-import org.taskhub.ui.theme.Teal600
 
 /**
  * Sección desplegable de miembros del hogar: cabecera con contador + lista
@@ -90,7 +87,7 @@ fun LazyListScope.householdMemberList(
                         .height(100.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Teal600)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             }
         }
@@ -201,7 +198,7 @@ private fun MemberCard(
                     displayName = member.displayName,
                     contentDescription = member.displayName,
                     size = 48.dp,
-                    backgroundColor = if (member.role == "admin") Coral100 else Teal100
+                    backgroundColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
                 )
 
                 Spacer(modifier = Modifier.width(12.dp))

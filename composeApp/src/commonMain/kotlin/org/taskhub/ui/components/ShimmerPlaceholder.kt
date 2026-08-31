@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,7 +62,7 @@ fun rememberShimmerBrush(): Brush {
 fun ShimmerPlaceholder(
     modifier: Modifier = Modifier,
     height: androidx.compose.ui.unit.Dp = 80.dp,
-    shape: Shape = RoundedCornerShape(12.dp)
+    shape: Shape = MaterialTheme.shapes.medium
 ) {
     val brush = rememberShimmerBrush()
     Column(

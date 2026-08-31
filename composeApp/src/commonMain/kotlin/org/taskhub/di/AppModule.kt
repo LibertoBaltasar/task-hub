@@ -3,6 +3,7 @@ package org.taskhub.di
 import com.russhwolf.settings.Settings
 import org.koin.core.module.Module
 import org.koin.dsl.module
+import org.koin.dsl.onClose
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.platform.NotificationScheduler
@@ -39,8 +40,11 @@ val appModule: Module = module {
     // Google Calendar integration
     single { GoogleCalendarRepository() }
 
-    // Google login / auth manager (compartido entre HomeScreen y Ajustes)
-    single { GoogleAuthManager(repo = get(), settingsStore = get(), householdStore = get()) }
+    // Google login / auth manager (compartido entre HomeScreen y Ajustes).
+    // onClose cancela su CoroutineScope interno si Koin cierra el contenedor
+    // (hoy no ocurre en producción — singleton de vida de proceso — pero deja
+    // el manager cerrable, p.ej. para tests que recrean Koin entre casos).
+    single { GoogleAuthManager(repo = get(), settingsStore = get(), householdStore = get()) } onClose { it?.close() }
 
     // Orquesta la sincronización automática de tareas ↔ Google Calendar
     single { CalendarSyncManager(repo = get(), calendarRepo = get(), settingsStore = get(), authManager = get()) }

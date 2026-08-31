@@ -2,6 +2,7 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,6 +61,8 @@ class HouseholdScreenModel(
                 logAnalyticsEvent("household_created")
                 _uiState.value = HouseholdUiState.Success(household)
                 buzz(HapticKind.SUCCESS)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: "Error al crear el espacio"
@@ -87,6 +90,8 @@ class HouseholdScreenModel(
                 }
                 authManager.syncHouseholdsToCloud()
                 buzz(HapticKind.SUCCESS)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: "Código de invitación inválido"
@@ -111,6 +116,8 @@ class HouseholdScreenModel(
                 } else {
                     _uiState.value = HouseholdUiState.Error(e.message)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: "Error al cargar el espacio"
@@ -140,39 +147,11 @@ class HouseholdScreenModel(
                 authManager.syncHouseholdsToCloud()
                 buzz(HapticKind.WARNING)
                 onSuccess()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 buzz(HapticKind.ERROR)
                 onError(e.message ?: "Error al eliminar el espacio")
-            }
-        }
-    }
-
-    fun deleteMultipleHouseholds(
-        householdIds: List<String>,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        screenModelScope.launch {
-            // Acumula éxitos/fallos por id en vez de abortar en el primer error:
-            // antes, un fallo a mitad de la lista dejaba los ids anteriores ya
-            // borrados pero informaba de un error genérico, sin decir cuáles se
-            // eliminaron y cuáles no.
-            val failed = mutableListOf<String>()
-            for (id in householdIds) {
-                try {
-                    repo.deleteHousehold(id)
-                    householdStore.removeHousehold(id)
-                } catch (_: Exception) {
-                    failed += id
-                }
-            }
-            authManager.syncHouseholdsToCloud()
-            if (failed.isEmpty()) {
-                buzz(HapticKind.WARNING)
-                onSuccess()
-            } else {
-                buzz(HapticKind.ERROR)
-                onError("No se pudieron eliminar ${failed.size} de ${householdIds.size} espacios")
             }
         }
     }
@@ -189,6 +168,8 @@ class HouseholdScreenModel(
                 authManager.syncHouseholdsToCloud()
                 buzz(HapticKind.WARNING)
                 onSuccess()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 buzz(HapticKind.ERROR)
                 onError(e.message ?: "Error al salir del espacio")
@@ -218,6 +199,8 @@ class HouseholdScreenModel(
             try {
                 val messages = repo.getMessages(householdId)
                 _messagesUiState.value = MessagesUiState.Success(messages)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _messagesUiState.value = MessagesUiState.Error(
                     e.message ?: "Error al cargar mensajes"
@@ -239,6 +222,8 @@ class HouseholdScreenModel(
                     ?.displayName ?: ""
                 repo.sendMessage(householdId, memberId, authorName, text)
                 loadMessages(householdId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _messagesUiState.value = MessagesUiState.Error(
                     e.message ?: "Error al enviar mensaje"

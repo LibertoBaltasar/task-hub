@@ -23,10 +23,6 @@ import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
-import org.taskhub.ui.theme.Coral500
-import org.taskhub.ui.theme.Teal600
-import org.taskhub.ui.theme.Teal800
-import org.taskhub.ui.theme.Teal50
 
 class WelcomeScreen : Screen {
 
@@ -104,7 +100,7 @@ class WelcomeScreen : Screen {
                     Text(
                         text = s("welcome_title"),
                         style = MaterialTheme.typography.headlineLarge,
-                        color = Teal600
+                        color = MaterialTheme.colorScheme.primary
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -161,11 +157,8 @@ class WelcomeScreen : Screen {
                                 .fillMaxWidth()
                                 .height(56.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Teal50,
-                                // Teal800 (no Teal600): Teal600 sobre Teal50 da 3.22:1,
-                                // por debajo del umbral WCAG AA (4.5:1) — y como ambos
-                                // colores son fijos, fallaba en cualquier tema/modo.
-                                contentColor = Teal800
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                             ),
                             shape = MaterialTheme.shapes.large
                         ) {

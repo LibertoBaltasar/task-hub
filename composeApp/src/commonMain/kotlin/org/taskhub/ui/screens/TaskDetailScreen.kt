@@ -30,8 +30,12 @@ import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.models.*
+import org.taskhub.ui.components.BadgeTone
+import org.taskhub.ui.components.DestructiveConfirmDialog
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
@@ -91,27 +95,14 @@ data class TaskDetailScreen(
 
         // Delete confirmation dialog
         if (showDeleteDialog) {
-            AlertDialog(
-                onDismissRequest = { showDeleteDialog = false },
-                title = { Text(s("task_detail_delete_title")) },
-                text = { Text(s("task_detail_delete_confirm")) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showDeleteDialog = false
-                            model.deleteTask(householdId, taskId)
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text(s("household_delete_btn"))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDeleteDialog = false }) {
-                        Text(s("household_cancel"))
-                    }
+            DestructiveConfirmDialog(
+                title = s("task_detail_delete_title"),
+                text = s("task_detail_delete_confirm"),
+                s = s,
+                onDismiss = { showDeleteDialog = false },
+                onConfirm = {
+                    showDeleteDialog = false
+                    model.deleteTask(householdId, taskId)
                 }
             )
         }
@@ -158,7 +149,7 @@ data class TaskDetailScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = Teal600)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         }
                     }
 
@@ -342,7 +333,7 @@ private fun TaskDetailContent(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
-                    containerColor = Teal50
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
@@ -351,7 +342,7 @@ private fun TaskDetailContent(
                         text = task.title,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Teal900
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
 
                     // Description
@@ -360,9 +351,7 @@ private fun TaskDetailContent(
                         Text(
                             text = task.description,
                             style = MaterialTheme.typography.bodyLarge,
-                            // Color fijo (no onSurfaceVariant): el fondo Teal50 de esta card
-                            // tampoco cambia con el modo oscuro (1.52:1 en dark).
-                            color = Teal800
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
                     }
 
@@ -373,8 +362,8 @@ private fun TaskDetailContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        InfoBadge(label = s("public_profile_stat_points"), value = "${task.points} ⭐", color = MaterialTheme.colorScheme.primary)
-                        InfoBadge(
+                        StatChip(label = s("public_profile_stat_points"), value = "${task.points} ⭐", tone = BadgeTone.Teal)
+                        StatChip(
                             label = s("task_detail_frequency_label"),
                             value = when (task.frequency) {
                                 "daily" -> s("recurrence_daily")
@@ -382,7 +371,7 @@ private fun TaskDetailContent(
                                 "monthly" -> s("recurrence_monthly")
                                 else -> s("recurrence_once")
                             },
-                            color = MaterialTheme.colorScheme.primary
+                            tone = BadgeTone.Teal
                         )
                     }
 
@@ -404,7 +393,7 @@ private fun TaskDetailContent(
                         Text(
                             text = "🔄 $daysStr",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
                     }
 
@@ -414,7 +403,7 @@ private fun TaskDetailContent(
                         Text(
                             text = s("task_detail_monthly_recurrence").replace("%d", task.recurrenceDay.toString()),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Teal700
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
                     }
 
@@ -425,13 +414,13 @@ private fun TaskDetailContent(
                             task.tags.forEach { tag ->
                                 Surface(
                                     shape = MaterialTheme.shapes.small,
-                                    color = Coral50
+                                    color = MaterialTheme.colorScheme.tertiaryContainer
                                 ) {
                                     Text(
                                         text = tag,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = Coral700
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 }
                             }
@@ -441,12 +430,12 @@ private fun TaskDetailContent(
                     // Penalty info
                     if (task.penaltyMode != null) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = Teal200)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f))
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = s("create_task_penalty_section"),
                             style = MaterialTheme.typography.labelLarge,
-                            color = Coral600,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontWeight = FontWeight.SemiBold
                         )
                         val penaltyDesc = when (task.penaltyMode) {
@@ -461,13 +450,13 @@ private fun TaskDetailContent(
                         Text(
                             text = penaltyDesc,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Coral700
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                         )
                         if (task.penaltyMax > 0) {
                             Text(
                                 text = s("task_detail_penalty_max_desc").replace("%d", task.penaltyMax.toString()),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Coral700
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                             )
                         }
                     }
@@ -486,7 +475,7 @@ private fun TaskDetailContent(
                     text = if (isCompletedToday) s("task_detail_completed_today") else s("task_detail_status_pending"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (isCompletedToday) Teal600 else Coral600
+                    color = if (isCompletedToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
                 )
                 if (!isCompletedToday) {
                     Button(
@@ -599,7 +588,7 @@ private fun TaskDetailContent(
                     Checkbox(
                         checked = st.completed,
                         onCheckedChange = { onToggleSubtask(st.id) },
-                        colors = CheckboxDefaults.colors(checkedColor = Teal600)
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
                     )
                     Text(
                         text = st.text,
@@ -682,7 +671,7 @@ private fun TaskDetailContent(
 
         // ── Comments section ──
         item {
-            HorizontalDivider(color = Teal200)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = s("task_detail_comments_title"),
@@ -708,10 +697,7 @@ private fun TaskDetailContent(
                     supportingText = {
                         Text("${newCommentText.length}/200")
                     },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Teal600,
-                        cursorColor = Teal600
-                    )
+                    colors = taskHubTextFieldColors()
                 )
                 Spacer(Modifier.width(8.dp))
                 IconButton(
@@ -734,7 +720,7 @@ private fun TaskDetailContent(
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
-                            color = Teal600,
+                            color = MaterialTheme.colorScheme.primary,
                             strokeWidth = 2.dp
                         )
                     }
@@ -933,7 +919,7 @@ private fun CalendarSyncStatusCard(
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
-                    color = if (status == CalendarSyncStatus.Synced) Teal700
+                    color = if (status == CalendarSyncStatus.Synced) MaterialTheme.semanticColors.success
                             else MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
@@ -946,7 +932,7 @@ private fun CalendarSyncStatusCard(
                             if (calendarActionState is TaskScreenModel.CalendarActionState.Sending) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
-                                    color = Teal600,
+                                    color = MaterialTheme.colorScheme.primary,
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -961,7 +947,7 @@ private fun CalendarSyncStatusCard(
                             if (isLinkingCalendar) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(16.dp),
-                                    color = Teal600,
+                                    color = MaterialTheme.colorScheme.primary,
                                     strokeWidth = 2.dp
                                 )
                             } else {
@@ -1028,7 +1014,7 @@ private fun AssignmentCard(
                         displayName = member?.displayName ?: "",
                         contentDescription = member?.displayName ?: "",
                         size = 32.dp,
-                        backgroundColor = if (member?.role == "admin") Coral100 else Teal100
+                        backgroundColor = if (member?.role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
@@ -1063,7 +1049,7 @@ private fun AssignmentCard(
                     Text(
                         text = s("task_detail_mandatory_badge"),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Coral600
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
 
@@ -1075,7 +1061,7 @@ private fun AssignmentCard(
                         text = if (onTime) s("task_detail_on_time_pts").replace("%d", pts.toString())
                         else s("task_detail_late_pts").replace("%d", pts.toString()),
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (onTime) Teal600 else Coral600
+                        color = if (onTime) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
                     )
                     if (assignment.completedAt != null) {
                         Text(
@@ -1109,7 +1095,7 @@ private fun AssignmentCard(
             } else if (assignment.status == "completed") {
                 Surface(
                     shape = MaterialTheme.shapes.small,
-                    color = Teal100
+                    color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
                         text = "✅",
@@ -1124,31 +1110,6 @@ private fun AssignmentCard(
 
 // ────────────────────────────────────────────────────────────
 //  Helpers
-
-@Composable
-private fun InfoBadge(label: String, value: String, color: androidx.compose.ui.graphics.Color) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = color.copy(alpha = 0.15f)
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = color.copy(alpha = 0.7f)
-            )
-        }
-    }
-}
 
 private fun formatDateTime(epochMillis: Long): String {
     val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(epochMillis)

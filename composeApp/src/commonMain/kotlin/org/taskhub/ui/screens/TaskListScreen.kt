@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -54,6 +56,7 @@ import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.shouldReduceMotion
+import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 import org.taskhub.platform.shareText
@@ -196,7 +199,7 @@ data class TaskListScreen(
                 if (isOffline) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        color = Coral100
+                        color = MaterialTheme.semanticColors.warningContainer
                     ) {
                         Text(
                             text = s("task_list_offline_banner"),
@@ -204,7 +207,7 @@ data class TaskListScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             style = MaterialTheme.typography.bodySmall,
-                            color = Coral800,
+                            color = MaterialTheme.semanticColors.onWarningContainer,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -798,7 +801,7 @@ private fun TaskCard(
                 } else if (isDone) {
                     Surface(
                         shape = MaterialTheme.shapes.small,
-                        color = Teal100
+                        color = MaterialTheme.colorScheme.primaryContainer
                     ) {
                         Text(
                             text = "✅",
@@ -841,13 +844,13 @@ private fun TaskCard(
                 }
                 Surface(
                     shape = MaterialTheme.shapes.small,
-                    color = Teal50
+                    color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
                         text = freqLabel,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = Teal800
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
 
@@ -855,13 +858,13 @@ private fun TaskCard(
                 task.tags.take(2).forEach { tag ->
                     Surface(
                         shape = MaterialTheme.shapes.small,
-                        color = Coral50
+                        color = MaterialTheme.colorScheme.tertiaryContainer
                     ) {
                         Text(
                             text = tag,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = Coral700
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                     }
                 }
@@ -903,13 +906,13 @@ private fun TaskCard(
                     val allDone = completedCount == totalAssigned
                     Surface(
                         shape = MaterialTheme.shapes.small,
-                        color = if (allDone) MaterialTheme.semanticColors.successContainer else Teal100
+                        color = if (allDone) MaterialTheme.semanticColors.successContainer else MaterialTheme.colorScheme.primaryContainer
                     ) {
                         Text(
                             text = "✅ $completedCount/$totalAssigned",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (allDone) MaterialTheme.semanticColors.onSuccessContainer else Teal800,
+                            color = if (allDone) MaterialTheme.semanticColors.onSuccessContainer else MaterialTheme.colorScheme.onPrimaryContainer,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -921,13 +924,13 @@ private fun TaskCard(
                         if (rotationMember != null) {
                             Surface(
                                 shape = MaterialTheme.shapes.small,
-                                color = Coral50
+                                color = MaterialTheme.colorScheme.tertiaryContainer
                             ) {
                                 Text(
                                     text = "🧑 ${rotationMember.displayName}",
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Coral700
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
                         }
@@ -963,7 +966,7 @@ private fun AnimatedCheckmark(reduceMotion: Boolean, modifier: Modifier = Modifi
     Surface(
         modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
         shape = MaterialTheme.shapes.small,
-        color = Teal100
+        color = MaterialTheme.colorScheme.primaryContainer
     ) {
         Text(
             text = "✅",
@@ -1002,7 +1005,12 @@ private fun ConfettiOverlay(modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) {
         progress.animateTo(1f, animationSpec = tween(durationMillis = 1000, easing = LinearEasing))
     }
-    val colors = listOf(Teal500, Coral500, Teal300, Coral300)
+    val colors = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.tertiary,
+        MaterialTheme.colorScheme.primaryContainer,
+        MaterialTheme.colorScheme.tertiaryContainer
+    )
 
     Canvas(modifier = modifier) {
         val particleSize = 6.dp.toPx()
@@ -1040,23 +1048,25 @@ private fun GroupHeader(
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
     val semantic = MaterialTheme.semanticColors
+    // isOverdue es un estado (vencida) → semanticColors.error, no la marca coral;
+    // el resto ("toca hoy/próximo") usa la marca teal (primaryContainer).
     val backgroundColor = when {
-        isOverdue -> Coral100
+        isOverdue -> MaterialTheme.colorScheme.errorContainer
         isDueSoon -> semantic.warningContainer
         isNoDate -> MaterialTheme.colorScheme.surfaceVariant
-        else -> Teal50
+        else -> MaterialTheme.colorScheme.primaryContainer
     }
     val contentColor = when {
-        isOverdue -> Coral800
+        isOverdue -> MaterialTheme.colorScheme.onErrorContainer
         isDueSoon -> semantic.onWarningContainer
         isNoDate -> MaterialTheme.colorScheme.onSurfaceVariant
-        else -> Teal800
+        else -> MaterialTheme.colorScheme.onPrimaryContainer
     }
     val dotColor = when {
-        isOverdue -> Coral600
+        isOverdue -> MaterialTheme.colorScheme.error
         isDueSoon -> semantic.warning
         isNoDate -> MaterialTheme.colorScheme.outline
-        else -> Teal600
+        else -> MaterialTheme.colorScheme.primary
     }
 
     Surface(
@@ -1143,11 +1153,7 @@ private fun SearchBar(
             }
         },
         singleLine = true,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Teal600,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-            cursorColor = Teal600
-        ),
+        colors = taskHubTextFieldColors(),
         shape = MaterialTheme.shapes.medium
     )
 }
@@ -1170,49 +1176,34 @@ private fun FilterChipsRow(
     var expandedSort by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Status filter chips
+        // Status filter chips. Los 4 chips eran bloques idénticos salvo el
+        // filtro/etiqueta — unificados en un bucle sobre una lista, con los
+        // colores tomados del tema (antes Teal100/Teal900 fijos, iguales en
+        // los 3 temas) en vez de repetidos por chip.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            FilterChip(
-                selected = currentFilter == TaskFilter.PENDING,
-                onClick = { onFilterChange(TaskFilter.PENDING) },
-                label = { Text(s("task_list_filter_pending")) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = Teal100,
-                    selectedLabelColor = Teal900
-                )
+            val statusFilterColors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
             )
-            FilterChip(
-                selected = currentFilter == TaskFilter.COMPLETED,
-                onClick = { onFilterChange(TaskFilter.COMPLETED) },
-                label = { Text(s("task_list_filter_completed")) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = Teal100,
-                    selectedLabelColor = Teal900
-                )
+            val statusFilters = listOf(
+                TaskFilter.PENDING to s("task_list_filter_pending"),
+                TaskFilter.COMPLETED to s("task_list_filter_completed"),
+                TaskFilter.MINE to s("task_list_filter_mine"),
+                TaskFilter.ALL to s("task_list_filter_all")
             )
-            FilterChip(
-                selected = currentFilter == TaskFilter.MINE,
-                onClick = { onFilterChange(TaskFilter.MINE) },
-                label = { Text(s("task_list_filter_mine")) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = Teal100,
-                    selectedLabelColor = Teal900
+            statusFilters.forEach { (filter, label) ->
+                FilterChip(
+                    selected = currentFilter == filter,
+                    onClick = { onFilterChange(filter) },
+                    label = { Text(label) },
+                    colors = statusFilterColors
                 )
-            )
-            FilterChip(
-                selected = currentFilter == TaskFilter.ALL,
-                onClick = { onFilterChange(TaskFilter.ALL) },
-                label = { Text(s("task_list_filter_all")) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = Teal100,
-                    selectedLabelColor = Teal900
-                )
-            )
+            }
         }
 
         // Tag filter + Sort
@@ -1230,8 +1221,8 @@ private fun FilterChipsRow(
                         onClick = { tagExpanded = true },
                         label = { Text(tagFilter ?: s("create_task_section_tags")) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Coral100,
-                            selectedLabelColor = Coral800
+                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                     )
                     DropdownMenu(
@@ -1260,9 +1251,22 @@ private fun FilterChipsRow(
 
             Spacer(Modifier.weight(1f))
 
-            // Sort button
+            // Sort button. El icono es solo emoji (sin texto visible por espacio en
+            // la fila) — contentDescription expone el criterio activo en claro para
+            // TalkBack/VoiceOver, que si no leerían el nombre unicode del glifo.
+            val currentSortLabel = when (currentSort) {
+                TaskSort.DEADLINE_ASC -> s("task_list_sort_deadline_asc")
+                TaskSort.DEADLINE_DESC -> s("task_list_sort_deadline_desc")
+                TaskSort.POINTS_DESC -> s("task_list_sort_points")
+                TaskSort.CREATED_DESC -> s("task_list_sort_recent")
+            }
             Box {
-                TextButton(onClick = { expandedSort = true }) {
+                TextButton(
+                    onClick = { expandedSort = true },
+                    modifier = Modifier.semantics {
+                        contentDescription = "${s("task_list_sort_label")}: $currentSortLabel"
+                    }
+                ) {
                     Text(
                         text = when (currentSort) {
                             TaskSort.DEADLINE_ASC -> "📅 ↑"

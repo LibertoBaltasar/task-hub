@@ -78,6 +78,29 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 24), dateOf(next))
     }
 
+    @Test
+    fun nextOccurrence_weekly_multipleDays_picksEarliestUpcoming() {
+        // 2024-03-15 es viernes (dow=5); días pedidos lunes(1)+miércoles(3) -> el lunes que viene
+        val now = epochOf(2024, 3, 15)
+        val next = RecurrenceRules.nextOccurrence(now, "weekly", weeklyDays = listOf(1, 3))
+        assertEquals(LocalDate(2024, 3, 18), dateOf(next))
+    }
+
+    @Test
+    fun nextOccurrence_weekly_multipleDays_todayIsOneOfThem_skipsToNextMatch() {
+        // 2024-03-15 es viernes (dow=5); días pedidos lunes(1)+viernes(5) -> el lunes (no hoy)
+        val now = epochOf(2024, 3, 15)
+        val next = RecurrenceRules.nextOccurrence(now, "weekly", weeklyDays = listOf(1, 5))
+        assertEquals(LocalDate(2024, 3, 18), dateOf(next))
+    }
+
+    @Test
+    fun nextOccurrence_weekly_emptyDays_jumpsForwardSevenDays() {
+        val now = epochOf(2024, 3, 15) // viernes
+        val next = RecurrenceRules.nextOccurrence(now, "weekly", weeklyDays = emptyList())
+        assertEquals(LocalDate(2024, 3, 22), dateOf(next))
+    }
+
     // ── nextOccurrence: monthly ──────────────────────────────────
 
     @Test

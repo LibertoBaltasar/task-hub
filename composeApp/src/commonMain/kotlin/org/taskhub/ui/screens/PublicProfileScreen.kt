@@ -66,7 +66,7 @@ data class PublicProfileScreen(
                         modifier = Modifier.fillMaxSize().padding(padding),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Teal600)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -107,7 +107,7 @@ data class PublicProfileScreen(
                         modifier = Modifier.fillMaxSize().padding(padding),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Teal600)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
             }
@@ -150,7 +150,7 @@ private fun PublicProfileContent(
             displayName = displayName,
             contentDescription = displayName,
             size = 100.dp,
-            backgroundColor = if (role == "admin") Coral100 else Teal100
+            backgroundColor = if (role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
         )
 
         // ── Nombre ──
@@ -162,15 +162,19 @@ private fun PublicProfileContent(
         )
 
         // ── Rol en este espacio ──
+        // Coral500/Teal600 fijos al 12% de alpha sobre el fondo del tema fallaban
+        // AA (2.49-3.13:1 en los 3 temas claros) — tertiary/onTertiary y
+        // primaryContainer/onPrimaryContainer ya están auditados ≥4.5:1, mismo
+        // par que usa PointsBadge (BadgeTone.Coral/Teal) para este mismo concepto.
         Surface(
             shape = MaterialTheme.shapes.small,
-            color = if (role == "admin") Coral500.copy(alpha = 0.12f) else Teal600.copy(alpha = 0.12f)
+            color = if (role == "admin") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primaryContainer
         ) {
             Text(
                 text = if (role == "admin") s("public_profile_role_admin") else s("member_role_child_short"),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 style = MaterialTheme.typography.labelLarge,
-                color = if (role == "admin") Coral500 else Teal600,
+                color = if (role == "admin") MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onPrimaryContainer,
                 fontWeight = FontWeight.SemiBold
             )
         }

@@ -13,6 +13,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
@@ -69,6 +71,11 @@ class FirestoreRepository(
     private var tokenExpiry: Long = 0L  // epoch millis when token expires (minus safety margin)
     @Volatile
     private var cachedLocalId: String? = null  // anonymous user ID — persists across sessions via settings
+    // Serializa ensureAuth(): sin esto, ráfagas de llamadas paralelas (varias
+    // pantallas cargando datos a la vez tras un cold start) pasan todas el
+    // check "bearerToken == null" antes de que la primera termine de escribirlo,
+    // disparando N altas/refrescos de token concurrentes.
+    private val authMutex = Mutex()
 
     /** Json tolerante usado solo para parsear el body de error de Firestore, no el de dominio. */
     private val errorParsingJson = Json {
@@ -124,9 +131,9 @@ class FirestoreRepository(
      * POST https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=API_KEY
      * Body: {"returnSecureToken":true}
      */
-    private suspend fun ensureAuth() {
+    private suspend fun ensureAuth() = authMutex.withLock {
         val now = Clock.System.now().toEpochMilliseconds()
-        if (bearerToken != null && now < tokenExpiry) return
+        if (bearerToken != null && now < tokenExpiry) return@withLock
 
         // 1) Restaurar sesión de Google si existe (UID estable del login Google).
         val googleRefresh = settingsStore.getGoogleRefreshToken()
@@ -137,7 +144,7 @@ class FirestoreRepository(
                 cachedLocalId = refreshed.userId
                 tokenExpiry = refreshed.tokenExpiry
                 settingsStore.setGoogleRefreshToken(refreshed.refreshToken ?: googleRefresh)
-                return
+                return@withLock
             } catch (_: Exception) {
                 // Sesión de Google caducada → cae al flujo anónimo.
                 settingsStore.clearGoogleAuth()
@@ -153,7 +160,7 @@ class FirestoreRepository(
                 cachedLocalId = refreshed.userId
                 tokenExpiry = refreshed.tokenExpiry
                 settingsStore.saveAnonymousAuth(refreshed.refreshToken ?: savedRefresh, refreshed.userId)
-                return
+                return@withLock
             } catch (_: Exception) {
                 // Token caducado/revocado → alta anónima nueva.
                 settingsStore.clearAnonymousAuth()
@@ -371,6 +378,8 @@ class FirestoreRepository(
         } catch (e: FirestoreException) {
             // Firestore respondió con un status HTTP (aunque sea 404/403): hay red.
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Fallo de transporte (sin red): no se llegó a Firestore.
             false
@@ -626,6 +635,8 @@ class FirestoreRepository(
 
         val members = try {
             getMembers(householdId)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -636,6 +647,8 @@ class FirestoreRepository(
                 client.delete("$baseUrl/households/$householdId/members/${member.id}") {
                     withAuth()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // No crítico: si el doc ya no existe, seguimos.
             }
@@ -643,6 +656,8 @@ class FirestoreRepository(
 
         val remaining = try {
             getMembers(householdId)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -1074,41 +1089,59 @@ class FirestoreRepository(
             return AppreciateResult.Error(it.toRepoReason())
         }
 
-        val members = getMembers(householdId)
-        val fromMember = members.find { it.id == fromMemberId }
-            ?: return AppreciateResult.Error(AppreciateErrorReason.MEMBER_NOT_FOUND)
-        val toMember = members.find { it.id == toMemberId }
+        val toMember = getMembers(householdId).find { it.id == toMemberId }
             ?: return AppreciateResult.Error(AppreciateErrorReason.MEMBER_NOT_FOUND)
 
-        val now = Clock.System.now().toEpochMilliseconds()
-        val budget = currentAppreciationBudget(fromMember, now)
-        PointsRules.validateAppreciateLimit(amount, budget)?.let {
-            return AppreciateResult.Error(it.toRepoReason())
+        // Consumir presupuesto ANTES de acuñar puntos (si la red falla entre las
+        // dos escrituras, es mejor que el receptor se quede sin acreditar,
+        // recuperable reintentando, que dejar que el emisor supere el tope
+        // semanal reintentando una acuñación que ya se completó) — y con
+        // concurrencia optimista (`currentDocument.updateTime` + reintento, igual
+        // que [addMemberPoints]): sin esto, dos "agradecer" casi simultáneos del
+        // mismo emisor podrían validar ambos contra el mismo presupuesto stale y
+        // saltarse el tope de 50 pts/semana. El perdedor de la carrera reintenta
+        // automáticamente contra el valor fresco (hasta [OPTIMISTIC_WRITE_MAX_RETRIES]
+        // veces); si el tope ya estaba agotado por el ganador, ve LIMIT_EXCEEDED.
+        val docUrl = "$baseUrl/households/$householdId/members/$fromMemberId"
+        repeat(OPTIMISTIC_WRITE_MAX_RETRIES) { attempt ->
+            val current: FirestoreDocumentResponse = try {
+                client.get(docUrl) { withAuth() }.body()
+            } catch (e: FirestoreException) {
+                if (e.statusCode == 404) return AppreciateResult.Error(AppreciateErrorReason.MEMBER_NOT_FOUND)
+                throw e
+            }
+            val fromMember = FirestoreParsers.toMemberResponse(current, householdId, "appreciateMember")
+            val now = Clock.System.now().toEpochMilliseconds()
+            val budget = currentAppreciationBudget(fromMember, now)
+            PointsRules.validateAppreciateLimit(amount, budget)?.let {
+                return AppreciateResult.Error(it.toRepoReason())
+            }
+            val newGiven = budget.given + amount
+            val fields = mapOf(
+                "appreciationGiven" to FirestoreValue(integerValue = newGiven.toString()),
+                "appreciationWeekStart" to FirestoreValue(integerValue = budget.weekStart.toString())
+            )
+            try {
+                client.patch(docUrl) {
+                    withAuth()
+                    updateMaskFieldPaths("appreciationGiven", "appreciationWeekStart")
+                    current.updateTime?.let { parameter("currentDocument.updateTime", it) }
+                    contentType(ContentType.Application.Json)
+                    setBody(FirestoreDocument(fields))
+                }
+                // Acuñar: el receptor gana puntos sin que se le resten al que agradece.
+                addMemberPoints(householdId, toMemberId, amount)
+                return AppreciateResult.Ok(
+                    remaining = PointsRules.WEEKLY_APPRECIATION_BUDGET - newGiven,
+                    receptorNewTotal = toMember.totalPoints + amount
+                )
+            } catch (e: FirestoreException) {
+                val isConflict = e.code == "FAILED_PRECONDITION" || e.code == "ABORTED"
+                if (!isConflict || attempt == OPTIMISTIC_WRITE_MAX_RETRIES - 1) throw e
+                // Otro escritor ganó la carrera: reintentar con el presupuesto fresco.
+            }
         }
-
-        // Consumir presupuesto ANTES de acuñar puntos: si la app se cierra o la
-        // red falla entre las dos escrituras, es mejor que el receptor se quede
-        // sin acreditar (recuperable reintentando) a que el emisor pueda superar
-        // el tope semanal reintentando una acuñación que sí llegó a completarse.
-        val newGiven = budget.given + amount
-        val fields = mapOf(
-            "appreciationGiven" to FirestoreValue(integerValue = newGiven.toString()),
-            "appreciationWeekStart" to FirestoreValue(integerValue = budget.weekStart.toString())
-        )
-        client.patch("$baseUrl/households/$householdId/members/$fromMemberId") {
-            withAuth()
-            updateMaskFieldPaths("appreciationGiven", "appreciationWeekStart")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-
-        // Acuñar: el receptor gana puntos sin que se le resten al que agradece.
-        addMemberPoints(householdId, toMemberId, amount)
-
-        return AppreciateResult.Ok(
-            remaining = PointsRules.WEEKLY_APPRECIATION_BUDGET - newGiven,
-            receptorNewTotal = toMember.totalPoints + amount
-        )
+        throw IllegalStateException("appreciateMember: reintentos de concurrencia agotados")
     }
 
     /**
@@ -1367,14 +1400,37 @@ class FirestoreRepository(
         return toTaskResponse(response, householdId)
     }
 
+    /** Resultado de [completeTask]: puntos realmente otorgados (tras penalización) y puntualidad. */
+    data class TaskCompletionResult(val completedAt: Long, val pointsAwarded: Int, val onTime: Boolean)
+
     /**
-     * Mark a task as completed today. Sets lastCompletedDate, awards points, and records history.
-     * Devuelve el `completedAt` (epoch millis) usado, para que el caller pueda
-     * localizar después el registro de `taskHistory` creado (p.ej. al deshacer).
+     * Otro dispositivo modificó el documento de la tarea (típicamente
+     * completándola también) entre que [completeTask] leyó su estado y trató
+     * de marcarla como completada. A diferencia de [addMemberPoints] (donde
+     * reintentar con el valor fresco es seguro porque sumar es conmutativo),
+     * completar una tarea NO es idempotente: reintentar automáticamente
+     * otorgaría los puntos dos veces. Política elegida: el perdedor de la
+     * carrera ve este error (mapeado a `TaskActionState.Error` en
+     * `TaskScreenModel`, mismo tratamiento que cualquier otro fallo de red) y
+     * debe recargar/reintentar a mano — nunca se le otorgan puntos.
+     */
+    class TaskCompletionConflictException(message: String) : Exception(message)
+
+    /**
+     * Mark a task as completed today. Sets lastCompletedDate, awards points
+     * (con penalización por retraso si `task.dueDate`/`penaltyMode` aplican —
+     * ver [resolveCompletionOutcome]), and records history.
      *
-     * NO es atómica de extremo a extremo (3 escrituras HTTP secuenciales): un
-     * fallo de red a mitad de secuencia deja estado parcial, mitigado por la
-     * guarda de reentrancia de `TaskScreenModel` pero no eliminado. Evaluado y
+     * Concurrencia optimista sobre el documento de la tarea (`currentDocument.
+     * updateTime` como precondition del primer PATCH, sin reintento — ver
+     * [TaskCompletionConflictException] para la política de conflicto):
+     * evita que dos dispositivos completando la misma tarea casi a la vez
+     * dupliquen puntos/historial.
+     *
+     * NO es atómica de extremo a extremo más allá de ese primer PATCH (las
+     * escrituras 2/3 siguen siendo HTTP secuenciales): un fallo de red a
+     * mitad de secuencia deja estado parcial, mitigado por la guarda de
+     * reentrancia de `TaskScreenModel` pero no eliminado. Evaluado y
      * descartado usar el endpoint `:commit` con `fieldTransforms` para
      * hacerlo transaccional — ver `docs/atomicidad-commit-pendiente.md` para
      * el motivo (no se puede verificar el payload contra la API real en este
@@ -1384,39 +1440,51 @@ class FirestoreRepository(
         householdId: String,
         taskId: String,
         memberId: String,
-        taskPoints: Int
-    ): Long {
+        task: TaskResponse
+    ): TaskCompletionResult {
         val now = Clock.System.now().toEpochMilliseconds()
+        val outcome = resolveCompletionOutcome(task, task.dueDate, now)
 
         // 1. Update lastCompletedDate + completedBy on the task.
         //    completedBy registra QUIÉN marcó hecho (quien recibe los puntos),
         //    al margen de quién esté asignado.
+        val docUrl = "$baseUrl/households/$householdId/tasks/$taskId"
+        val current: FirestoreDocumentResponse = client.get(docUrl) { withAuth() }.body()
         val fields = mapOf(
             "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
             "completedBy" to FirestoreValue(stringValue = memberId)
         )
-
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths("lastCompletedDate", "completedBy")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
+        try {
+            client.patch(docUrl) {
+                withAuth()
+                updateMaskFieldPaths("lastCompletedDate", "completedBy")
+                current.updateTime?.let { parameter("currentDocument.updateTime", it) }
+                contentType(ContentType.Application.Json)
+                setBody(FirestoreDocument(fields))
+            }
+        } catch (e: FirestoreException) {
+            if (e.code == "FAILED_PRECONDITION" || e.code == "ABORTED") {
+                throw TaskCompletionConflictException(
+                    "La tarea se modificó en otro dispositivo justo antes de completarla. Vuelve a intentarlo."
+                )
+            }
+            throw e
         }
 
         // 2. Add points to the member
-        addMemberPoints(householdId, memberId, taskPoints)
+        addMemberPoints(householdId, memberId, outcome.pointsAwarded)
 
         // 3. Save task history record
         saveTaskHistory(
             householdId = householdId,
             taskId = taskId,
             memberId = memberId,
-            points = taskPoints,
+            points = outcome.pointsAwarded,
             completedAt = now,
-            onTime = true
+            onTime = outcome.onTime
         )
 
-        return now
+        return TaskCompletionResult(now, outcome.pointsAwarded, outcome.onTime)
     }
 
     /**
@@ -1564,6 +1632,8 @@ class FirestoreRepository(
     ): TaskHistoryResponse? {
         val history = try {
             getTaskHistory(householdId)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -1604,8 +1674,12 @@ class FirestoreRepository(
             client.delete("$baseUrl/households/$householdId/taskHistory/${record.id}") {
                 withAuth()
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
-            // No crítico: si ya no existe (o falla), el undo de puntos/racha sigue en pie.
+            // No crítico: si ya no existe (o falla, p.ej. sin permiso de borrado
+            // de un registro ajeno bajo firestore.rules v4), el undo de
+            // puntos/racha sigue en pie.
         }
     }
 
@@ -1674,6 +1748,8 @@ class FirestoreRepository(
     suspend fun deleteAssignments(householdId: String, taskId: String) {
         val assignments = try {
             getAssignments(householdId, taskId)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -1682,6 +1758,8 @@ class FirestoreRepository(
                 client.delete("$baseUrl/households/$householdId/tasks/$taskId/assignments/${assignment.id}") {
                     withAuth()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // No crítico: si ya no existe, seguimos.
             }
@@ -1744,11 +1822,12 @@ class FirestoreRepository(
         taskId: String,
         memberId: String,
         points: Int,
+        onTime: Boolean,
         completedAt: Long
     ) {
         val assignment = getAssignments(householdId, taskId)
             .find { it.memberId == memberId && it.status == "assigned" } ?: return
-        markAssignmentCompleted(householdId, taskId, assignment.id, completedAt, points, onTime = true)
+        markAssignmentCompleted(householdId, taskId, assignment.id, completedAt, points, onTime)
     }
 
     /**
@@ -1763,18 +1842,9 @@ class FirestoreRepository(
         assignment: TaskAssignmentResponse
     ): TaskAssignmentResponse {
         val now = Clock.System.now().toEpochMilliseconds()
-        // dueDate == 0 significa "sin fecha límite" (ver TaskResponse.dueDate):
-        // sin este caso especial, toda tarea sin deadline se marcaba como
-        // fuera de plazo (now <= 0 es siempre false) y sufría penalización.
-        val onTime = assignment.dueDate == 0L || now <= assignment.dueDate
-
-        // Calculate points (with penalty if overdue)
-        val pointsAwarded = if (onTime) {
-            task.points
-        } else {
-            val penalty = calculatePenalty(task, assignment.dueDate, now)
-            maxOf(task.points - penalty, 0)
-        }
+        val outcome = resolveCompletionOutcome(task, assignment.dueDate, now)
+        val onTime = outcome.onTime
+        val pointsAwarded = outcome.pointsAwarded
 
         // Update assignment
         markAssignmentCompleted(householdId, taskId, assignmentId, now, pointsAwarded, onTime)
@@ -1862,6 +1932,35 @@ class FirestoreRepository(
     //  Penalty & Recurrence Logic
     // ────────────────────────────────────────────────────────
 
+    /** Resultado de resolver puntos otorgados + puntualidad al completar una tarea. */
+    private data class CompletionOutcome(val onTime: Boolean, val pointsAwarded: Int)
+
+    /**
+     * Calcula si se completó a tiempo + los puntos a otorgar (con penalización
+     * por retraso si toca), a partir de una fecha límite concreta.
+     *
+     * Compartido por [completeTask] (sin asignación — usa `task.dueDate`, solo
+     * relevante para tareas "once") y [completeAssignment] (con asignación —
+     * usa `assignment.dueDate`, que puede diferir de `task.dueDate` en tareas
+     * recurrentes). Antes solo `completeAssignment` calculaba penalización;
+     * `completeTask` otorgaba siempre los puntos íntegros con `onTime=true`
+     * fijo, ignorando `task.dueDate`/`penaltyMode` — bug que permitía evitar
+     * la penalización completando desde la lista principal en vez del detalle.
+     *
+     * `dueDate == 0` significa "sin fecha límite" (ver `TaskResponse.dueDate`)
+     * y nunca penaliza.
+     */
+    private fun resolveCompletionOutcome(task: TaskResponse, dueDate: Long, now: Long): CompletionOutcome {
+        val onTime = dueDate == 0L || now <= dueDate
+        val pointsAwarded = if (onTime) {
+            task.points
+        } else {
+            val penalty = calculatePenalty(task, dueDate, now)
+            maxOf(task.points - penalty, 0)
+        }
+        return CompletionOutcome(onTime, pointsAwarded)
+    }
+
     /**
      * Calculate penalty points for an overdue task.
      *
@@ -1896,63 +1995,28 @@ class FirestoreRepository(
     /**
      * Calculate the next due date for a recurring task.
      *
-     * Given the current time, finds the next occurrence based on recurrenceDays.
-     * If frequency is "daily", returns next day.
-     * If frequency is "weekly", returns the next matching weekday from recurrenceDays.
-     * If frequency is "monthly", returns the same day next month.
+     * Delega en [RecurrenceRules.nextOccurrence] (testeada en
+     * `RecurrenceRulesTest`) en vez de reimplementar el cálculo — antes este
+     * método tenía su propia lógica, sin test, y con una diferencia real de
+     * comportamiento en "monthly": ignoraba `task.recurrenceDay` (el día fijo
+     * configurado por el usuario) y usaba en su lugar el día de la compleción,
+     * así que una tarea "día 28 de cada mes" completada el 5 saltaba al 28 del
+     * mes SIGUIENTE en vez de al 28 de este mes. `RecurrenceRules.nextOccurrence`
+     * sí respeta `recurrenceDay`. Nota: como efecto colateral de unificar, la
+     * hora de la fecha límite calculada pasa de las 12:00 a las 00:00 hora
+     * local (medianoche, como ya hacía `nextOccurrence` para otros usos en la
+     * app) — un cambio menor de cuándo exactamente empieza a contar como
+     * "atrasada" una tarea recurrente, aceptado como parte de tener una única
+     * fuente de verdad para este cálculo.
      */
     private fun calculateNextDueDate(task: TaskResponse, afterMs: Long): Long? {
-        val tz = TimeZone.currentSystemDefault()
-        val afterInstant = kotlinx.datetime.Instant.fromEpochMilliseconds(afterMs)
-        val afterDateTime = afterInstant.toLocalDateTime(tz)
-        val afterDate = afterDateTime.date
-
-        // Compute epoch millis for a given date at 12:00 local time.
-        fun dateToEpoch(year: Int, month: Int, day: Int): Long =
-            LocalDateTime(year, month, day, 12, 0, 0).toInstant(tz).toEpochMilliseconds()
-
-        val nextDate: LocalDate? = when (task.frequency) {
-            "daily" -> afterDate.plus(1, DateTimeUnit.DAY)
-            "weekly" -> {
-                if (task.recurrenceDays.isEmpty()) {
-                    afterDate.plus(7, DateTimeUnit.DAY)
-                } else {
-                    // Find the next matching day of the week
-                    var candidate = afterDate.plus(1, DateTimeUnit.DAY)
-                    var safety = 0
-                    while (safety < 14) {
-                        val dayOfWeek = candidate.dayOfWeek.ordinal + 1 // 1=Monday
-                        if (dayOfWeek in task.recurrenceDays) {
-                            return dateToEpoch(candidate.year, candidate.monthNumber, candidate.dayOfMonth)
-                        }
-                        candidate = candidate.plus(1, DateTimeUnit.DAY)
-                        safety++
-                    }
-                    null // Should not happen
-                }
-            }
-            "monthly" -> {
-                // Next month, same day (capped at month length)
-                val nextMonth = afterDate.monthNumber + 1
-                val nextYear = if (nextMonth > 12) afterDate.year + 1 else afterDate.year
-                val nextMonthNum = if (nextMonth > 12) nextMonth - 12 else nextMonth
-                val maxDay = daysInMonth(nextYear, nextMonthNum)
-                val dayOfMonth = minOf(afterDate.dayOfMonth, maxDay)
-                LocalDate(nextYear, nextMonthNum, dayOfMonth)
-            }
-            else -> afterDate.plus(1, DateTimeUnit.DAY)
-        }
-
-        return nextDate?.let { dateToEpoch(it.year, it.monthNumber, it.dayOfMonth) }
-    }
-
-    private fun daysInMonth(year: Int, month: Int): Int {
-        return when (month) {
-            1, 3, 5, 7, 8, 10, 12 -> 31
-            4, 6, 9, 11 -> 30
-            2 -> if (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) 29 else 28
-            else -> 30
-        }
+        if (task.frequency !in setOf("daily", "weekly", "monthly")) return null
+        return RecurrenceRules.nextOccurrence(
+            nowEpochMs = afterMs,
+            frequency = task.frequency,
+            day = task.recurrenceDay,
+            weeklyDays = task.recurrenceDays
+        )
     }
 
     // ────────────────────────────────────────────────────────
@@ -2488,6 +2552,8 @@ class FirestoreRepository(
         try {
             ensureAuth()
             bearerToken?.let { header("Authorization", "Bearer $it") }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Auth failed — fall back to API key for read-only access
             parameter("key", apiKey)

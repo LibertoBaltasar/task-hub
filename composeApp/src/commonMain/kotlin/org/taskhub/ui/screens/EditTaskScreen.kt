@@ -222,7 +222,8 @@ data class EditTaskScreen(
                                     title.isNotBlank() &&
                                     (pointsText.toIntOrNull() ?: -1) > 0 &&
                                     (!hasDeadline || deadlineTime.isValidTimeFormat()) &&
-                                    (!hasPenalty || (penaltyValue.toIntOrNull() ?: -1) > 0),
+                                    (!hasPenalty || (penaltyValue.toIntOrNull() ?: -1) > 0) &&
+                                    (!hasPenalty || penaltyMax.isBlank() || (penaltyMax.toIntOrNull() ?: -1) >= 0),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.primary
                                 )
@@ -341,7 +342,7 @@ data class EditTaskScreen(
                                             if (it.id == st.id) it.copy(completed = checked) else it
                                         }
                                     },
-                                    colors = CheckboxDefaults.colors(checkedColor = Teal600)
+                                    colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
                                 )
                                 Text(
                                     text = st.text,
@@ -420,8 +421,8 @@ data class EditTaskScreen(
                                     onClick = { frequency = key },
                                     label = { Text(label) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Teal100,
-                                        selectedLabelColor = Teal900
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 )
                             }
@@ -463,8 +464,8 @@ data class EditTaskScreen(
                                         },
                                         label = { Text(label) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Coral100,
-                                            selectedLabelColor = Coral800
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                         )
                                     )
                                 }
@@ -629,7 +630,7 @@ data class EditTaskScreen(
                                                     }
                                                 },
                                                 colors = CheckboxDefaults.colors(
-                                                    checkedColor = Teal600
+                                                    checkedColor = MaterialTheme.colorScheme.primary
                                                 )
                                             )
                                             Text(
@@ -644,7 +645,7 @@ data class EditTaskScreen(
 
                         is MemberUiState.Loading -> {
                             item {
-                                CircularProgressIndicator(color = Teal600)
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             }
                         }
 
@@ -667,7 +668,7 @@ data class EditTaskScreen(
                                 checked = hasRotation,
                                 onCheckedChange = { hasRotation = it },
                                 colors = SwitchDefaults.colors(
-                                    checkedTrackColor = Coral500
+                                    checkedTrackColor = MaterialTheme.colorScheme.tertiary
                                 )
                             )
                         }
@@ -708,7 +709,8 @@ data class EditTaskScreen(
                                                     Text(
                                                         text = displayText,
                                                         modifier = Modifier.weight(1f),
-                                                        maxLines = 1
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
                                                     )
                                                     Text("▼")
                                                 }
@@ -744,7 +746,7 @@ data class EditTaskScreen(
 
                             is MemberUiState.Loading -> {
                                 item {
-                                    CircularProgressIndicator(color = Teal600)
+                                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                                 }
                             }
 
@@ -768,7 +770,7 @@ data class EditTaskScreen(
                                     checked = mandatory,
                                     onCheckedChange = { mandatory = it },
                                     colors = SwitchDefaults.colors(
-                                        checkedTrackColor = Coral500
+                                        checkedTrackColor = MaterialTheme.colorScheme.tertiary
                                     )
                                 )
                             }
@@ -865,8 +867,8 @@ data class EditTaskScreen(
                                     onClick = { penaltyMode = "fixed" },
                                     label = { Text(s("create_task_penalty_fixed")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral100,
-                                        selectedLabelColor = Coral800
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                                 FilterChip(
@@ -874,8 +876,8 @@ data class EditTaskScreen(
                                     onClick = { penaltyMode = "percentage" },
                                     label = { Text(s("create_task_penalty_percentage")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral100,
-                                        selectedLabelColor = Coral800
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                             }
@@ -917,8 +919,8 @@ data class EditTaskScreen(
                                     onClick = { penaltyInterval = "day" },
                                     label = { Text(s("create_task_interval_daily")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral50,
-                                        selectedLabelColor = Coral700
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                                 FilterChip(
@@ -926,8 +928,8 @@ data class EditTaskScreen(
                                     onClick = { penaltyInterval = "week" },
                                     label = { Text(s("recurrence_weekly")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral50,
-                                        selectedLabelColor = Coral700
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                                 FilterChip(
@@ -935,8 +937,8 @@ data class EditTaskScreen(
                                     onClick = { penaltyInterval = "month" },
                                     label = { Text(s("recurrence_monthly")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral50,
-                                        selectedLabelColor = Coral700
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                             }
@@ -950,6 +952,10 @@ data class EditTaskScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                // A diferencia de sus campos hermanos ("Puntos", penaltyValue),
+                                // este no validaba nada. 0/vacío SÍ es válido (sin tope), solo
+                                // un negativo o texto no numérico es error.
+                                isError = penaltyMax.isNotBlank() && (penaltyMax.toIntOrNull() ?: -1) < 0,
                                 supportingText = {
                                     Text(s("create_task_penalty_max_hint"))
                                 }

@@ -2,6 +2,7 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,6 +79,8 @@ class MemberScreenModel(
             try {
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
                     e.message ?: "Error al cargar miembros"
@@ -96,6 +99,8 @@ class MemberScreenModel(
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
                 buzz(HapticKind.SUCCESS)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
                     e.message ?: "Error al añadir miembro"
@@ -111,6 +116,8 @@ class MemberScreenModel(
                 repo.deleteMember(householdId, memberId)
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
                     e.message ?: "Error al eliminar miembro"
@@ -129,6 +136,8 @@ class MemberScreenModel(
                 repo.updateMemberRole(householdId, memberId, role)
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
                     e.message ?: "Error al cambiar el rol"
@@ -154,6 +163,8 @@ class MemberScreenModel(
             try {
                 val rewards = repo.getRewards(householdId)
                 _rewardState.value = RewardUiState.Success(rewards)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _rewardState.value = RewardUiState.Error(
                     e.message ?: "Error al cargar recompensas"
@@ -178,6 +189,8 @@ class MemberScreenModel(
                 buzz(HapticKind.SUCCESS)
                 // Reload
                 loadRewards(householdId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
                     e.message ?: "Error al crear recompensa"
@@ -193,6 +206,8 @@ class MemberScreenModel(
                 repo.deleteReward(householdId, rewardId)
                 buzz(HapticKind.WARNING)
                 loadRewards(householdId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
                     e.message ?: "Error al eliminar recompensa"
@@ -217,6 +232,8 @@ class MemberScreenModel(
                 buzz(HapticKind.SUCCESS)
                 // Reload members to refresh points
                 loadMembers(householdId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
                     e.message ?: "Error al canjear recompensa"

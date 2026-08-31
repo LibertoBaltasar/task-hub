@@ -20,7 +20,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.taskhub.network.models.MessageResponse
 import org.taskhub.ui.models.MessagesUiState
-import org.taskhub.ui.theme.Teal600
 
 /**
  * Chat de mensajes del hogar: lista de mensajes + campo de envío.
@@ -65,7 +64,7 @@ fun HouseholdChatSection(
                         modifier = Modifier.fillMaxWidth().height(120.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Teal600)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
 

@@ -12,49 +12,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import cafe.adriel.voyager.core.screen.Screen
-import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.components.BadgeTone
+import org.taskhub.ui.components.DestructiveConfirmDialog
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
-import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardUiState
 import org.taskhub.ui.theme.*
-
-data class RewardListScreen(val householdId: String) : Screen {
-
-    @Composable
-    override fun Content() {
-        val navigator = LocalNavigator.currentOrThrow
-        val memberModel = koinScreenModel<MemberScreenModel>()
-        val appSettings = LocalAppSettings.current
-        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
-
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Top bar
-                TaskHubTopBar(
-                    title = s("explore_tab_rewards"),
-                    onBack = { navigator.pop() }
-                )
-
-                RewardsBody(householdId, memberModel)
-            }
-        }
-    }
-}
 
 /** Contenido reutilizable de recompensas (sin barra superior), para la pantalla combinada. */
 @Composable
@@ -145,7 +118,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Teal600)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -275,7 +248,9 @@ private fun RewardCard(
                 text = reward.title,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
             // Description if present
@@ -285,7 +260,8 @@ private fun RewardCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    maxLines = 2
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -334,22 +310,14 @@ private fun RewardCard(
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(s("reward_delete_title")) },
-            text = { Text(s("reward_delete_confirm").replace("%s", reward.title)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteConfirm = false
-                    onDelete()
-                }) {
-                    Text(s("household_delete_btn"), color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text(s("household_cancel"))
-                }
+        DestructiveConfirmDialog(
+            title = s("reward_delete_title"),
+            text = s("reward_delete_confirm").replace("%s", reward.title),
+            s = s,
+            onDismiss = { showDeleteConfirm = false },
+            onConfirm = {
+                showDeleteConfirm = false
+                onDelete()
             }
         )
     }

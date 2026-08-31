@@ -2,6 +2,7 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +63,8 @@ class ProfileScreenModel(
                         UserProfile(id = userId)
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _myProfileState.value = ProfileUiState.Error(
                     e.message ?: "Error al cargar tu perfil"
@@ -84,6 +87,8 @@ class ProfileScreenModel(
                         UserProfile(id = userId, displayName = "Usuario")
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _otherProfileState.value = ProfileUiState.Error(
                     e.message ?: "Error al cargar el perfil"
@@ -119,6 +124,8 @@ class ProfileScreenModel(
                 )
                 _saveState.value = ProfileSaveState.Saved
                 buzz(HapticKind.SUCCESS)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _saveState.value = ProfileSaveState.Error(
                     e.message ?: "Error al guardar el perfil"

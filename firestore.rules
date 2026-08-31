@@ -11,6 +11,17 @@ service cloud.firestore {
     //  a Firebase — hazlo manualmente (PATCH, no POST, ver CLAUDE.md)
     //  tras revisar el impacto en la UI descrito abajo.
     //
+    //  Ajuste v4 (encargo "cierre de pendientes" 2026-08-31, sección 0):
+    //  taskHistory/{thid} `delete` ahora también permite al PROPIO miembro
+    //  borrar su registro (memberId == auth.uid), no solo admin/owner.
+    //  Motivo: [TaskScreenModel.undoCompleteTask] (deshacer "completar
+    //  tarea") lo hace un miembro normal, no un admin — sin este ajuste el
+    //  delete (ya best-effort, no rompe el undo) dejaría huérfano para
+    //  siempre el registro de taskHistory de cualquier undo hecho por un
+    //  miembro no-admin, desincronizando StatsScreen en cuanto se
+    //  desplieguen las reglas. `update` de taskHistory sigue restringido a
+    //  admin/owner (solo lo usa reassignTaskCompletion, ya gateado en UI).
+    //
     //  Cambios respecto a v3 (cierran los 2 bloqueantes que impedían
     //  desplegar v3 — ver "IMPORTANTE" de v3 más abajo):
     //   - members/{mid} (auto-alta con código de invitación): el rol YA
@@ -236,7 +247,17 @@ service cloud.firestore {
     // existente (p.ej. para manipular StatsScreen) se restringe a admin/owner.
     match /households/{hid}/taskHistory/{thid} {
       allow read, create: if isMember(hid) || isOwner(hid);
-      allow update, delete: if isTrusted(hid);
+      allow update: if isTrusted(hid);
+      // delete: admin/owner puede borrar cualquier registro; además, el
+      // propio miembro puede borrar SU PROPIO registro (memberId ==
+      // auth.uid) — necesario para [TaskScreenModel.undoCompleteTask]:
+      // deshacer "completar tarea" es una acción de miembro normal que
+      // borra el registro de la propia compleción para no dejar
+      // taskHistory desincronizado con totalPoints (ver
+      // FirestoreRepository.deleteTaskHistoryRecord). Sigue sin permitir
+      // borrar el registro de OTRO miembro sin ser admin/owner.
+      allow delete: if isTrusted(hid)
+        || (isMember(hid) && resource.data.memberId == request.auth.uid);
     }
     // Cada notificación va dirigida a un miembro (`memberId`). Lectura/creación
     // amplias (dashboard familiar), pero modificar/borrar la notificación de

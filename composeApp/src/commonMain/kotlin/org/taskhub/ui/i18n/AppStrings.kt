@@ -8,6 +8,10 @@ object AppStrings {
 
     private val strings: Map<String, Map<String, String>> = mapOf(
         "es" to mapOf(
+            // Common (usadas por componentes compartidos entre dominios, p.ej. DestructiveConfirmDialog)
+            "common_cancel" to "Cancelar",
+            "common_delete" to "Eliminar",
+
             // Settings
             "settings_title" to "⚙️ Ajustes",
             "settings_notifications" to "🔔 Notificaciones",
@@ -94,6 +98,7 @@ object AppStrings {
             "household_share_code" to "Comparte este código para invitar miembros",
             "household_share" to "📤 Compartir",
             "household_invite_title" to "Código de invitación",
+            "household_qr_description" to "Código QR con el código de invitación %s",
             "household_share_message" to "Únete a mi espacio en Task Hub: %s. Descárgala en: https://play.google.com/store/apps/details?id=org.taskhub",
             "household_share_subject" to "Invitación a Task Hub",
             "household_view_tasks" to "📋 Ver Tareas",
@@ -373,6 +378,7 @@ object AppStrings {
             "calendar_week_of" to "Semana del %1 %2",
             "calendar_error_prefix" to "Error: %s",
             "calendar_no_tasks_for_day" to "Sin tareas para este día",
+            "calendar_no_tasks_range" to "No hay tareas en este periodo",
             "calendar_task_status_completed" to "✅ Completada",
             "calendar_task_status_overdue" to "⚠️ Vencida",
             "calendar_task_status_pending" to "📌 Pendiente",
@@ -521,12 +527,17 @@ object AppStrings {
             "task_list_filter_completed" to "Completadas",
             "task_list_filter_mine" to "Mías",
             "task_list_filter_all" to "Todas",
+            "task_list_sort_label" to "Ordenar por",
             "task_list_sort_deadline_asc" to "Deadline más próximo",
             "task_list_sort_deadline_desc" to "Deadline más lejano",
             "task_list_sort_points" to "Más puntos",
             "task_list_sort_recent" to "Más recientes",
         ),
         "en" to mapOf(
+            // Common (shared across components used by multiple domains, e.g. DestructiveConfirmDialog)
+            "common_cancel" to "Cancel",
+            "common_delete" to "Delete",
+
             // Settings
             "settings_title" to "⚙️ Settings",
             "settings_notifications" to "🔔 Notifications",
@@ -613,6 +624,7 @@ object AppStrings {
             "household_share_code" to "Share this code to invite members",
             "household_share" to "📤 Share",
             "household_invite_title" to "Invite code",
+            "household_qr_description" to "QR code with the invite code %s",
             "household_share_message" to "Join my space on Task Hub: %s. Download at: https://play.google.com/store/apps/details?id=org.taskhub",
             "household_share_subject" to "Task Hub Invitation",
             "household_view_tasks" to "📋 View Tasks",
@@ -892,6 +904,7 @@ object AppStrings {
             "calendar_week_of" to "Week of %1 %2",
             "calendar_error_prefix" to "Error: %s",
             "calendar_no_tasks_for_day" to "No tasks for this day",
+            "calendar_no_tasks_range" to "No tasks in this period",
             "calendar_task_status_completed" to "✅ Completed",
             "calendar_task_status_overdue" to "⚠️ Overdue",
             "calendar_task_status_pending" to "📌 Pending",
@@ -1040,6 +1053,7 @@ object AppStrings {
             "task_list_filter_completed" to "Completed",
             "task_list_filter_mine" to "Mine",
             "task_list_filter_all" to "All",
+            "task_list_sort_label" to "Sort by",
             "task_list_sort_deadline_asc" to "Closest deadline",
             "task_list_sort_deadline_desc" to "Farthest deadline",
             "task_list_sort_points" to "Most points",

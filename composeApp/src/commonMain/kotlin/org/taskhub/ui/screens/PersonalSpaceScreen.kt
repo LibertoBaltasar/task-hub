@@ -20,12 +20,6 @@ import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.CalendarSyncManager
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
-import org.taskhub.ui.theme.Coral500
-import org.taskhub.ui.theme.Teal500
-import org.taskhub.ui.theme.Teal600
-import org.taskhub.ui.theme.Teal700
-import org.taskhub.ui.theme.Teal800
-import org.taskhub.ui.theme.Teal900
 
 /**
  * Pantalla dedicada al espacio Personal del usuario.
@@ -70,7 +64,10 @@ data class PersonalSpaceScreen(
                 // Top bar
                 TaskHubTopBar(
                     title = s("personal_space_title"),
-                    onBack = { navigator.replaceAll(HomeScreen()) }
+                    // pop() en vez de replaceAll(HomeScreen()) — misma unificación que
+                    // HouseholdScreen (ver su comentario): coincide con el atrás del
+                    // sistema y con la convención de flecha del resto de la app.
+                    onBack = { navigator.pop() }
                 )
 
                 // ── Content ──

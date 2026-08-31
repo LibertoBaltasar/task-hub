@@ -12,44 +12,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import cafe.adriel.voyager.core.screen.Screen
-import cafe.adriel.voyager.navigator.LocalNavigator
-import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
-import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 import kotlinx.coroutines.launch
-
-data class RankingScreen(val householdId: String) : Screen {
-
-    @Composable
-    override fun Content() {
-        val navigator = LocalNavigator.currentOrThrow
-        val appSettings = LocalAppSettings.current
-        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
-
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Top bar
-                TaskHubTopBar(
-                    title = s("explore_tab_ranking"),
-                    onBack = { navigator.pop() }
-                )
-
-                RankingBody(householdId)
-            }
-        }
-    }
-}
 
 /** Contenido reutilizable del ranking (sin barra superior), para la pantalla combinada. */
 @Composable
@@ -162,18 +133,18 @@ private fun RankingRow(
     }
 
     val bgColor = when (position) {
-        1 -> Coral100
-        2 -> Teal50
-        3 -> Teal50
+        1 -> MaterialTheme.colorScheme.tertiaryContainer
+        2 -> MaterialTheme.colorScheme.primaryContainer
+        3 -> MaterialTheme.colorScheme.primaryContainer
         else -> MaterialTheme.colorScheme.surface
     }
-    // Teal50/Coral100 son fondos fijos (no siguen el tema oscuro): el texto
-    // secundario debe emparejarse con un color fijo también, no con
-    // onSurfaceVariant (que en oscuro cae hasta ~1.3:1 sobre estos fondos
-    // claros — mismo patrón ya corregido en otras 6 cards de la app).
+    // tertiaryContainer/onTertiaryContainer y primaryContainer/onPrimaryContainer
+    // (antes Coral100/Teal50 fijos + Coral800/Teal800 fijos): siguen el tema
+    // activo (Naturaleza/Minimal) y ya son pares auditados ≥4.5:1 en las 6
+    // combinaciones tema/modo, mismo criterio que otras 6+ cards de la app.
     val secondaryTextColor = when (position) {
-        1 -> Coral800
-        2, 3 -> Teal800
+        1 -> MaterialTheme.colorScheme.onTertiaryContainer
+        2, 3 -> MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
@@ -220,7 +191,7 @@ private fun RankingRow(
                 fallbackEmoji = if (member.role == "admin") "👑" else "👤",
                 displayName = member.displayName,
                 contentDescription = member.displayName,
-                backgroundColor = if (member.role == "admin") Coral100 else Teal100
+                backgroundColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
             )
 
             Spacer(Modifier.width(12.dp))
@@ -246,7 +217,7 @@ private fun RankingRow(
                     text = "⭐ ${member.totalPoints}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Coral700
+                    color = MaterialTheme.colorScheme.tertiary
                 )
                 Text(
                     text = "🔥 ${member.currentStreak}",

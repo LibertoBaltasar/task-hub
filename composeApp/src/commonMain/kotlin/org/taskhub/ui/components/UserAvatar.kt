@@ -22,7 +22,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
-import org.taskhub.ui.theme.Teal100
 
 /**
  * Avatar reutilizable con orden de prioridad: foto ([avatarUrl]) > emoji
@@ -40,7 +39,10 @@ fun UserAvatar(
     contentDescription: String,
     modifier: Modifier = Modifier,
     size: Dp = 40.dp,
-    backgroundColor: Color = Teal100
+    // Antes Teal100 fijo: el único caller que no pasa backgroundColor
+    // explícito (EditProfileScreen) quedaba con un fondo fijo que ignora los
+    // temas Naturaleza/Minimal. primaryContainer sigue el tema activo.
+    backgroundColor: Color = MaterialTheme.colorScheme.primaryContainer
 ) {
     val avatarContentDescription = contentDescription
     Box(

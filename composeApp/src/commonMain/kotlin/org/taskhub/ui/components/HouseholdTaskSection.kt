@@ -24,8 +24,6 @@ import org.taskhub.network.models.TaskResponse
 import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.screens.TaskDetailScreen
-import org.taskhub.ui.theme.Coral500
-import org.taskhub.ui.theme.Teal600
 
 @Composable
 fun HouseholdTaskSection(
@@ -59,9 +57,9 @@ fun HouseholdTaskSection(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (household.isPersonal)
-                Teal600.copy(alpha = 0.08f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
             else
-                Coral500.copy(alpha = 0.06f)
+                MaterialTheme.colorScheme.tertiary.copy(alpha = 0.06f)
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -76,7 +74,7 @@ fun HouseholdTaskSection(
                 if (household.isPersonal) {
                     Surface(
                         shape = MaterialTheme.shapes.small,
-                        color = Teal600.copy(alpha = 0.15f)
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                     ) {
                         Text(
                             "👤",
@@ -120,7 +118,7 @@ fun HouseholdTaskSection(
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(24.dp),
                                     strokeWidth = 2.dp,
-                                    color = if (household.isPersonal) Teal600 else Coral500
+                                    color = if (household.isPersonal) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
                                 )
                             }
                         }

@@ -2,6 +2,7 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -231,7 +232,7 @@ class TaskScreenModel(
                 _allTags.value = tagSet.toList().sorted()
 
                 _listState.value = TaskListUiState.Success(tasks, assignments, members)
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 // Relanzar: si no, una loadTasks() más reciente que ya canceló este
                 // Job ve su propia cancelación tratada como un error normal aquí
                 // (ver `loadTasksJob?.cancel()` arriba) y puede sobrescribir el
@@ -340,6 +341,8 @@ class TaskScreenModel(
 
                 _actionState.value = TaskActionState.Success
                 buzz(HapticKind.SUCCESS)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al crear tarea"
@@ -407,20 +410,28 @@ class TaskScreenModel(
                     completedAt = 0L
                 )
 
-                val completedAt = repo.completeTask(
+                val result = repo.completeTask(
                     householdId = householdId,
                     taskId = taskId,
                     memberId = memberId,
-                    taskPoints = task.points
+                    task = task
                 )
-                _undoState.value = _undoState.value?.copy(completedAt = completedAt)
+                val completedAt = result.completedAt
+                _undoState.value = _undoState.value?.copy(
+                    completedAt = completedAt,
+                    pointsAwarded = result.pointsAwarded
+                )
 
                 // Si había una asignación pendiente para este miembro, sincronizarla
                 // como completada (ver KDoc de syncAssignmentOnTaskCompleted) — evita
                 // que el detalle siga ofreciendo "Marcar hecho" sobre una tarea ya
                 // completada por la lista, lo que duplicaría los puntos ya otorgados.
                 try {
-                    repo.syncAssignmentOnTaskCompleted(householdId, taskId, memberId, task.points, completedAt)
+                    repo.syncAssignmentOnTaskCompleted(
+                        householdId, taskId, memberId, result.pointsAwarded, result.onTime, completedAt
+                    )
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) { }
 
                 // Cancel any scheduled reminder for this task.
@@ -431,6 +442,8 @@ class TaskScreenModel(
                 // los puntos ya otorgados).
                 try {
                     notificationScheduler.cancelReminder(taskId)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) { }
 
                 // Tarea hecha → borrar el evento de Calendar vinculado, si lo hay
@@ -440,6 +453,8 @@ class TaskScreenModel(
                     if (myAssignment != null) {
                         calendarSync.onTaskCompleted(householdId, myAssignment)
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) { }
 
                 // Update streak + achievements reusing memberBefore (evita 2
@@ -450,10 +465,12 @@ class TaskScreenModel(
                     if (memberBefore != null) {
                         val streakUpdated = updateMemberStreak(householdId, memberBefore)
                         val memberForAchievements = streakUpdated.copy(
-                            totalPoints = memberBefore.totalPoints + task.points
+                            totalPoints = memberBefore.totalPoints + result.pointsAwarded
                         )
                         checkAndAwardAchievements(householdId, memberForAchievements)
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) { }
 
                 _actionState.value = TaskActionState.Success
@@ -466,6 +483,8 @@ class TaskScreenModel(
                 try {
                     logAnalyticsEvent("task_completed")
                     adController.maybeShowInterstitial()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) { }
             } catch (e: Exception) {
                 _undoState.value = null
@@ -511,6 +530,8 @@ class TaskScreenModel(
                     state.previousLastCompletedDate,
                     state.previousCompletedBy
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Non-critical — la tarea puede quedar como completada (ver KDoc arriba)
             }
@@ -546,6 +567,8 @@ class TaskScreenModel(
                 )
                 _reassignState.value = TaskActionState.Success
                 loadTaskDetail(householdId, taskId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _reassignState.value = TaskActionState.Error(
                     e.message ?: "Error al cambiar quién hizo la tarea"
@@ -576,11 +599,15 @@ class TaskScreenModel(
                 )
                 try {
                     calendarSync.onTaskCompleted(householdId, assignment)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) { }
                 _actionState.value = TaskActionState.Success
 
                 // Refresh detail
                 loadTaskDetail(householdId, taskId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al completar tarea"
@@ -605,9 +632,17 @@ class TaskScreenModel(
 
                 _detailState.value = TaskDetailUiState.Success(task, assignments, members)
 
-                val myMemberId = try { repo.resolveCurrentMember(householdId) } catch (_: Exception) { null }
+                val myMemberId = try {
+                    repo.resolveCurrentMember(householdId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
                 _currentMemberId.value = myMemberId
                 _myAssignment.value = assignments.find { it.memberId == myMemberId }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _detailState.value = TaskDetailUiState.Error(
                     e.message ?: "Error al cargar tarea"
@@ -634,6 +669,8 @@ class TaskScreenModel(
 
                 // Refresh detail
                 loadTaskDetail(householdId, taskId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al asignar tarea"
@@ -712,6 +749,8 @@ class TaskScreenModel(
                 _actionState.value = TaskActionState.Success
                 // Refresh detail
                 loadTaskDetail(householdId, taskId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al actualizar tarea"
@@ -731,6 +770,8 @@ class TaskScreenModel(
                 repo.deleteTask(householdId, taskId)
                 _actionState.value = TaskActionState.Success
                 buzz(HapticKind.WARNING)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al eliminar tarea"
@@ -760,6 +801,8 @@ class TaskScreenModel(
             try {
                 val comments = repo.getComments(householdId, taskId)
                 _commentsState.value = CommentsUiState.Success(comments)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _commentsState.value = CommentsUiState.Error(
                     e.message ?: "Error al cargar comentarios"
@@ -782,6 +825,8 @@ class TaskScreenModel(
                 repo.addComment(householdId, taskId, authorName, text)
                 // Reload comments
                 loadComments(householdId, taskId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _commentsState.value = CommentsUiState.Error(
                     e.message ?: "Error al añadir comentario"
@@ -796,6 +841,8 @@ class TaskScreenModel(
             val memberId = _currentMemberId.value ?: repo.resolveCurrentMember(householdId)
             val member = repo.getMembers(householdId).find { it.id == memberId }
             member?.displayName?.takeIf { it.isNotBlank() } ?: "Miembro"
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             "Usuario"
         }
@@ -911,6 +958,8 @@ class TaskScreenModel(
         for (achievementId in newlyUnlocked) {
             try {
                 repo.addMemberAchievement(householdId, member.id, achievementId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Non-critical failure
             }
@@ -957,6 +1006,8 @@ class TaskScreenModel(
                 buzz(HapticKind.SELECTION)
                 // Refresh detail
                 loadTaskDetail(householdId, taskId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Non-critical; detail will be stale until next load
             } finally {
@@ -1035,6 +1086,8 @@ class TaskScreenModel(
                 } else {
                     CalendarActionState.Error("No se pudo sincronizar con Google Calendar")
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _calendarActionState.value = CalendarActionState.Error(
                     e.message ?: "Error al sincronizar con Google Calendar"
@@ -1067,6 +1120,8 @@ class TaskScreenModel(
         try {
             val household = repo.getHousehold(householdId)
             calendarSync.onTaskAssigned(householdId, household.name, household.isPersonal, assignments)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Best-effort: se reintenta en el próximo reconcile.
         }
@@ -1079,6 +1134,8 @@ class TaskScreenModel(
             for (assignment in assignments) {
                 calendarSync.onTaskUnassigned(householdId, assignment)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Best-effort: el evento huérfano queda hasta el próximo reconcile.
         }

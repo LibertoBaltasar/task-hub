@@ -307,7 +307,16 @@ data class HouseholdScreen(val householdId: String) : Screen {
                 // Top bar
                 TaskHubTopBar(
                     title = "Task Hub",
-                    onBack = { navigator.replaceAll(HomeScreen()) },
+                    // pop() en vez de replaceAll(HomeScreen()): unifica con el atrás del
+                    // sistema (que Voyager ya resuelve como pop() por defecto) y con la
+                    // convención del resto de pantallas de la app (todas usan pop() en su
+                    // flecha de topbar). Antes la flecha y el atrás del sistema llevaban a
+                    // destinos distintos según cómo se hubiera llegado aquí. Si esta
+                    // pantalla se alcanzó vía replaceAll (p.ej. tras crear perfil o unirse
+                    // a un hogar — ver CreateProfileScreen/JoinHouseholdScreen), no hay
+                    // nada que hacer pop(): mismo comportamiento no-op que ya tenía el
+                    // atrás del sistema en ese caso, ahora también en la flecha.
+                    onBack = { navigator.pop() },
                     actions = {
                         // Notification bell with badge
                         Box {
@@ -354,7 +363,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Teal600)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 } else {
                     // Content
@@ -385,7 +394,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             .fillMaxWidth()
                                             .clickable { showQrDialog = true },
                                         colors = CardDefaults.cardColors(
-                                            containerColor = Teal50
+                                            containerColor = MaterialTheme.colorScheme.primaryContainer
                                         )
                                     ) {
                                         Column(
@@ -404,7 +413,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = household.name,
                                                 style = MaterialTheme.typography.headlineSmall,
-                                                color = Teal900,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 fontWeight = FontWeight.Bold,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
@@ -415,11 +424,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = s("household_invite_code"),
                                                 style = MaterialTheme.typography.labelMedium,
-                                                // Color fijo (no colorScheme.primary): el fondo de esta card
-                                                // (Teal50) tampoco cambia con el tema/modo oscuro, así que un
-                                                // color de texto que SÍ cambia (colorScheme.primary se aclara
-                                                // en modo oscuro) rompía el contraste (1.87:1 en dark).
-                                                color = Teal800,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -427,7 +432,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = household.inviteCode,
                                                 style = MaterialTheme.typography.headlineMedium,
-                                                color = Teal800,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                                                 fontWeight = FontWeight.Bold,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
@@ -438,7 +443,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = s("household_share_code"),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = Teal800,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )

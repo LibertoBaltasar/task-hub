@@ -3,6 +3,7 @@ package org.taskhub.ui.models
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -256,5 +257,21 @@ class GoogleAuthManager(
                 // No crítico — se reintenta en el próximo cambio
             }
         }
+    }
+
+    /**
+     * Cancela el `CoroutineScope` interno (observador de
+     * [GoogleSignInResultHolder] + corrutinas de [syncHouseholdsToCloud] en
+     * vuelo). No implementa `java.io.Closeable` porque no existe en
+     * `commonMain` de Kotlin Multiplatform (es JVM-only) — introducirlo
+     * forzaría una dependencia no disponible en iOS. En su lugar, Koin
+     * invoca este método vía `onClose` al cerrar el contenedor de DI (ver
+     * `AppModule.kt`). Impacto práctico hoy: nulo — la app nunca llama a
+     * `koin.close()` (este manager vive tanto como el proceso), pero deja
+     * el manager correctamente cerrable si eso cambia en el futuro (p.ej.
+     * tests instrumentados que recrean el contenedor de Koin entre casos).
+     */
+    fun close() {
+        scope.cancel()
     }
 }

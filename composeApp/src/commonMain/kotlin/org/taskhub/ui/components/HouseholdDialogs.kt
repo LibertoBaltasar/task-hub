@@ -46,6 +46,7 @@ fun QrShareDialog(
             ) {
                 QrCodeImage(
                     text = inviteCode,
+                    contentDescription = s("household_qr_description").replace("%s", inviteCode),
                     modifier = Modifier.size(220.dp)
                 )
 
@@ -101,22 +102,12 @@ fun DeleteHouseholdConfirmDialog1(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(s("household_delete_title")) },
-        text = {
-            Text(s("household_delete_confirm_1").replace("%s", householdName))
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(s("household_delete_btn"), color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(s("household_cancel"))
-            }
-        }
+    DestructiveConfirmDialog(
+        title = s("household_delete_title"),
+        text = s("household_delete_confirm_1").replace("%s", householdName),
+        s = s,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm
     )
 }
 
@@ -130,22 +121,13 @@ fun DeleteHouseholdConfirmDialog2(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(s("household_delete_confirm_2")) },
-        text = {
-            Text(s("household_delete_confirm_2_desc").replace("%s", householdName))
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(s("household_delete_yes"), color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(s("household_cancel"))
-            }
-        }
+    DestructiveConfirmDialog(
+        title = s("household_delete_confirm_2"),
+        text = s("household_delete_confirm_2_desc").replace("%s", householdName),
+        s = s,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
+        confirmLabel = s("household_delete_yes")
     )
 }
 
@@ -159,22 +141,13 @@ fun LeaveHouseholdDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(s("household_leave_title")) },
-        text = {
-            Text(s("household_leave_confirm").replace("%s", householdName))
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(s("household_leave_btn"), color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(s("household_cancel"))
-            }
-        }
+    DestructiveConfirmDialog(
+        title = s("household_leave_title"),
+        text = s("household_leave_confirm").replace("%s", householdName),
+        s = s,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
+        confirmLabel = s("household_leave_btn")
     )
 }
 

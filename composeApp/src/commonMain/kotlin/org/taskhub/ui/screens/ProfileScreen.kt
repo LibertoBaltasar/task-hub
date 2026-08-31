@@ -6,7 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
@@ -30,8 +30,6 @@ import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
-import org.taskhub.ui.theme.Coral500
-import org.taskhub.ui.theme.Teal600
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 
@@ -110,7 +108,7 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                         HouseholdProfileCard(
                             household = personal,
                             icon = Icons.Default.Person,
-                            color = Teal600
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -121,7 +119,11 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                     HouseholdProfileCard(
                         household = household,
                         icon = Icons.Default.Edit,
-                        color = Coral500,
+                        // Coral500 fijo teñía el icono con 2.60-2.81:1 en los 3 temas
+                        // claros (falla el umbral 3:1 de icono significativo, WCAG
+                        // 1.4.11) — colorScheme.tertiary ya está auditado en los 6
+                        // temas/modo.
+                        color = MaterialTheme.colorScheme.tertiary,
                         onNavigate = { navigator.push(HouseholdScreen(household.id)) }
                     )
                 }
@@ -218,8 +220,11 @@ private fun HouseholdProfileCard(
                 }
             }
             if (onNavigate != null) {
+                // ArrowForward, no ArrowBack: este icono significa "ir a/entrar en
+                // este hogar", no "volver" — una flecha de retroceso en esa posición
+                // confundía la dirección de la acción.
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = s("profile_card_go_to_space"),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier

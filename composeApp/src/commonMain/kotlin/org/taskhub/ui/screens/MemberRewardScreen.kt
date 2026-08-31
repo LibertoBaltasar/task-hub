@@ -114,7 +114,7 @@ data class MemberRewardScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (canAfford) Teal50 else MaterialTheme.colorScheme.errorContainer
+                            containerColor = if (canAfford) MaterialTheme.semanticColors.successContainer else MaterialTheme.colorScheme.errorContainer
                         )
                     ) {
                         Column(
@@ -132,7 +132,7 @@ data class MemberRewardScreen(
                                 text = "⭐ ${reward.cost}",
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (canAfford) Teal800 else MaterialTheme.colorScheme.error
+                                color = if (canAfford) MaterialTheme.semanticColors.onSuccessContainer else MaterialTheme.colorScheme.error
                             )
 
                             Spacer(Modifier.height(8.dp))
@@ -153,7 +153,7 @@ data class MemberRewardScreen(
                                 text = "⭐ $memberPoints",
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = if (canAfford) Teal800 else MaterialTheme.colorScheme.error
+                                color = if (canAfford) MaterialTheme.semanticColors.onSuccessContainer else MaterialTheme.colorScheme.error
                             )
 
                             if (!canAfford) {

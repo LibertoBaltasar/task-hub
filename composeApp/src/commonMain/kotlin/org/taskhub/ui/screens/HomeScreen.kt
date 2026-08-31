@@ -38,7 +38,6 @@ import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.models.HomeScreenModel
-import org.taskhub.ui.theme.Teal600
 import org.taskhub.platform.AdBannerSlot
 
 /**
@@ -133,7 +132,7 @@ class HomeScreen : Screen {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(20.dp),
                                     strokeWidth = 2.dp,
-                                    color = Teal600
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(s("settings_account_connecting"))
                             }

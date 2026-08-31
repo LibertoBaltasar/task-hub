@@ -62,7 +62,7 @@ data class NotificationListScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = Teal600)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         }
                     }
 
@@ -96,7 +96,10 @@ data class NotificationListScreen(
                                     Text(
                                         text = s("notifications_unread_count").replace("%d", st.unreadCount.toString()),
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = if (st.unreadCount > 0) Coral500 else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        // Coral500 fijo sobre `background` fallaba AA (2.83-3.07:1) en los 3
+                                        // temas claros; semanticColors.info ya está auditado y es el mismo
+                                        // tono que usa el punto indicador de "no leída" más abajo.
+                                        color = if (st.unreadCount > 0) MaterialTheme.semanticColors.info else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(bottom = 8.dp)
                                     )
                                 }
@@ -148,12 +151,18 @@ private fun NotificationCard(
 ) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    // primaryContainer/onPrimaryContainer (en vez del antiguo par fijo
+    // Teal50/Teal800/900): sigue el tema activo (Naturaleza/Minimal, no solo
+    // Default) y ya es un par accesible auditado en las 6 combinaciones
+    // tema/modo, mismo criterio aplicado a otras 6+ cards de la app.
+    val titleColor = if (!notification.read) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    val secondaryColor = if (!notification.read) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (!notification.read)
-                Teal50
+                MaterialTheme.colorScheme.primaryContainer
             else
                 MaterialTheme.colorScheme.surface
         ),
@@ -186,14 +195,15 @@ private fun NotificationCard(
                     Text(
                         text = notification.title,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = if (!notification.read) FontWeight.Bold else FontWeight.Normal
+                        fontWeight = if (!notification.read) FontWeight.Bold else FontWeight.Normal,
+                        color = titleColor
                     )
 
                     // Time ago text
                     Text(
                         text = formatTimeAgo(notification.createdAt, appSettings.currentLanguage),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = secondaryColor
                     )
                 }
 
@@ -202,7 +212,7 @@ private fun NotificationCard(
                 Text(
                     text = notification.message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = secondaryColor
                 )
 
                 // Mark as read button for unread notifications

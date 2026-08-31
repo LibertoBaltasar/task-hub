@@ -53,10 +53,38 @@ private data class DayTaskEntry(
 )
 
 // ── Color helpers ──────────────────────────────────────────
+// Antes: colores fijos (0xFFFFCDD2/Teal500/0xFFA5D6A7) iguales en los 3 temas
+// y en claro/oscuro. En el tema Minimal (monocromo por diseño) rompían la
+// identidad "escala de grises"; combinados con texto que sí sigue el tema
+// (ver TaskChip), fallaban WCAG AA en varias combinaciones — mismo patrón ya
+// corregido en el popup de esta misma pantalla (ver TaskPopupItem/statusLabel
+// más abajo, que ya usa PointsBadge con pares container/onContainer
+// auditados). Sustituidos por la paleta semántica (éxito/error/info), común
+// a los 3 temas y ya auditada ≥4.5:1 en las 6 combinaciones.
 
-private val OverdueColor = Color(0xFFFFCDD2)   // light red
-private val DueTodayColor = Teal500              // teal
-private val CompletedColor = Color(0xFFA5D6A7)  // green-gray / light green
+@Composable
+private fun DayTaskEntry.dotColor(): Color = when {
+    isCompleted -> MaterialTheme.semanticColors.success
+    isOverdue -> MaterialTheme.colorScheme.error
+    isDueToday -> MaterialTheme.semanticColors.info
+    else -> MaterialTheme.colorScheme.primary
+}
+
+@Composable
+private fun DayTaskEntry.containerColor(): Color = when {
+    isCompleted -> MaterialTheme.semanticColors.successContainer
+    isOverdue -> MaterialTheme.colorScheme.errorContainer
+    isDueToday -> MaterialTheme.semanticColors.infoContainer
+    else -> MaterialTheme.colorScheme.primaryContainer
+}
+
+@Composable
+private fun DayTaskEntry.onContainerColor(): Color = when {
+    isCompleted -> MaterialTheme.semanticColors.onSuccessContainer
+    isOverdue -> MaterialTheme.colorScheme.onErrorContainer
+    isDueToday -> MaterialTheme.semanticColors.onInfoContainer
+    else -> MaterialTheme.colorScheme.onPrimaryContainer
+}
 
 // ────────────────────────────────────────────────────────────
 //  CalendarScreen
@@ -227,7 +255,7 @@ data class CalendarScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = Teal600)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         }
                     }
 
@@ -244,6 +272,20 @@ data class CalendarScreen(
                     }
 
                     else -> {
+                        if (tasksByDate.values.all { it.isEmpty() }) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = s("calendar_no_tasks_range"),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         when (mode) {
                             CalendarMode.WEEK -> WeekView(
                                 weekRange = weekRange,
@@ -420,7 +462,7 @@ private fun DayColumn(
             .fillMaxHeight()
             .clickable(onClick = onClick)
             .then(
-                if (isToday) Modifier.background(Teal50.copy(alpha = 0.5f))
+                if (isToday) Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
                 else Modifier
             )
             .padding(horizontal = 2.dp, vertical = 4.dp),
@@ -429,7 +471,7 @@ private fun DayColumn(
         // Day number
         Surface(
             shape = RoundedCornerShape(50),
-            color = if (isToday) Teal600 else Color.Transparent,
+            color = if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent,
             modifier = Modifier.size(32.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -478,7 +520,7 @@ private fun MonthDayCell(
             .fillMaxHeight()
             .clickable(onClick = onClick)
             .then(
-                if (isToday) Modifier.background(Teal50.copy(alpha = 0.5f))
+                if (isToday) Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
                 else Modifier
             )
             .padding(2.dp),
@@ -487,7 +529,7 @@ private fun MonthDayCell(
         // Day number
         Surface(
             shape = RoundedCornerShape(50),
-            color = if (isToday) Teal600 else Color.Transparent,
+            color = if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent,
             modifier = Modifier.size(24.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -510,12 +552,7 @@ private fun MonthDayCell(
             ) {
                 // Show colored dots — max 6
                 entries.take(6).forEach { entry ->
-                    val color = when {
-                        entry.isCompleted -> CompletedColor
-                        entry.isOverdue -> OverdueColor
-                        entry.isDueToday -> DueTodayColor
-                        else -> Teal500
-                    }
+                    val color = entry.dotColor()
                     Box(
                         modifier = Modifier
                             .size(6.dp)
@@ -542,17 +579,8 @@ private fun MonthDayCell(
 
 @Composable
 private fun TaskChip(entry: DayTaskEntry) {
-    val bgColor = when {
-        entry.isCompleted -> CompletedColor
-        entry.isOverdue -> OverdueColor
-        entry.isDueToday -> DueTodayColor
-        else -> Teal500
-    }
-    val textColor = when {
-        entry.isCompleted -> MaterialTheme.colorScheme.primary
-        entry.isOverdue -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.onPrimary
-    }
+    val bgColor = entry.containerColor()
+    val textColor = entry.onContainerColor()
 
     Surface(
         shape = RoundedCornerShape(4.dp),
@@ -651,12 +679,7 @@ private fun TaskPopupItem(
 ) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
-    val statusColor = when {
-        entry.isCompleted -> CompletedColor
-        entry.isOverdue -> OverdueColor
-        entry.isDueToday -> DueTodayColor
-        else -> Teal500
-    }
+    val statusColor = entry.dotColor()
 
     Card(
         modifier = Modifier

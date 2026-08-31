@@ -7,6 +7,7 @@ import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -144,6 +145,8 @@ class GoogleCalendarRepository(
                 parameter("fields", "id")
             }
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             false
         }

@@ -22,12 +22,9 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cafe.adriel.voyager.core.screen.Screen
-import cafe.adriel.voyager.koin.koinScreenModel
-import cafe.adriel.voyager.navigator.LocalNavigator
-import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -37,40 +34,12 @@ import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.ui.components.LocalAppSettings
-import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.Achievement
 import org.taskhub.ui.models.AchievementChecker
 import org.taskhub.ui.models.TaskScreenModel
 import org.taskhub.ui.theme.*
-
-data class StatsScreen(
-    val householdId: String,
-    val memberId: String
-) : Screen {
-
-    @Composable
-    override fun Content() {
-        val navigator = LocalNavigator.currentOrThrow
-        val appSettings = LocalAppSettings.current
-        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
-
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Top bar
-                TaskHubTopBar(
-                    title = s("explore_tab_stats"),
-                    onBack = { navigator.pop() }
-                )
-
-                StatsBody(householdId, memberId)
-            }
-        }
-    }
-}
 
 /** Contenido reutilizable de estadísticas (sin barra superior), para la pantalla combinada. */
 @Composable
@@ -124,7 +93,7 @@ internal fun StatsBody(householdId: String, memberId: String) {
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(color = Teal600)
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         }
                     }
                     errorMessage != null -> {
@@ -252,14 +221,19 @@ private fun computeStats(
     val memberAssignments = assignments.filter { it.memberId == member.id }
     val completedAssignments = memberAssignments.filter { it.status == "completed" && it.completedAt != null }
 
-    // Combine both sources for per-day counts
-    data class CompletionRecord(val completedAt: Long, val points: Int, val onTime: Boolean)
+    // Combine both sources for per-day counts. taskId incluido para que la
+    // distribución por categoría (más abajo) pueda contar TODAS las
+    // compleciones reales, no solo las que llegaron vía completeAssignment()
+    // — antes el pie chart solo miraba completedAssignments, subestimando
+    // (a veces a 0) las tareas completadas por completeTask() (flujo
+    // principal de la lista), que se registran en taskHistory.
+    data class CompletionRecord(val completedAt: Long, val points: Int, val onTime: Boolean, val taskId: String)
 
     val fromAssignments = completedAssignments.map { a ->
-        CompletionRecord(a.completedAt ?: 0L, a.pointsAwarded ?: 0, a.onTime ?: true)
+        CompletionRecord(a.completedAt ?: 0L, a.pointsAwarded ?: 0, a.onTime ?: true, a.taskId)
     }
     val fromHistory = memberHistory.map { h ->
-        CompletionRecord(h.completedAt, h.points, h.onTime)
+        CompletionRecord(h.completedAt, h.points, h.onTime, h.taskId)
     }
     val allCompletions = fromAssignments + fromHistory
 
@@ -289,9 +263,10 @@ private fun computeStats(
         DayPoints("${date.dayOfMonth}/${date.monthNumber}", points)
     }
 
-    // Tag distribution — from completed assignments (which have taskId)
+    // Tag distribution — de TODAS las compleciones (assignments + taskHistory),
+    // no solo assignments (ver comentario de CompletionRecord arriba).
     val taskMap = tasks.associateBy { it.id }
-    val completedTaskIds = completedAssignments.map { it.taskId }.distinct()
+    val completedTaskIds = allCompletions.map { it.taskId }.distinct()
     val completedTasks = completedTaskIds.mapNotNull { taskMap[it] }
     val tagCounts = mutableMapOf<String, Int>()
     for (task in completedTasks) {
@@ -332,7 +307,7 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Coral100),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
         shape = MaterialTheme.shapes.large
     ) {
         Row(
@@ -347,15 +322,15 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
                 Text(
                     s("stats_current_streak_label"),
                     style = MaterialTheme.typography.bodySmall,
-                    // Color fijo (no onSurfaceVariant): el fondo Coral100 de esta card
-                    // tampoco cambia con el tema/modo oscuro (1.30:1 con onSurfaceVariant en dark).
-                    color = Coral800
+                    // onTertiaryContainer (par accesible auditado, sigue el tema activo)
+                    // en vez del antiguo Coral800/Coral700/Teal800 fijos.
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
                 )
                 Text(
                     s("stats_days_suffix").replace("%d", currentStreak.toString()),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Coral700
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -363,13 +338,13 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
                 Text(
                     s("stats_best_streak_label"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Coral800
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
                 )
                 Text(
                     s("stats_days_suffix").replace("%d", bestStreak.toString()),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = Teal800
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
             }
         }
@@ -387,7 +362,7 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
             Spacer(Modifier.height(12.dp))
 
             val maxCount = (data.maxOfOrNull { it.count } ?: 1).coerceAtLeast(1)
-            val barColor = Teal500
+            val barColor = MaterialTheme.colorScheme.primary
             val textMeasurer = rememberTextMeasurer()
             val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
             // Los Canvas de esta pantalla no tienen ningún texto alternativo:
@@ -467,8 +442,8 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
 
             val maxPoints = (dailyPoints.maxOfOrNull { it.points } ?: 10).coerceAtLeast(1)
             val textMeasurer = rememberTextMeasurer()
-            val lineColor = Coral500
-            val pointColor = Coral600
+            val lineColor = MaterialTheme.colorScheme.tertiary
+            val pointColor = MaterialTheme.colorScheme.tertiary
             val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
             val chartDescription = remember(dailyPoints) {
                 dailyPoints.joinToString(", ") { "${it.dayLabel}: ${it.points}" }
@@ -541,7 +516,17 @@ private fun PieChartCard(title: String, data: List<TagCount>) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
 
-            val colors = listOf(Teal500, Coral500, Teal300, Coral300, Teal700, Coral700)
+            // Paleta categórica de 6 tonos, uno por rol de MaterialTheme.colorScheme:
+            // antes 6 hex fijos (Teal/Coral), iguales en los 3 temas — ahora sigue
+            // el tema activo (Naturaleza/Minimal) manteniendo 6 tonos distinguibles.
+            val colors = listOf(
+                MaterialTheme.colorScheme.primary,
+                MaterialTheme.colorScheme.tertiary,
+                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.tertiaryContainer,
+                MaterialTheme.colorScheme.secondary,
+                MaterialTheme.colorScheme.secondaryContainer
+            )
             val total = data.sumOf { it.count }.toFloat().coerceAtLeast(1f)
             val chartDescription = remember(data) {
                 data.joinToString(", ") { "${it.tag}: ${it.count}" }
@@ -573,8 +558,14 @@ private fun PieChartCard(title: String, data: List<TagCount>) {
 
                 Spacer(Modifier.width(16.dp))
 
-                // Legend
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Legend — Modifier.weight(1f) para que la columna se ajuste al
+                // ancho disponible en vez de poder desbordar la card con etiquetas
+                // largas (frecuente en español); TextOverflow.Ellipsis para que el
+                // texto se corte con "…" en vez de a mitad de carácter.
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     data.forEachIndexed { index, tagCount ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -586,7 +577,8 @@ private fun PieChartCard(title: String, data: List<TagCount>) {
                             Text(
                                 "${tagCount.tag} (${tagCount.count})",
                                 style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -621,29 +613,12 @@ private fun SummaryStatsCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                StatItem(s("stats_summary_tasks"), "$totalTasks", "✅")
-                StatItem(s("stats_summary_points"), "$totalPoints", "⭐")
-                StatItem(s("stats_summary_on_time"), "${(onTimeRate * 100).toInt()}%", "⏱️")
-                StatItem(s("stats_summary_overdue"), "$overdueCount", "⚠️")
+                StatChip(label = s("stats_summary_tasks"), value = "$totalTasks", emoji = "✅", tone = null)
+                StatChip(label = s("stats_summary_points"), value = "$totalPoints", emoji = "⭐", tone = null)
+                StatChip(label = s("stats_summary_on_time"), value = "${(onTimeRate * 100).toInt()}%", emoji = "⏱️", tone = null)
+                StatChip(label = s("stats_summary_overdue"), value = "$overdueCount", emoji = "⚠️", tone = null)
             }
         }
-    }
-}
-
-@Composable
-private fun StatItem(label: String, value: String, emoji: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(emoji, style = MaterialTheme.typography.titleLarge)
-        Text(
-            value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -652,7 +627,7 @@ private fun AchievementCard(achievement: Achievement) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = if (achievement.isUnlocked) Teal50 else MaterialTheme.colorScheme.surfaceVariant
+            containerColor = if (achievement.isUnlocked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
         ),
         shape = MaterialTheme.shapes.medium
     ) {

@@ -25,6 +25,7 @@ import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.RewardActionState
@@ -149,7 +150,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                                 showEmojiPicker = false
                                             },
                                         shape = MaterialTheme.shapes.small,
-                                        color = if (selectedIcon == emoji) Teal100
+                                        color = if (selectedIcon == emoji) MaterialTheme.colorScheme.primaryContainer
                                             else MaterialTheme.colorScheme.surfaceVariant
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
@@ -172,11 +173,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         placeholder = { Text(s("create_reward_title_placeholder")) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Teal600,
-                            focusedLabelColor = Teal600,
-                            cursorColor = Teal600
-                        )
+                        colors = taskHubTextFieldColors()
                     )
 
                     // Description
@@ -188,11 +185,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                         maxLines = 3,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Teal600,
-                            focusedLabelColor = Teal600,
-                            cursorColor = Teal600
-                        )
+                        colors = taskHubTextFieldColors()
                     )
 
                     // Cost
@@ -209,11 +202,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         prefix = { Text("⭐ ") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Teal600,
-                            focusedLabelColor = Teal600,
-                            cursorColor = Teal600
-                        )
+                        colors = taskHubTextFieldColors()
                     )
 
                     Spacer(Modifier.height(8.dp))
@@ -222,7 +211,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = Teal50
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
                         )
                     ) {
                         Column(
@@ -234,7 +223,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                             Text(
                                 text = s("create_reward_preview_label"),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Teal700
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -250,14 +239,12 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                 Text(
                                     text = description,
                                     style = MaterialTheme.typography.bodySmall,
-                                    // Color fijo (no onSurfaceVariant): el fondo Teal50 de esta
-                                    // card tampoco cambia con el modo oscuro (1.52:1 en dark).
-                                    color = Teal800
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                 )
                             }
                             Surface(
                                 shape = MaterialTheme.shapes.medium,
-                                color = Coral500
+                                color = MaterialTheme.colorScheme.tertiary
                             ) {
                                 Text(
                                     text = "⭐ ${costText.ifEmpty { "0" }}",

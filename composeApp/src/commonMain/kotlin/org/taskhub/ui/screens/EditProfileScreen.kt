@@ -27,7 +27,6 @@ import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.ProfileScreenModel
 import org.taskhub.ui.models.ProfileUiState
 import org.taskhub.ui.models.ProfileSaveState
-import org.taskhub.ui.theme.Teal600
 
 /**
  * Pantalla para editar el perfil GLOBAL del usuario actual.
@@ -105,7 +104,7 @@ class EditProfileScreen : Screen {
                         modifier = Modifier.fillMaxSize().padding(padding),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Teal600)
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -188,11 +187,11 @@ class EditProfileScreen : Screen {
                                                     },
                                                 shape = MaterialTheme.shapes.medium,
                                                 color = if (avatarEmoji == emoji)
-                                                    Teal600.copy(alpha = 0.15f)
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                                                 else
                                                     MaterialTheme.colorScheme.surfaceVariant,
                                                 border = if (avatarEmoji == emoji)
-                                                    androidx.compose.foundation.BorderStroke(2.dp, Teal600)
+                                                    androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
                                                 else null
                                             ) {
                                                 Box(contentAlignment = Alignment.Center) {

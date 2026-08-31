@@ -8,6 +8,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -16,10 +18,15 @@ import androidx.compose.ui.unit.dp
  *
  * Uses a pure-Kotlin QR encoder that works on all KMP targets.
  * The QR is drawn as black modules on a white background with a quiet zone border.
+ *
+ * [contentDescription] es obligatorio (sin default) para forzar a cada
+ * call-site a decidir un texto accesible con el código en claro — un lector
+ * de pantalla no puede "leer" un QR pintado a mano en un Canvas.
  */
 @Composable
 fun QrCodeImage(
     text: String,
+    contentDescription: String,
     modifier: Modifier = Modifier,
     size: Dp = 200.dp,
     onError: @Composable (String) -> Unit = { err -> }
@@ -42,7 +49,9 @@ fun QrCodeImage(
     val totalModules = moduleCount + 2 * quietZone
 
     Canvas(
-        modifier = modifier.size(size)
+        modifier = modifier
+            .size(size)
+            .semantics { this.contentDescription = contentDescription }
     ) {
         val moduleSize = size.toPx() / totalModules
 

@@ -2,6 +2,7 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,6 +41,8 @@ class NotificationScreenModel(
                 val unread = memberNotifications.count { !it.read }
                 _unreadCount.value = unread
                 _uiState.value = NotificationUiState.Success(memberNotifications, unread)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.value = NotificationUiState.Error(
                     e.message ?: "Error al cargar notificaciones"
@@ -62,6 +65,8 @@ class NotificationScreenModel(
                     _unreadCount.value = unread
                     _uiState.value = NotificationUiState.Success(updated, unread)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Non-critical, ignore
             }
@@ -74,6 +79,8 @@ class NotificationScreenModel(
                 val all = repo.getNotifications(householdId)
                 val unread = all.count { it.memberId == memberId && !it.read }
                 _unreadCount.value = unread
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Ignore polling errors
             }

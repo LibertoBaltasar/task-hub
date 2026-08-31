@@ -92,9 +92,12 @@ object RecurrenceRules {
      * hora local del día resultante.
      *
      * - daily: mañana.
-     * - weekly: siguiente día de la semana [day] (1=Lunes..7=Domingo); si hoy
-     *   ya es ese día, +7 días. Si [day] es null, se usa el día de la semana
-     *   actual (equivale a "dentro de 7 días").
+     * - weekly: si [weeklyDays] no está vacío, el primer día de esa lista
+     *   estrictamente posterior a hoy (escaneando hacia delante, soporta
+     *   varios días por semana — p.ej. lunes+miércoles+viernes). Si
+     *   [weeklyDays] está vacío, usa el día de la semana [day] (1=Lunes..
+     *   7=Domingo; si hoy ya es ese día, +7 días); si [day] también es null,
+     *   se usa el día de la semana actual (equivale a "dentro de 7 días").
      * - monthly: siguiente día [day] del mes (1..31, ajustado con
      *   [clampDayOfMonth]); si ese día de este mes ya pasó (o es hoy), salta
      *   al mes siguiente. Si [day] es null, se usa el día del mes actual.
@@ -103,6 +106,7 @@ object RecurrenceRules {
         nowEpochMs: Long,
         frequency: String,
         day: Int? = null,
+        weeklyDays: List<Int> = emptyList(),
         tz: TimeZone = TimeZone.currentSystemDefault()
     ): Long {
         val today = Instant.fromEpochMilliseconds(nowEpochMs).toLocalDateTime(tz).date
@@ -110,11 +114,24 @@ object RecurrenceRules {
         val targetDate = when (frequency) {
             "daily" -> today.plus(1, DateTimeUnit.DAY)
             "weekly" -> {
-                val targetDow = day ?: (today.dayOfWeek.ordinal + 1)
-                val currentDow = today.dayOfWeek.ordinal + 1
-                var diff = targetDow - currentDow
-                if (diff <= 0) diff += 7
-                today.plus(diff, DateTimeUnit.DAY)
+                if (weeklyDays.isNotEmpty()) {
+                    var candidate = today.plus(1, DateTimeUnit.DAY)
+                    var found: LocalDate? = null
+                    var safety = 0
+                    while (found == null && safety < 14) {
+                        val dow = candidate.dayOfWeek.ordinal + 1
+                        if (dow in weeklyDays) found = candidate
+                        candidate = candidate.plus(1, DateTimeUnit.DAY)
+                        safety++
+                    }
+                    found ?: today.plus(7, DateTimeUnit.DAY) // no debería ocurrir (rango cubre 2 semanas)
+                } else {
+                    val targetDow = day ?: (today.dayOfWeek.ordinal + 1)
+                    val currentDow = today.dayOfWeek.ordinal + 1
+                    var diff = targetDow - currentDow
+                    if (diff <= 0) diff += 7
+                    today.plus(diff, DateTimeUnit.DAY)
+                }
             }
             "monthly" -> {
                 val targetDay = day ?: today.dayOfMonth

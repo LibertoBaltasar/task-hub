@@ -176,7 +176,8 @@ data class CreateTaskScreen(
                                     title.isNotBlank() &&
                                     (pointsText.toIntOrNull() ?: -1) > 0 &&
                                     (!hasDeadline || deadlineTime.isValidTimeFormat()) &&
-                                    (!hasPenalty || (penaltyValue.toIntOrNull() ?: -1) > 0),
+                                    (!hasPenalty || (penaltyValue.toIntOrNull() ?: -1) > 0) &&
+                                    (!hasPenalty || penaltyMax.isBlank() || (penaltyMax.toIntOrNull() ?: -1) >= 0),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.primary
                                 )
@@ -310,7 +311,7 @@ data class CreateTaskScreen(
                                             if (it.id == st.id) it.copy(completed = checked) else it
                                         }
                                     },
-                                    colors = CheckboxDefaults.colors(checkedColor = Teal600)
+                                    colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
                                 )
                                 Text(
                                     text = st.text,
@@ -389,8 +390,8 @@ data class CreateTaskScreen(
                                     onClick = { frequency = key },
                                     label = { Text(label) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Teal100,
-                                        selectedLabelColor = Teal900
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 )
                             }
@@ -432,8 +433,8 @@ data class CreateTaskScreen(
                                         },
                                         label = { Text(label) },
                                         colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = Coral100,
-                                            selectedLabelColor = Coral800
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                         )
                                     )
                                 }
@@ -598,7 +599,7 @@ data class CreateTaskScreen(
                                                     }
                                                 },
                                                 colors = CheckboxDefaults.colors(
-                                                    checkedColor = Teal600
+                                                    checkedColor = MaterialTheme.colorScheme.primary
                                                 )
                                             )
                                             Text(
@@ -623,7 +624,7 @@ data class CreateTaskScreen(
 
                         is MemberUiState.Loading -> {
                             item {
-                                CircularProgressIndicator(color = Teal600)
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                             }
                         }
 
@@ -646,7 +647,7 @@ data class CreateTaskScreen(
                                     checked = mandatory,
                                     onCheckedChange = { mandatory = it },
                                     colors = SwitchDefaults.colors(
-                                        checkedTrackColor = Coral500
+                                        checkedTrackColor = MaterialTheme.colorScheme.tertiary
                                     )
                                 )
                             }
@@ -743,8 +744,8 @@ data class CreateTaskScreen(
                                     onClick = { penaltyMode = "fixed" },
                                     label = { Text(s("create_task_penalty_fixed")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral100,
-                                        selectedLabelColor = Coral800
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                                 FilterChip(
@@ -752,8 +753,8 @@ data class CreateTaskScreen(
                                     onClick = { penaltyMode = "percentage" },
                                     label = { Text(s("create_task_penalty_percentage")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral100,
-                                        selectedLabelColor = Coral800
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                             }
@@ -800,8 +801,8 @@ data class CreateTaskScreen(
                                     onClick = { penaltyInterval = "day" },
                                     label = { Text(s("create_task_interval_daily")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral50,
-                                        selectedLabelColor = Coral700
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                                 FilterChip(
@@ -809,8 +810,8 @@ data class CreateTaskScreen(
                                     onClick = { penaltyInterval = "week" },
                                     label = { Text(s("recurrence_weekly")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral50,
-                                        selectedLabelColor = Coral700
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                                 FilterChip(
@@ -818,8 +819,8 @@ data class CreateTaskScreen(
                                     onClick = { penaltyInterval = "month" },
                                     label = { Text(s("recurrence_monthly")) },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Coral50,
-                                        selectedLabelColor = Coral700
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                             }
@@ -833,6 +834,12 @@ data class CreateTaskScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                // A diferencia de sus campos hermanos ("Puntos", penaltyValue),
+                                // este no validaba nada: cualquier texto no numérico caía en
+                                // un fallback silencioso a 0 (pMax más arriba). 0/vacío SÍ es
+                                // un valor válido aquí (significa "sin tope"), solo un negativo
+                                // o texto no numérico es error.
+                                isError = penaltyMax.isNotBlank() && (penaltyMax.toIntOrNull() ?: -1) < 0,
                                 supportingText = {
                                     Text(s("create_task_penalty_max_hint"))
                                 }
@@ -894,7 +901,7 @@ private fun QuickTemplatesSection(
                 Text(
                     text = if (expanded) "\u25B2" else "\u25BC",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Teal600
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
