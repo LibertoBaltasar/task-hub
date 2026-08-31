@@ -95,3 +95,28 @@ No hay atomicidad de extremo a extremo entre "marcar tarea completada",
 las dos transferencias de puntos y la actualización de `completedBy`/
 historial). Un fallo de red a mitad de secuencia sigue siendo posible y sigue
 dejando estado parcial, mitigado pero no eliminado por lo anterior.
+
+## Añadido (2026-08-31) — `updateTask` / reasignación de miembros al editar
+
+Hallazgo nuevo del panel de expertos v2 (Experto 7, #12): `TaskScreenModel.updateTask`
+sincronizaba las asignaciones de una tarea editada con `repo.deleteAssignments()`
++ `repo.assignTask()` como dos llamadas HTTP independientes. Si la segunda
+fallaba a mitad de camino (p. ej. tras crear la asignación del primer
+miembro de tres), la tarea ya se había quedado sin ninguna asignación previa
+por el `deleteAssignments` anterior — peor caso: tarea completamente
+desasignada tras un fallo de red al guardar un simple cambio de título.
+
+**Mitigado** (no atómico de extremo a extremo, mismo motivo que el resto de
+este documento — sin acceso a `:commit`/emulador para verificar un payload
+transaccional): se añadió `FirestoreRepository.replaceAssignments()`, que
+invierte el orden — crea las asignaciones nuevas primero y solo borra las
+antiguas si esa creación no lanzó excepción. Si el paso de creación falla, la
+tarea conserva sus asignaciones anteriores (estado recuperable, el usuario
+puede reintentar) en vez de quedarse sin ninguna. El peor caso posible ahora
+es un fallo justo en el borrado de las antiguas tras crear las nuevas con
+éxito, que deja asignaciones antiguas + nuevas duplicadas — un estado
+extraño pero recuperable (basta con reeditar y guardar de nuevo), muy
+preferible a perder todas las asignaciones.
+
+`TaskScreenModel.updateTask` se actualizó para llamar a `replaceAssignments`
+en vez de las dos funciones por separado.

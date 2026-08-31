@@ -20,8 +20,6 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
-import org.koin.compose.koinInject
-import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.AssignmentSlot
@@ -50,7 +48,6 @@ data class EditTaskScreen(
         val navigator = LocalNavigator.currentOrThrow
         val taskModel = koinScreenModel<TaskScreenModel>()
         val memberModel = koinScreenModel<MemberScreenModel>()
-        val repo = koinInject<FirestoreRepository>()
         val actionState by taskModel.actionState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
         val appSettings = LocalAppSettings.current
@@ -112,7 +109,7 @@ data class EditTaskScreen(
                 deadlineTime = "${dt.hour.toString().padStart(2, '0')}:${dt.minute.toString().padStart(2, '0')}"
             }
             try {
-                val assignments = repo.getAssignments(householdId, task.id)
+                val assignments = taskModel.getAssignments(householdId, task.id)
                 if (assignments.isNotEmpty()) {
                     selectedMembers = assignments.map { it.memberId }.toSet()
                     mandatory = assignments.firstOrNull()?.mandatory ?: false

@@ -7,9 +7,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.taskhub.network.FIRESTORE_GONE_MESSAGE
 import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.HouseholdResponse
+import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.MessageResponse
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
@@ -50,6 +53,12 @@ class HouseholdScreenModel(
 
     private val _uiState = MutableStateFlow<HouseholdUiState>(HouseholdUiState.Idle)
     val uiState: StateFlow<HouseholdUiState> = _uiState.asStateFlow()
+
+    /** Ver [FirestoreRepository.resolveCurrentMember]. */
+    suspend fun resolveCurrentMember(householdId: String): String = repo.resolveCurrentMember(householdId)
+
+    /** Ver [FirestoreRepository.appreciationRemaining]. */
+    fun appreciationRemaining(member: MemberResponse): Int = repo.appreciationRemaining(member)
 
     fun createHousehold(name: String) {
         screenModelScope.launch {
@@ -108,9 +117,9 @@ class HouseholdScreenModel(
                 val household = repo.getHousehold(id)
                 _uiState.value = HouseholdUiState.Success(household)
             } catch (e: FirestoreException) {
-                if (e.statusCode == 404 || e.statusCode == 403) {
+                if (e.isGoneOrForbidden) {
                     _uiState.value = HouseholdUiState.Error(
-                        message = "Este espacio ya no existe o ya no tienes acceso a él.",
+                        message = FIRESTORE_GONE_MESSAGE,
                         removable = true
                     )
                 } else {

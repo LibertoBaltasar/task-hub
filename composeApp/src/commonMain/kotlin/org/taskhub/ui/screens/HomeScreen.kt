@@ -24,9 +24,7 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
-import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
-import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.AppLogo
 import org.taskhub.ui.components.EmptyHouseholdsIllustration
 import org.taskhub.ui.components.HouseholdTaskSection
@@ -52,12 +50,10 @@ class HomeScreen : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val householdStore = koinInject<HouseholdStore>()
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
         val model = koinScreenModel<HomeScreenModel>()
         val uiState by model.uiState.collectAsState()
-        val settingsStore = koinInject<SettingsStore>()
         val authManager = koinInject<GoogleAuthManager>()
         val authState by authManager.state.collectAsState()
 
@@ -66,9 +62,7 @@ class HomeScreen : Screen {
         var showSettings by remember { mutableStateOf(false) }
 
         // Prompt de login con Google en el primer arranque (solo si aún no ha iniciado sesión)
-        var showGooglePrompt by remember {
-            mutableStateOf(!settingsStore.hasSeenGooglePrompt() && !settingsStore.isGoogleLoggedIn())
-        }
+        var showGooglePrompt by remember { mutableStateOf(model.shouldShowGooglePrompt()) }
 
         // Cargar hogares + tareas de todos al entrar. Reconcilia primero contra
         // Firestore para podar hogares "fantasma" (borrados o sin acceso).
@@ -117,7 +111,7 @@ class HomeScreen : Screen {
             AlertDialog(
                 onDismissRequest = {
                     showGooglePrompt = false
-                    settingsStore.setHasSeenGooglePrompt(true)
+                    model.markGooglePromptSeen()
                 },
                 title = { Text(s("home_google_prompt_title")) },
                 text = {
@@ -149,7 +143,7 @@ class HomeScreen : Screen {
                 confirmButton = {
                     Button(
                         onClick = {
-                            settingsStore.setHasSeenGooglePrompt(true)
+                            model.markGooglePromptSeen()
                             authManager.signIn()
                         },
                         enabled = authState !is GoogleAuthState.SigningIn,
@@ -162,7 +156,7 @@ class HomeScreen : Screen {
                     TextButton(
                         onClick = {
                             showGooglePrompt = false
-                            settingsStore.setHasSeenGooglePrompt(true)
+                            model.markGooglePromptSeen()
                         }
                     ) {
                         Text(s("home_google_prompt_dismiss"))

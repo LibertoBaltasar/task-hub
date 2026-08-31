@@ -19,6 +19,7 @@ import org.taskhub.ui.models.HomeScreenModel
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.models.ProfileScreenModel
+import org.taskhub.ui.models.StatsScreenModel
 import org.taskhub.ui.models.TaskScreenModel
 
 val appModule: Module = module {
@@ -56,10 +57,11 @@ val appModule: Module = module {
     single { createAdController() }
 
     // ScreenModels (Voyager — each screen gets its own instance via factory)
-    factory { HomeScreenModel(repo = get(), householdStore = get()) }
+    factory { HomeScreenModel(repo = get(), householdStore = get(), settingsStore = get()) }
     factory { HouseholdScreenModel(repo = get(), householdStore = get(), authManager = get(), settingsStore = get()) }
     factory { MemberScreenModel(repo = get(), settingsStore = get()) }
     factory { ProfileScreenModel(repo = get(), settingsStore = get()) }
     factory { NotificationScreenModel(repo = get()) }
     factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarSync = get(), adController = get(), settingsStore = get()) }
+    factory { StatsScreenModel(repo = get()) }
 }

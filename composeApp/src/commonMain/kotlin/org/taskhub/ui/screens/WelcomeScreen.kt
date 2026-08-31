@@ -12,26 +12,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.koin.compose.koinInject
-import org.taskhub.network.FirestoreRepository
-import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.models.HomeScreenModel
 
 class WelcomeScreen : Screen {
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
-        val householdStore = koinInject<HouseholdStore>()
-        val repo = koinInject<FirestoreRepository>()
-        var savedHouseholds by remember { mutableStateOf<List<SavedHousehold>>(householdStore.getSavedHouseholds()) }
+        val homeModel = koinScreenModel<HomeScreenModel>()
+        var savedHouseholds by remember { mutableStateOf<List<SavedHousehold>>(homeModel.getSavedHouseholds()) }
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
@@ -39,7 +37,7 @@ class WelcomeScreen : Screen {
 
         // Reconcilia contra Firestore para podar hogares "fantasma" (borrados o sin acceso).
         LaunchedEffect(Unit) {
-            savedHouseholds = repo.reconcileHouseholds(householdStore)
+            savedHouseholds = homeModel.reconcileHouseholds()
         }
 
         // Settings dialog

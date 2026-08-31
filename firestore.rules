@@ -3,13 +3,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v4 — NO DESPLEGADO)
+    //  Task Hub — Reglas de seguridad (v4 — DESPLEGADO 2026-08-31)
     //
-    //  ⚠️ Este archivo se editó como parte del encargo "modelo de roles
+    //  ✅ Desplegado el 2026-08-31 vía scripts/deploy_firestore_rules.py
+    //  (PATCH, no POST — ver CLAUDE.md). Ruleset
+    //  projects/task-hub-62f98/rulesets/014a2dcd-974a-4dd4-931a-4d8608cdb82c.
+    //  Historial: v4 se editó como parte del encargo "modelo de roles
     //  seguro" de 2026-08-30 (cierra los 2 bloqueantes de la auditoría
-    //  anterior, ver docs/audit-2026-08-30.md) pero NO se ha desplegado
-    //  a Firebase — hazlo manualmente (PATCH, no POST, ver CLAUDE.md)
-    //  tras revisar el impacto en la UI descrito abajo.
+    //  anterior, ver docs/audit-2026-08-30.md) y se completó con el ajuste
+    //  de taskHistory delete (propio miembro) del encargo "cierre de
+    //  pendientes" 2026-08-31 antes de desplegar.
     //
     //  Ajuste v4 (encargo "cierre de pendientes" 2026-08-31, sección 0):
     //  taskHistory/{thid} `delete` ahora también permite al PROPIO miembro

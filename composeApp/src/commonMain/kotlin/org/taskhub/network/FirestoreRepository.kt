@@ -77,6 +77,15 @@ class FirestoreRepository(
     // disparando N altas/refrescos de token concurrentes.
     private val authMutex = Mutex()
 
+    // ── Miembro actual (single source of truth, ver resolveCurrentMember) ──
+    // Memoiza el resultado por hogar: sin esto, cada ScreenModel que necesita
+    // saber "quién soy en este hogar" (TaskScreenModel, CalendarSyncManager,
+    // HouseholdScreen) repite la misma resolución de identidad (+ getMembers)
+    // de forma independiente y podría, en teoría, no coincidir si la lista de
+    // miembros cambia entre una llamada y otra dentro de la misma sesión.
+    private val currentMemberMutex = Mutex()
+    private val currentMemberCache = mutableMapOf<String, String>()
+
     /** Json tolerante usado solo para parsear el body de error de Firestore, no el de dominio. */
     private val errorParsingJson = Json {
         ignoreUnknownKeys = true
@@ -238,6 +247,27 @@ class FirestoreRepository(
      */
     fun getLocalId(): String? =
         cachedLocalId ?: settingsStore.getGoogleUid() ?: settingsStore.getAnonymousUid()
+
+    /**
+     * True si el usuario actual es el owner del hogar (comparación de
+     * [getLocalId] con `household.ownerId`) — igual que `isTrusted(hid)` en
+     * `firestore.rules`. Se usaba duplicado en 3 sitios (`HouseholdScreen`,
+     * `TaskDetailScreen`, `RewardListScreen`), cada uno inyectando
+     * `FirestoreRepository` directamente para repetir la misma comparación.
+     * false ante cualquier fallo de red (best-effort, igual que el código que
+     * sustituye).
+     */
+    suspend fun isHouseholdOwner(householdId: String): Boolean {
+        val localId = getLocalId() ?: return false
+        val household = try {
+            getHousehold(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return false
+        }
+        return localId == household.ownerId
+    }
 
     /**
      * Todas las identidades posibles del usuario actual, sin duplicados:
@@ -617,6 +647,7 @@ class FirestoreRepository(
             withAuth()
         }
         taskCache.clearHousehold(householdId)
+        currentMemberCache.remove(householdId)
     }
 
     /**
@@ -652,6 +683,10 @@ class FirestoreRepository(
             } catch (_: Exception) {
                 // No crítico: si el doc ya no existe, seguimos.
             }
+        }
+        if (deleted.isNotEmpty()) {
+            taskCache.clearMembers(householdId)
+            currentMemberCache.remove(householdId)
         }
 
         val remaining = try {
@@ -808,6 +843,7 @@ class FirestoreRepository(
             }
 
         val id = extractDocId(response.name, "createMember")
+        taskCache.clearMembers(householdId)
 
         // Reclamar el perfil global del usuario (base del "perfilado creciente").
         if (userId != null) {
@@ -834,8 +870,28 @@ class FirestoreRepository(
      *
      * Garantiza que completar tareas nunca falle con "No se ha identificado al
      * miembro actual", sin importar cómo se haya navegado hasta la tarea.
+     *
+     * Memoizada por hogar (single source of truth, ver [currentMemberCache]):
+     * llamadas repetidas dentro de la misma sesión devuelven el mismo valor
+     * sin repetir la resolución de identidad ni la llamada a [getMembers].
+     * La entrada se invalida al abandonar el hogar ([leaveHousehold]) o
+     * borrarlo ([deleteHousehold]).
      */
     suspend fun resolveCurrentMember(householdId: String): String {
+        currentMemberCache[householdId]?.let { return it }
+        return currentMemberMutex.withLock {
+            currentMemberCache[householdId]?.let { return@withLock it }
+            val resolved = resolveCurrentMemberUncached(householdId)
+            // No se memoiza un resultado vacío: sería un fallo transitorio
+            // (getMembers y createMember fallaron), no una identidad real.
+            if (resolved.isNotBlank()) {
+                currentMemberCache[householdId] = resolved
+            }
+            resolved
+        }
+    }
+
+    private suspend fun resolveCurrentMemberUncached(householdId: String): String {
         // Asegura autenticación para que getLocalId() devuelva el UID real
         // (persistido) y no null en el primer arranque.
         ensureAuth()
@@ -894,6 +950,7 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        taskCache.clearMembers(householdId)
 
         return true
     }
@@ -912,6 +969,7 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        taskCache.clearMembers(householdId)
     }
 
     // ────────────────────────────────────────────────────────
@@ -1024,6 +1082,7 @@ class FirestoreRepository(
                     contentType(ContentType.Application.Json)
                     setBody(FirestoreDocument(mapOf("totalPoints" to FirestoreValue(integerValue = newTotal.toString()))))
                 }
+                taskCache.clearMembers(householdId)
                 return
             } catch (e: FirestoreException) {
                 val isConflict = e.code == "FAILED_PRECONDITION" || e.code == "ABORTED"
@@ -1129,6 +1188,7 @@ class FirestoreRepository(
                     contentType(ContentType.Application.Json)
                     setBody(FirestoreDocument(fields))
                 }
+                taskCache.clearMembers(householdId)
                 // Acuñar: el receptor gana puntos sin que se le resten al que agradece.
                 addMemberPoints(householdId, toMemberId, amount)
                 return AppreciateResult.Ok(
@@ -1352,6 +1412,7 @@ class FirestoreRepository(
         }.body()
 
         val id = extractDocId(response.name, "createTask")
+        taskCache.clearTasks(householdId)
         return TaskResponse(
             id = id, householdId = householdId, createdBy = createdBy,
             title = title, description = description, points = points,
@@ -1470,6 +1531,7 @@ class FirestoreRepository(
             }
             throw e
         }
+        taskCache.clearTasks(householdId)
 
         // 2. Add points to the member
         addMemberPoints(householdId, memberId, outcome.pointsAwarded)
@@ -1520,6 +1582,7 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        taskCache.clearTasks(householdId)
     }
 
     /** Save a task completion record to Firestore taskHistory subcollection. */
@@ -1613,6 +1676,7 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        taskCache.clearTasks(householdId)
 
         // 3. Reasignar el registro de historial de esa compleción para que las
         //    estadísticas (StatsScreen) sigan coherentes.
@@ -1753,6 +1817,14 @@ class FirestoreRepository(
         } catch (_: Exception) {
             emptyList()
         }
+        deleteAssignmentDocs(householdId, taskId, assignments)
+    }
+
+    private suspend fun deleteAssignmentDocs(
+        householdId: String,
+        taskId: String,
+        assignments: List<TaskAssignmentResponse>
+    ) {
         assignments.forEach { assignment ->
             try {
                 client.delete("$baseUrl/households/$householdId/tasks/$taskId/assignments/${assignment.id}") {
@@ -1764,6 +1836,52 @@ class FirestoreRepository(
                 // No crítico: si ya no existe, seguimos.
             }
         }
+    }
+
+    /**
+     * Sustituye las asignaciones de una tarea por unas nuevas (usado al editar
+     * la tarea desde [EditTaskScreen]).
+     *
+     * Mitigación de atomicidad (ver `docs/atomicidad-commit-pendiente.md`,
+     * sección `updateTask`): antes esta operación era `deleteAssignments` +
+     * `assignTask` como dos pasos independientes en el caller — si la creación
+     * de las nuevas asignaciones fallaba a mitad de camino (p. ej. tras crear
+     * la asignación de 2 de 3 miembros), la tarea ya se había quedado sin
+     * ninguna asignación previa, así que el resultado era "tarea con solo 2
+     * asignaciones" en el mejor caso o "sin ninguna" si fallaba en el primer
+     * miembro. Aquí se invierte el orden: se crean las asignaciones nuevas
+     * PRIMERO y solo se borran las antiguas si esa creación no lanzó. Si el
+     * paso de creación falla, la tarea conserva sus asignaciones previas
+     * (estado recuperable) en vez de quedarse sin ninguna. Sigue sin ser
+     * atómico de extremo a extremo (un fallo justo en el borrado de las
+     * antiguas puede dejar antiguas + nuevas duplicadas, un estado peor que
+     * "sin cambios" pero mejor que "sin asignaciones").
+     */
+    suspend fun replaceAssignments(
+        householdId: String,
+        taskId: String,
+        memberIds: List<String>,
+        mandatory: Boolean,
+        dueDate: Long,
+        taskTitle: String = ""
+    ): List<TaskAssignmentResponse> {
+        val previous = try {
+            getAssignments(householdId, taskId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        val created = if (memberIds.isNotEmpty()) {
+            assignTask(householdId, taskId, memberIds, mandatory, dueDate, taskTitle)
+        } else {
+            emptyList()
+        }
+
+        deleteAssignmentDocs(householdId, taskId, previous)
+
+        return created
     }
 
     /** Get all assignments across all tasks for a household (peticiones en paralelo). */
@@ -1873,6 +1991,7 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(taskFields))
         }
+        taskCache.clearTasks(householdId)
 
         // Handle recurrence: create next assignment for recurring tasks.
         // No exigir recurrenceDays.isNotEmpty(): esa lista solo se rellena para
@@ -2125,6 +2244,7 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        taskCache.clearTasks(householdId)
     }
 
     /**
@@ -2159,6 +2279,7 @@ class FirestoreRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        taskCache.clearTasks(householdId)
     }
 
     /**
@@ -2168,6 +2289,7 @@ class FirestoreRepository(
         client.delete("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
         }
+        taskCache.clearTasks(householdId)
     }
 
     private fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse {

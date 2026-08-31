@@ -84,8 +84,33 @@ class TaskCache(private val settings: Settings) {
      * pero posible) vería datos obsoletos.
      */
     fun clearHousehold(householdId: String) {
+        clearTasks(householdId)
+        clearHouseholdDoc(householdId)
+        clearMembers(householdId)
+    }
+
+    /**
+     * Invalida solo la caché de tareas de un hogar. Debe llamarse tras
+     * cualquier escritura que modifique tareas (crear/editar/borrar/completar)
+     * para que una lectura offline posterior no sirva el estado previo a la
+     * mutación en vez de fallar de forma visible (ver `getTasks`, que hace
+     * fallback a caché ante error de red).
+     */
+    fun clearTasks(householdId: String) {
         settings.remove("cache_tasks_$householdId")
+    }
+
+    /** Invalida solo la caché del documento de hogar. Ver [clearTasks]. */
+    fun clearHouseholdDoc(householdId: String) {
         settings.remove("cache_household_$householdId")
+    }
+
+    /**
+     * Invalida solo la caché de miembros de un hogar. Debe llamarse tras
+     * cualquier escritura que modifique miembros (puntos, rol, alta, baja).
+     * Ver [clearTasks].
+     */
+    fun clearMembers(householdId: String) {
         settings.remove("cache_members_$householdId")
     }
 }

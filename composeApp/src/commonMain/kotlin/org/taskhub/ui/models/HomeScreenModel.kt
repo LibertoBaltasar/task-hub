@@ -20,6 +20,7 @@ import org.taskhub.network.models.TaskResponse
 import org.taskhub.platform.updateWidgetPendingTasks
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
+import org.taskhub.storage.SettingsStore
 
 /**
  * ViewModel compartido para [HomeScreen].
@@ -30,8 +31,16 @@ import org.taskhub.storage.SavedHousehold
  */
 class HomeScreenModel(
     private val repo: FirestoreRepository,
-    private val householdStore: HouseholdStore
+    private val householdStore: HouseholdStore,
+    private val settingsStore: SettingsStore
 ) : ScreenModel {
+
+    /** True si debe mostrarse el prompt de login con Google (primer arranque, aún sin sesión). */
+    fun shouldShowGooglePrompt(): Boolean =
+        !settingsStore.hasSeenGooglePrompt() && !settingsStore.isGoogleLoggedIn()
+
+    /** Marca el prompt de Google como visto, para no volver a mostrarlo. */
+    fun markGooglePromptSeen() = settingsStore.setHasSeenGooglePrompt(true)
 
     private val _uiState = MutableStateFlow(HomeScreenUiState())
     val uiState: StateFlow<HomeScreenUiState> = _uiState.asStateFlow()
@@ -42,6 +51,9 @@ class HomeScreenModel(
      * conserva los demás ante cualquier fallo de red/servidor.
      */
     suspend fun reconcileHouseholds(): List<SavedHousehold> = repo.reconcileHouseholds(householdStore)
+
+    /** Hogares guardados localmente, sin reconciliar contra red. Ver [reconcileHouseholds]. */
+    fun getSavedHouseholds(): List<SavedHousehold> = householdStore.getSavedHouseholds()
 
     /**
      * Carga las tareas pendientes de todos los hogares y

@@ -12,45 +12,38 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import org.koin.compose.koinInject
-import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.models.MemberScreenModel
+import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.theme.*
-import kotlinx.coroutines.launch
 
-/** Contenido reutilizable del ranking (sin barra superior), para la pantalla combinada. */
+/**
+ * Contenido reutilizable del ranking (sin barra superior), para la pantalla
+ * combinada. Reutiliza el [MemberScreenModel] que ya crea [ExploreScreen] en
+ * vez de inyectar `FirestoreRepository` directamente — antes esta pantalla
+ * duplicaba su propia carga de miembros al margen de cualquier ScreenModel.
+ */
 @Composable
-internal fun RankingBody(householdId: String) {
-    val repo = koinInject<FirestoreRepository>()
+internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
-    var members by remember { mutableStateOf<List<MemberResponse>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    val coroutineScope = rememberCoroutineScope()
-
-    // ── Función de carga extraíble para poder reintentar ──
-    suspend fun loadRanking() {
-        isLoading = true
-        try {
-            val all = repo.getMembers(householdId)
-            // Sort by totalPoints descending (getMembers ya filtra miembros que abandonaron)
-            members = all.sortedByDescending { it.totalPoints }
-            errorMessage = null
-        } catch (e: Exception) {
-            errorMessage = e.message ?: s("ranking_error_loading")
-        }
-        isLoading = false
-    }
+    val uiState by memberModel.uiState.collectAsState()
 
     LaunchedEffect(householdId) {
-        loadRanking()
+        memberModel.loadMembers(householdId)
     }
+
+    // Sort by totalPoints descending (getMembers ya filtra miembros que abandonaron)
+    val members = (uiState as? MemberUiState.Success)?.members
+        ?.sortedByDescending { it.totalPoints }
+        ?: emptyList()
+    val isLoading = uiState is MemberUiState.Loading || uiState is MemberUiState.Idle
+    val errorMessage = (uiState as? MemberUiState.Error)?.message
 
     when {
         isLoading -> {
@@ -70,7 +63,7 @@ internal fun RankingBody(householdId: String) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("❌ $errorMessage", color = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.height(16.dp))
-                    Button(onClick = { coroutineScope.launch { loadRanking() } }) { Text(s("tasks_retry")) }
+                    Button(onClick = { memberModel.loadMembers(householdId) }) { Text(s("tasks_retry")) }
                 }
             }
         }

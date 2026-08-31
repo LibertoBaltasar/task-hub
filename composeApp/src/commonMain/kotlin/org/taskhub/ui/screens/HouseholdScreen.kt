@@ -15,7 +15,6 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.koin.compose.koinInject
-import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.MemberResponse
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -53,7 +52,6 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val memberModel = koinScreenModel<MemberScreenModel>()
         val notificationModel = koinScreenModel<NotificationScreenModel>()
-        val repo = koinInject<FirestoreRepository>()
         val calendarSync = koinInject<CalendarSyncManager>()
         val householdState by householdModel.uiState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
@@ -126,7 +124,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         // controles de admin para la persona equivocada).
         var currentMemberId by remember { mutableStateOf("") }
         LaunchedEffect(householdId) {
-            currentMemberId = repo.resolveCurrentMember(householdId)
+            currentMemberId = householdModel.resolveCurrentMember(householdId)
         }
         val myMember = (memberState as? MemberUiState.Success)?.members?.firstOrNull { it.id == currentMemberId }
         // El owner del hogar (quien lo creó) es siempre "de confianza" para
@@ -135,7 +133,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         // crear su propio perfil en CreateProfileScreen. Sin esto, un creador
         // que eligiera "Miembro" para sí mismo dejaba el hogar sin nadie con
         // controles de admin visibles en la UI (bloqueo permanente).
-        val currentUserId = repo.getLocalId()
+        val currentUserId = householdModel.getLocalId()
         val ownerHousehold = (householdState as? HouseholdUiState.Success)?.household
         val isAdmin = myMember?.role == "admin" ||
             (currentUserId != null && ownerHousehold != null && currentUserId == ownerHousehold.ownerId)
@@ -249,7 +247,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         }
 
         appreciateTarget?.let { target ->
-            val remaining = myMember?.let { repo.appreciationRemaining(it) } ?: 0
+            val remaining = myMember?.let { householdModel.appreciationRemaining(it) } ?: 0
             AppreciateDialog(
                 target = target,
                 s = s,

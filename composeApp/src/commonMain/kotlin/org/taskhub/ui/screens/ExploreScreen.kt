@@ -18,6 +18,7 @@ import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
+import org.taskhub.ui.models.StatsScreenModel
 
 /**
  * Pantalla combinada de un hogar: agrupa Estadísticas, Ranking y Recompensas
@@ -33,6 +34,7 @@ data class ExploreScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val memberModel = koinScreenModel<MemberScreenModel>()
+        val statsModel = koinScreenModel<StatsScreenModel>()
         var selectedTab by remember { mutableStateOf(0) }
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -66,8 +68,8 @@ data class ExploreScreen(
                 }
 
                 when (selectedTab) {
-                    0 -> StatsBody(householdId, memberId)
-                    1 -> RankingBody(householdId)
+                    0 -> StatsBody(householdId, memberId, statsModel)
+                    1 -> RankingBody(householdId, memberModel)
                     2 -> RewardsBody(householdId, memberModel)
                 }
             }

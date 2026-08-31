@@ -7,7 +7,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.taskhub.network.FIRESTORE_GONE_MESSAGE
+import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.network.models.RewardRedemption
@@ -73,6 +76,12 @@ class MemberScreenModel(
     private val _rewardActionState = MutableStateFlow<RewardActionState>(RewardActionState.Idle)
     val rewardActionState: StateFlow<RewardActionState> = _rewardActionState.asStateFlow()
 
+    /** Ver [FirestoreRepository.isHouseholdOwner]. */
+    suspend fun isHouseholdOwner(householdId: String): Boolean = repo.isHouseholdOwner(householdId)
+
+    /** UID del usuario actual. Ver [FirestoreRepository.getLocalId]. */
+    val localId: String? get() = repo.getLocalId()
+
     fun loadMembers(householdId: String) {
         screenModelScope.launch {
             _uiState.value = MemberUiState.Loading
@@ -81,6 +90,10 @@ class MemberScreenModel(
                 _uiState.value = MemberUiState.Success(members)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: FirestoreException) {
+                _uiState.value = MemberUiState.Error(
+                    if (e.isGoneOrForbidden) FIRESTORE_GONE_MESSAGE else e.message
+                )
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
                     e.message ?: "Error al cargar miembros"
@@ -178,12 +191,12 @@ class MemberScreenModel(
         title: String,
         description: String,
         cost: Int,
-        icon: String,
-        createdBy: String
+        icon: String
     ) {
         screenModelScope.launch {
             _rewardActionState.value = RewardActionState.Loading
             try {
+                val createdBy = repo.getLocalId() ?: ""
                 repo.createReward(householdId, title, description, cost, icon, createdBy)
                 _rewardActionState.value = RewardActionState.Success()
                 buzz(HapticKind.SUCCESS)

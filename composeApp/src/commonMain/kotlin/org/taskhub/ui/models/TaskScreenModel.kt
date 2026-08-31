@@ -8,7 +8,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.taskhub.network.FIRESTORE_GONE_MESSAGE
+import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
@@ -150,6 +153,22 @@ class TaskScreenModel(
         if (settingsStore.isVibrationEnabled()) vibrate(kind)
     }
 
+    /** Ver [FirestoreRepository.isHouseholdOwner]. */
+    suspend fun isHouseholdOwner(householdId: String): Boolean = repo.isHouseholdOwner(householdId)
+
+    /** Ver [FirestoreRepository.getAssignments]. Usado por [EditTaskScreen] para precargar asignaciones. */
+    suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> =
+        repo.getAssignments(householdId, taskId)
+
+    /** Ver [SettingsStore.hasGoogleLinked]. */
+    fun hasGoogleLinked(): Boolean = settingsStore.hasGoogleLinked()
+
+    /** Ver [SettingsStore.isCalendarSyncEnabled]. */
+    fun isCalendarSyncEnabled(): Boolean = settingsStore.isCalendarSyncEnabled()
+
+    /** Ver [SettingsStore.setCalendarSyncEnabled]. */
+    fun setCalendarSyncEnabled(enabled: Boolean) = settingsStore.setCalendarSyncEnabled(enabled)
+
     private val _listState = MutableStateFlow<TaskListUiState>(TaskListUiState.Idle)
     val listState: StateFlow<TaskListUiState> = _listState.asStateFlow()
 
@@ -238,6 +257,12 @@ class TaskScreenModel(
                 // (ver `loadTasksJob?.cancel()` arriba) y puede sobrescribir el
                 // resultado correcto de la carga nueva con un "Error" obsoleto.
                 throw e
+            } catch (e: FirestoreException) {
+                // No es un problema de conexión: no marcar offline (evita confundir
+                // "sin acceso" con "sin conexión", ver HouseholdScreenModel.loadHousehold).
+                _listState.value = TaskListUiState.Error(
+                    if (e.isGoneOrForbidden) FIRESTORE_GONE_MESSAGE else e.message
+                )
             } catch (e: Exception) {
                 _isOffline.value = true
                 _listState.value = TaskListUiState.Error(
@@ -643,6 +668,10 @@ class TaskScreenModel(
                 _myAssignment.value = assignments.find { it.memberId == myMemberId }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: FirestoreException) {
+                _detailState.value = TaskDetailUiState.Error(
+                    if (e.isGoneOrForbidden) FIRESTORE_GONE_MESSAGE else e.message
+                )
             } catch (e: Exception) {
                 _detailState.value = TaskDetailUiState.Error(
                     e.message ?: "Error al cargar tarea"
@@ -724,25 +753,26 @@ class TaskScreenModel(
                     dueDate = dueDate
                 )
 
-                // Sincronizar asignaciones: borrar las existentes y reasignar.
-                // Si no se seleccionó a nadie, se asigna a todos (misma semántica
-                // que al crear).
+                // Sincronizar asignaciones: crear las nuevas antes de borrar las
+                // antiguas (ver FirestoreRepository.replaceAssignments — deja la
+                // tarea con asignaciones previas en vez de sin ninguna si la
+                // creación falla a mitad de camino). Si no se seleccionó a nadie,
+                // se asigna a todos (misma semántica que al crear).
                 syncCalendarOnUnassigned(householdId, taskId)
-                repo.deleteAssignments(householdId, taskId)
                 val membersToAssign = if (memberIds.isNotEmpty()) {
                     memberIds
                 } else {
                     repo.getMembers(householdId).map { it.id }
                 }
-                if (membersToAssign.isNotEmpty()) {
-                    val created = repo.assignTask(
-                        householdId = householdId,
-                        taskId = taskId,
-                        memberIds = membersToAssign,
-                        mandatory = mandatory,
-                        dueDate = dueDate,
-                        taskTitle = title
-                    )
+                val created = repo.replaceAssignments(
+                    householdId = householdId,
+                    taskId = taskId,
+                    memberIds = membersToAssign,
+                    mandatory = mandatory,
+                    dueDate = dueDate,
+                    taskTitle = title
+                )
+                if (created.isNotEmpty()) {
                     syncCalendarOnAssigned(householdId, created)
                 }
 

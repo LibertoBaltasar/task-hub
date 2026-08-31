@@ -19,8 +19,6 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.koin.compose.koinInject
-import org.taskhub.network.FirestoreRepository
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
@@ -38,7 +36,6 @@ data class CreateRewardScreen(val householdId: String) : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val memberModel = koinScreenModel<MemberScreenModel>()
         val actionState by memberModel.rewardActionState.collectAsState()
-        val repo = koinInject<FirestoreRepository>()
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
@@ -282,14 +279,12 @@ data class CreateRewardScreen(val householdId: String) : Screen {
 
                     Button(
                         onClick = {
-                            val localId = repo.getLocalId() ?: ""
                             memberModel.createReward(
                                 householdId = householdId,
                                 title = title.trim(),
                                 description = description.trim(),
                                 cost = cost,
-                                icon = selectedIcon,
-                                createdBy = localId
+                                icon = selectedIcon
                             )
                         },
                         modifier = Modifier.fillMaxWidth(),

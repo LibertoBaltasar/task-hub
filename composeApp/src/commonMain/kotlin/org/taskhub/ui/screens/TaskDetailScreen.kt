@@ -25,10 +25,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
-import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
-import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.DestructiveConfirmDialog
@@ -53,9 +51,7 @@ data class TaskDetailScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
-        val settingsStore = koinInject<SettingsStore>()
         val authManager = koinInject<GoogleAuthManager>()
-        val repo = koinInject<FirestoreRepository>()
         val coroutineScope = rememberCoroutineScope()
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -77,14 +73,10 @@ data class TaskDetailScreen(
         // perfil — ver el mismo fix en HouseholdScreen.kt.
         var isOwner by remember { mutableStateOf(false) }
         LaunchedEffect(householdId) {
-            try {
-                val household = repo.getHousehold(householdId)
-                val uid = repo.getLocalId()
-                isOwner = uid != null && uid == household.ownerId
-            } catch (_: Exception) {
-                // best-effort: si falla, isOwner se queda en false (solo se
-                // pierde el atajo de "owner", el rol "admin" normal sigue igual)
-            }
+            // best-effort: si falla, isOwner se queda en false (solo se pierde
+            // el atajo de "owner", el rol "admin" normal sigue igual) — ver
+            // FirestoreRepository.isHouseholdOwner.
+            isOwner = model.isHouseholdOwner(householdId)
         }
 
         LaunchedEffect(taskId) {
@@ -155,8 +147,8 @@ data class TaskDetailScreen(
 
                     is TaskDetailUiState.Success -> {
                         val memberMap = state.members.associateBy { it.id }
-                        val isGoogleLinked = settingsStore.hasGoogleLinked()
-                        val isCalendarSyncEnabled = settingsStore.isCalendarSyncEnabled()
+                        val isGoogleLinked = model.hasGoogleLinked()
+                        val isCalendarSyncEnabled = model.isCalendarSyncEnabled()
                         // Reasignar quién hizo una tarea mueve puntos entre miembros:
                         // gateado a admin/owner tanto aquí como en firestore.rules
                         // (ver el `update` de households/{hid}/tasks/{tid}).
@@ -215,7 +207,7 @@ data class TaskDetailScreen(
                                     val linked = authManager.linkCalendar()
                                     isLinkingCalendar = false
                                     if (linked) {
-                                        settingsStore.setCalendarSyncEnabled(true)
+                                        model.setCalendarSyncEnabled(true)
                                     } else {
                                         // Antes fallaba en silencio: solo se apagaba el
                                         // spinner y volvía a "No vinculado" sin ninguna
@@ -228,7 +220,7 @@ data class TaskDetailScreen(
                                 }
                             },
                             onEnableCalendarSync = {
-                                settingsStore.setCalendarSyncEnabled(true)
+                                model.setCalendarSyncEnabled(true)
                                 model.loadTaskDetail(householdId, taskId)
                             }
                         )

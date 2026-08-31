@@ -7,7 +7,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.taskhub.network.FIRESTORE_GONE_MESSAGE
+import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.NotificationResponse
 
 sealed class NotificationUiState {
@@ -43,6 +46,10 @@ class NotificationScreenModel(
                 _uiState.value = NotificationUiState.Success(memberNotifications, unread)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: FirestoreException) {
+                _uiState.value = NotificationUiState.Error(
+                    if (e.isGoneOrForbidden) FIRESTORE_GONE_MESSAGE else e.message
+                )
             } catch (e: Exception) {
                 _uiState.value = NotificationUiState.Error(
                     e.message ?: "Error al cargar notificaciones"

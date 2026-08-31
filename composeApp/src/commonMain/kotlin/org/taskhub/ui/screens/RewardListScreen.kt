@@ -16,7 +16,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.koin.compose.koinInject
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.components.BadgeTone
@@ -60,24 +59,18 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
         memberModel.loadMembers(householdId)
     }
 
-    val repo = koinInject<org.taskhub.network.FirestoreRepository>()
-    val localId = repo.getLocalId()
-
     // El owner del hogar es siempre "de confianza" para gestionar recompensas,
     // igual que isTrusted(hid) en firestore.rules — ver mismo fix en
     // HouseholdScreen.kt/TaskDetailScreen.kt.
     var isOwner by remember { mutableStateOf(false) }
     LaunchedEffect(householdId) {
-        try {
-            val household = repo.getHousehold(householdId)
-            isOwner = localId != null && localId == household.ownerId
-        } catch (_: Exception) {
-        }
+        isOwner = memberModel.isHouseholdOwner(householdId)
     }
 
     LaunchedEffect(memberState) {
         if (memberState is MemberUiState.Success) {
             val members = (memberState as MemberUiState.Success).members
+            val localId = memberModel.localId
             val myMember = members.find { it.userId == localId }
             isAdmin = myMember?.role == "admin" || isOwner
             currentMemberId = myMember?.id ?: ""
