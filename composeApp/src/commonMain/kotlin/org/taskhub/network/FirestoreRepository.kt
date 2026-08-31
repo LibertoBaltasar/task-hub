@@ -16,6 +16,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
+// NOTA: FormDataContent/Parameters (refresh de token) y errorParsingJson/HttpClient
+// ahora viven en FirestoreClient (ver fase 1 del refactor, docs/refactor-arquitectura-2026-08-31.md).
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Instant
@@ -58,24 +60,26 @@ class FirestoreRepository(
     private val projectId: String = "task-hub-62f98",
     private val apiKey: String = DEFAULT_API_KEY,
     private val taskCache: TaskCache,
-    private val settingsStore: SettingsStore
+    private val settingsStore: SettingsStore,
+    private val firestoreClient: FirestoreClient = FirestoreClient(apiKey, settingsStore)
 ) {
     private val baseUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
-    private val authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
-    private val secureTokenUrl = "https://securetoken.googleapis.com/v1/token"
 
-    // ── Auth state (in-memory, regenerated on app restart — fine for anonymous) ──
-    @Volatile
-    private var bearerToken: String? = null
-    @Volatile
-    private var tokenExpiry: Long = 0L  // epoch millis when token expires (minus safety margin)
-    @Volatile
-    private var cachedLocalId: String? = null  // anonymous user ID — persists across sessions via settings
-    // Serializa ensureAuth(): sin esto, ráfagas de llamadas paralelas (varias
-    // pantallas cargando datos a la vez tras un cold start) pasan todas el
-    // check "bearerToken == null" antes de que la primera termine de escribirlo,
-    // disparando N altas/refrescos de token concurrentes.
-    private val authMutex = Mutex()
+    // ── Cliente HTTP + auth de bajo nivel (ver FirestoreClient, fase 1 del
+    // refactor). `client` se mantiene como alias local para no tocar los ~60
+    // call-sites internos (`client.get/post/patch/delete`) de este archivo.
+    private val client = firestoreClient.client
+
+    // ── Repos de dominio (fase 2 del refactor) — FirestoreRepository actúa
+    // como facade temporal mientras dura la migración (fase 3).
+    private val notificationRepository = NotificationRepository(baseUrl, firestoreClient)
+    private val rewardsRepository = RewardsRepository(baseUrl, firestoreClient)
+    private val taskRepository = TaskRepository(baseUrl, firestoreClient, taskCache, notificationRepository)
+    private val householdRepository = HouseholdRepository(baseUrl, firestoreClient, taskCache) { getLocalId() }
+
+    // Reintentos ante conflicto de concurrencia optimista (ver `addMemberPoints`/
+    // `addMemberAchievement`) — alias local, mismo motivo que `client` arriba.
+    private val OPTIMISTIC_WRITE_MAX_RETRIES = FirestoreClient.OPTIMISTIC_WRITE_MAX_RETRIES
 
     // ── Miembro actual (single source of truth, ver resolveCurrentMember) ──
     // Memoiza el resultado por hogar: sin esto, cada ScreenModel que necesita
@@ -86,159 +90,15 @@ class FirestoreRepository(
     private val currentMemberMutex = Mutex()
     private val currentMemberCache = mutableMapOf<String, String>()
 
-    /** Json tolerante usado solo para parsear el body de error de Firestore, no el de dominio. */
-    private val errorParsingJson = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
-
-    private val client = HttpClient {
-        install(ContentNegotiation) {
-            json(Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-                encodeDefaults = false
-            })
-        }
-        install(HttpTimeout) {
-            connectTimeoutMillis = 15_000
-            requestTimeoutMillis = 30_000
-        }
-        // Intercepta CUALQUIER respuesta de error (>=400) antes de que se parsee
-        // como documento — si no, un body de error de Firestore se convierte en
-        // un FirestoreDocumentResponse vacío (por ignoreUnknownKeys) y el fallo
-        // real (p.ej. PERMISSION_DENIED) queda enmascarado tras "missing document name".
-        HttpResponseValidator {
-            validateResponse { response ->
-                if (response.status.value >= 400) {
-                    val bodyText = runCatching { response.bodyAsText() }.getOrDefault("")
-                    val errorBody = runCatching {
-                        errorParsingJson.decodeFromString<FirestoreErrorEnvelope>(bodyText)
-                    }.getOrNull()?.error
-                    val message = errorBody?.message?.takeIf { it.isNotBlank() }
-                        ?: bodyText.takeIf { it.isNotBlank() }
-                        ?: "Firestore respondió ${response.status.value} sin más detalles"
-                    throw FirestoreException(
-                        statusCode = response.status.value,
-                        code = errorBody?.status,
-                        message = message
-                    )
-                }
-            }
-        }
-    }
-
     // ────────────────────────────────────────────────────────
     //  Auth
     // ────────────────────────────────────────────────────────
 
     /**
-     * Ensures we have a valid anonymous auth token, signing up anonymously if needed.
-     * Called lazily on first request. Token is cached in memory and refreshed
-     * when within 5 minutes of expiry.
-     *
-     * POST https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=API_KEY
-     * Body: {"returnSecureToken":true}
+     * Ver [FirestoreClient.ensureAuth] — delegado tal cual (wrapper para no
+     * tocar los call-sites internos `ensureAuth()` de este archivo).
      */
-    private suspend fun ensureAuth() = authMutex.withLock {
-        val now = Clock.System.now().toEpochMilliseconds()
-        if (bearerToken != null && now < tokenExpiry) return@withLock
-
-        // 1) Restaurar sesión de Google si existe (UID estable del login Google).
-        val googleRefresh = settingsStore.getGoogleRefreshToken()
-        if (settingsStore.getGoogleUid() != null && googleRefresh != null) {
-            try {
-                val refreshed = refreshFirebaseToken(googleRefresh)
-                bearerToken = refreshed.idToken
-                cachedLocalId = refreshed.userId
-                tokenExpiry = refreshed.tokenExpiry
-                settingsStore.setGoogleRefreshToken(refreshed.refreshToken ?: googleRefresh)
-                return@withLock
-            } catch (_: Exception) {
-                // Sesión de Google caducada → cae al flujo anónimo.
-                settingsStore.clearGoogleAuth()
-            }
-        }
-
-        // 2) Restaurar la identidad anónima persistida (mismo UID entre reinicios).
-        val savedRefresh = settingsStore.getAnonymousRefreshToken()
-        if (savedRefresh != null) {
-            try {
-                val refreshed = refreshFirebaseToken(savedRefresh)
-                bearerToken = refreshed.idToken
-                cachedLocalId = refreshed.userId
-                tokenExpiry = refreshed.tokenExpiry
-                settingsStore.saveAnonymousAuth(refreshed.refreshToken ?: savedRefresh, refreshed.userId)
-                return@withLock
-            } catch (_: Exception) {
-                // Token caducado/revocado → alta anónima nueva.
-                settingsStore.clearAnonymousAuth()
-            }
-        }
-
-        // 3) Alta anónima nueva (sin email/password) y persistir el refresh token.
-        val response: FirebaseAuthResponse = client.post("$authUrl?key=$apiKey") {
-            contentType(ContentType.Application.Json)
-            setBody(FirebaseAuthRequest(returnSecureToken = true))
-        }.body()
-
-        val idToken = response.idToken
-        val localId = response.localId
-        val expiresIn = response.expiresIn?.toLongOrNull()
-        val refreshToken = response.refreshToken
-        if (idToken.isNullOrBlank() || localId.isNullOrBlank() || expiresIn == null || refreshToken.isNullOrBlank()) {
-            throw IllegalStateException(
-                "Firebase anonymous auth devolvió una respuesta incompleta " +
-                "(sin idToken/localId/expiresIn/refreshToken). Verifica la API key del proyecto."
-            )
-        }
-
-        bearerToken = idToken
-        cachedLocalId = localId
-        // expiresIn is in seconds. Refresh 5 minutes before actual expiry.
-        tokenExpiry = now + (expiresIn * 1000) - 300_000
-        settingsStore.saveAnonymousAuth(refreshToken, localId)
-    }
-
-    /**
-     * Renueva un idToken de Firebase Auth usando su refresh token, sin crear una
-     * identidad nueva. Devuelve el MISMO UID (user_id), de modo que el usuario
-     * (anónimo o de Google) conserva sus datos entre reinicios y reinstalaciones.
-     *
-     * Endpoint: POST https://securetoken.googleapis.com/v1/token?key=API_KEY
-     * Body (form-urlencoded): grant_type=refresh_token&refresh_token=...
-     */
-    private suspend fun refreshFirebaseToken(refreshToken: String): RefreshedAuth {
-        val response: TokenRefreshResponse = client.post("$secureTokenUrl?key=$apiKey") {
-            contentType(ContentType.Application.FormUrlEncoded)
-            setBody(FormDataContent(Parameters.build {
-                append("grant_type", "refresh_token")
-                append("refresh_token", refreshToken)
-            }))
-        }.body()
-
-        val idToken = response.id_token
-        val userId = response.user_id
-        val expiresIn = response.expires_in?.toLongOrNull()
-        if (idToken.isNullOrBlank() || userId.isNullOrBlank() || expiresIn == null) {
-            throw IllegalStateException("Renovación del token de Firebase falló (respuesta incompleta)")
-        }
-
-        val now = Clock.System.now().toEpochMilliseconds()
-        return RefreshedAuth(
-            idToken = idToken,
-            userId = userId,
-            tokenExpiry = now + (expiresIn * 1000) - 300_000,
-            refreshToken = response.refresh_token
-        )
-    }
-
-    private data class RefreshedAuth(
-        val idToken: String,
-        val userId: String,
-        val tokenExpiry: Long,
-        val refreshToken: String? = null
-    )
+    private suspend fun ensureAuth() = firestoreClient.ensureAuth()
 
     /**
      * Devuelve el UID del usuario actual (anónimo o Google). Cae al UID persistido
@@ -246,7 +106,7 @@ class FirestoreRepository(
      * de la primera llamada de red (p.ej. al crear el miembro "Yo" del Personal).
      */
     fun getLocalId(): String? =
-        cachedLocalId ?: settingsStore.getGoogleUid() ?: settingsStore.getAnonymousUid()
+        firestoreClient.cachedLocalId ?: settingsStore.getGoogleUid() ?: settingsStore.getAnonymousUid()
 
     /**
      * True si el usuario actual es el owner del hogar (comparación de
@@ -281,7 +141,7 @@ class FirestoreRepository(
         listOfNotNull(
             settingsStore.getGoogleUid(),
             settingsStore.getAnonymousUid(),
-            cachedLocalId
+            firestoreClient.cachedLocalId
         ).distinct()
 
     /**
@@ -314,9 +174,7 @@ class FirestoreRepository(
         }
 
         val now = Clock.System.now().toEpochMilliseconds()
-        bearerToken = idToken
-        cachedLocalId = localId
-        tokenExpiry = now + (expiresIn * 1000) - 300_000
+        firestoreClient.setAuthState(idToken, localId, now + (expiresIn * 1000) - 300_000)
 
         // Persistir la sesión de Google para restaurarla en próximos arranques
         // (el refresh token permite renovar el idToken sin re-login).
@@ -417,71 +275,26 @@ class FirestoreRepository(
     }
 
     /**
-     * Adds Authorization header to a request builder if we already have a token.
-     * Calls [ensureAuth] first so the token is always fresh.
+     * Ver [FirestoreClient.withAuth]/[FirestoreClient.updateMaskFieldPaths] —
+     * delegados tal cual (wrappers para no tocar los ~60 call-sites internos
+     * de este archivo que ya invocan `withAuth()`/`updateMaskFieldPaths(...)`
+     * a secas dentro de un bloque `client.get/post/patch/delete { ... }`).
      */
-    private suspend fun HttpRequestBuilder.withAuth() {
-        ensureAuth()
-        bearerToken?.let { header("Authorization", "Bearer $it") }
-    }
+    private suspend fun HttpRequestBuilder.withAuth() = with(firestoreClient) { withAuth() }
 
-    /**
-     * Añade `updateMask.fieldPaths` como parámetros de query repetidos (uno por
-     * campo), tal y como exige la API REST de Firestore. Un único string con
-     * los campos unidos por comas ("a,b,c") es inválido y produce el error
-     * "Invalid property path" — Firestore espera múltiples pares
-     * `updateMask.fieldPaths=a&updateMask.fieldPaths=b&updateMask.fieldPaths=c`.
-     */
-    private fun HttpRequestBuilder.updateMaskFieldPaths(vararg fields: String) {
-        fields.forEach { parameter("updateMask.fieldPaths", it) }
-    }
+    private fun HttpRequestBuilder.updateMaskFieldPaths(vararg fields: String) =
+        with(firestoreClient) { updateMaskFieldPaths(*fields) }
 
-    private fun HttpRequestBuilder.updateMaskFieldPaths(fields: Collection<String>) {
-        fields.forEach { parameter("updateMask.fieldPaths", it) }
-    }
+    private fun HttpRequestBuilder.updateMaskFieldPaths(fields: Collection<String>) =
+        with(firestoreClient) { updateMaskFieldPaths(fields) }
 
     // ────────────────────────────────────────────────────────
     //  Households
     // ────────────────────────────────────────────────────────
 
     /** Create a household (auto-generated doc ID). Requires auth (write). */
-    suspend fun createHousehold(name: String, isPersonal: Boolean = false): HouseholdResponse {
-        ensureAuth()
-        val now = Clock.System.now().toEpochMilliseconds()
-        val inviteCode = if (isPersonal) "PERSONAL" else generateInviteCode()
-        val ownerId = getLocalId() ?: throw IllegalStateException("No autenticado")
-
-        val fields = mapOf(
-            "name" to FirestoreValue(stringValue = name),
-            "inviteCode" to FirestoreValue(stringValue = inviteCode),
-            "isPersonal" to FirestoreValue(booleanValue = isPersonal),
-            "ownerId" to FirestoreValue(stringValue = ownerId),
-            "createdAt" to FirestoreValue(integerValue = now.toString()),
-            "updatedAt" to FirestoreValue(integerValue = now.toString())
-        )
-
-        val response: FirestoreDocumentResponse = client.post("$baseUrl/households") {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
-
-        val id = extractDocId(response.name, "createHousehold")
-
-        // Publicar el mapa código → hogar para poder unirse sin listar hogares.
-        if (!isPersonal) {
-            try {
-                createInvite(inviteCode, id)
-            } catch (_: Exception) {
-                // No crítico: sin invite, otros no pueden unirse por código.
-            }
-        }
-
-        val household = HouseholdResponse(id, name, inviteCode, now, now, isPersonal, ownerId)
-        // Cache immediately so getHousehold has it on first load
-        taskCache.cacheHousehold(household)
-        return household
-    }
+    suspend fun createHousehold(name: String, isPersonal: Boolean = false): HouseholdResponse =
+        householdRepository.createHousehold(name, isPersonal)
 
     /**
      * Obtiene (o crea) el espacio Personal del usuario actual con un ID DETERMINISTA
@@ -493,78 +306,10 @@ class FirestoreRepository(
      * así que tareas/miembros/puntos se comparten automáticamente. En modo anónimo
      * (sin cuenta) sigue siendo por-dispositivo, como antes.
      */
-    suspend fun getOrCreatePersonalHousehold(): HouseholdResponse {
-        ensureAuth()
-        val uid = getLocalId() ?: throw IllegalStateException("No autenticado")
-        val personalId = personalHouseholdId(uid)
-
-        // 1) Si ya existe (lo creó este u otro dispositivo con la misma cuenta),
-        //    devolverlo tal cual y refrescar la caché local.
-        val existing = try {
-            getHousehold(personalId)
-        } catch (_: Exception) {
-            null
-        }
-        if (existing != null) return existing
-
-        // 2) No existe → crearlo en el ID determinista.
-        val now = Clock.System.now().toEpochMilliseconds()
-        val fields = mapOf(
-            "name" to FirestoreValue(stringValue = "Personal"),
-            "inviteCode" to FirestoreValue(stringValue = "PERSONAL"),
-            "isPersonal" to FirestoreValue(booleanValue = true),
-            "ownerId" to FirestoreValue(stringValue = uid),
-            "createdAt" to FirestoreValue(integerValue = now.toString()),
-            "updatedAt" to FirestoreValue(integerValue = now.toString())
-        )
-        val response: FirestoreDocumentResponse = try {
-            client.post("$baseUrl/households") {
-                withAuth()
-                parameter("documentId", personalId)
-                contentType(ContentType.Application.Json)
-                setBody(FirestoreDocument(fields))
-            }.body()
-        } catch (e: FirestoreException) {
-            // Carrera entre dispositivos: el mismo usuario abrió la app en dos
-            // sitios a la vez y ambos intentaron crear el mismo ID determinista.
-            // El que llega segundo recibe ALREADY_EXISTS: no es un fallo real,
-            // basta con leer el hogar que el otro dispositivo acaba de crear.
-            if (e.code == "ALREADY_EXISTS" || e.statusCode == 409) {
-                return getHousehold(personalId)
-            }
-            throw e
-        }
-
-        val household = HouseholdResponse(
-            id = extractDocId(response.name, "getOrCreatePersonalHousehold"),
-            name = "Personal",
-            inviteCode = "PERSONAL",
-            createdAt = now,
-            updatedAt = now,
-            isPersonal = true,
-            ownerId = uid
-        )
-        taskCache.cacheHousehold(household)
-        return household
-    }
+    suspend fun getOrCreatePersonalHousehold(): HouseholdResponse = householdRepository.getOrCreatePersonalHousehold()
 
     /** ID determinista del espacio Personal para una identidad (UID) dada. */
-    fun personalHouseholdId(uid: String): String = "personal_$uid"
-
-    /**
-     * Escribe invites/{code} → { householdId }. Las reglas de Firestore permiten
-     * resolverlo por código (get) pero no listar la colección, de modo que el
-     * código actúa como secreto compartido fuera de banda.
-     */
-    private suspend fun createInvite(code: String, householdId: String) {
-        val fields = mapOf("householdId" to FirestoreValue(stringValue = householdId))
-        client.post("$baseUrl/invites") {
-            withAuth()
-            parameter("documentId", code)
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-    }
+    fun personalHouseholdId(uid: String): String = householdRepository.personalHouseholdId(uid)
 
     /**
      * Get a household by id. Falls back to local cache on network/5xx failures.
@@ -574,71 +319,18 @@ class FirestoreRepository(
      * would keep showing a "ghost" household forever). Callers that need to prune
      * local state should catch [FirestoreException] and check [FirestoreException.statusCode].
      */
-    suspend fun getHousehold(id: String): HouseholdResponse {
-        return try {
-            val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$id") {
-                tryAuthOrApiKey()
-            }.body()
-
-            val household = toHouseholdResponse(response, knownId = id)
-            taskCache.cacheHousehold(household)
-            household
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: FirestoreException) {
-            if (e.statusCode == 404 || e.statusCode == 403) throw e
-            taskCache.getCachedHousehold(id) ?: throw e
-        } catch (e: Exception) {
-            taskCache.getCachedHousehold(id) ?: throw e
-        }
-    }
+    suspend fun getHousehold(id: String): HouseholdResponse = householdRepository.getHousehold(id)
 
     /**
      * Reconcilia los hogares guardados localmente en [store] contra Firestore
-     * (fuente de verdad). Poda (borra de [store]) los que ya no existen o a los
-     * que se perdió acceso (404/403 — señal inequívoca). Ante fallos de red o de
-     * servidor (5xx, timeouts, sin conexión) CONSERVA la entrada: no podar nunca
-     * por un fallo transitorio, solo por una confirmación explícita de Firestore.
-     *
-     * Devuelve la lista de hogares que sobreviven la reconciliación.
+     * (fuente de verdad). Ver [HouseholdRepository.reconcileHouseholds] para el
+     * detalle de la política de poda (movida tal cual, sin cambios).
      */
-    suspend fun reconcileHouseholds(store: HouseholdStore): List<SavedHousehold> {
-        val saved = store.getSavedHouseholds()
-        return saved.filter { h ->
-            try {
-                getHousehold(h.id)
-                true
-            } catch (e: FirestoreException) {
-                if (e.statusCode == 404 || e.statusCode == 403) {
-                    store.removeHousehold(h.id)
-                    taskCache.clearHousehold(h.id)
-                    false
-                } else {
-                    true // 5xx u otro error tipado de Firestore: no es inequívoco, conservar
-                }
-            } catch (_: Exception) {
-                true // red/timeout/etc: conservar
-            }
-        }
-    }
+    suspend fun reconcileHouseholds(store: HouseholdStore): List<SavedHousehold> =
+        householdRepository.reconcileHouseholds(store)
 
     /** Batch-fetch multiple households by their document IDs (en paralelo). */
-    suspend fun getHouseholds(ids: List<String>): List<HouseholdResponse> {
-        if (ids.isEmpty()) return emptyList()
-        return coroutineScope {
-            ids.map { id ->
-                async {
-                    try {
-                        getHousehold(id)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        null // stale ID from local store — skip
-                    }
-                }
-            }.awaitAll().filterNotNull()
-        }
-    }
+    suspend fun getHouseholds(ids: List<String>): List<HouseholdResponse> = householdRepository.getHouseholds(ids)
 
     /** Delete a household document. Does NOT cascade-delete subcollections (members, tasks)
      *  — those become orphaned but harmless. Requires auth (write). */
@@ -711,18 +403,7 @@ class FirestoreRepository(
     }
 
     /** Find a household by invite code. Uses the invites/{code} map (no list). */
-    suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
-        // 1) Resolver código → householdId vía invites/{code}.
-        val inviteResponse: FirestoreDocumentResponse = client.get("$baseUrl/invites/$inviteCode") {
-            tryAuthOrApiKey()
-        }.body()
-
-        val householdId = inviteResponse.fields["householdId"]?.stringValue
-            ?: throw IllegalStateException("Código de invitación inválido")
-
-        // 2) Leer el hogar por su ID.
-        return getHousehold(householdId)
-    }
+    suspend fun joinHousehold(inviteCode: String): HouseholdResponse = householdRepository.joinHousehold(inviteCode)
 
     // ────────────────────────────────────────────────────────
     //  Household membership
@@ -1302,7 +983,10 @@ class FirestoreRepository(
     //  Tasks (subcollection under households/{id})
     // ────────────────────────────────────────────────────────
 
-    /** Create a task. Returns the created task. */
+    // Tasks CRUD + history + assignments — delegado en TaskRepository (fase
+    // 2.3 del refactor), salvo completeTask/completeAssignment/
+    // reassignTaskCompletion (capa de puntos, se quedan hasta la fase Member).
+
     suspend fun createTask(
         householdId: String,
         createdBy: String,
@@ -1320,146 +1004,16 @@ class FirestoreRepository(
         penaltyMax: Int,
         dueDate: Long = 0,
         assignmentRotation: List<org.taskhub.network.models.AssignmentSlot> = emptyList()
-    ): TaskResponse {
-        val now = Clock.System.now().toEpochMilliseconds()
+    ): TaskResponse = taskRepository.createTask(
+        householdId, createdBy, title, description, points, frequency, recurrenceDays,
+        recurrenceDay, tags, subtasks, penaltyMode, penaltyValue, penaltyInterval, penaltyMax,
+        dueDate, assignmentRotation
+    )
 
-        val fields = mutableMapOf<String, FirestoreValue>(
-            "householdId" to FirestoreValue(stringValue = householdId),
-            "createdBy" to FirestoreValue(stringValue = createdBy),
-            "title" to FirestoreValue(stringValue = title),
-            "description" to FirestoreValue(stringValue = description),
-            "points" to FirestoreValue(integerValue = points.toString()),
-            "frequency" to FirestoreValue(stringValue = frequency),
-            "dueDate" to FirestoreValue(integerValue = dueDate.toString()),
-            "createdAt" to FirestoreValue(integerValue = now.toString()),
-            "updatedAt" to FirestoreValue(integerValue = now.toString())
-        )
-
-        // Tags as array
-        if (tags.isNotEmpty()) {
-            fields["tags"] = FirestoreValue(
-                arrayValue = FirestoreArrayValue(
-                    values = tags.map { FirestoreValue(stringValue = it) }
-                )
-            )
-        } else {
-            fields["tags"] = FirestoreValue(
-                arrayValue = FirestoreArrayValue(values = emptyList())
-            )
-        }
-
-        // Recurrence days as array
-        if (recurrenceDays.isNotEmpty()) {
-            fields["recurrenceDays"] = FirestoreValue(
-                arrayValue = FirestoreArrayValue(
-                    values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }
-                )
-            )
-        }
-
-        // Recurrence day of month (solo "monthly")
-        if (recurrenceDay != null) {
-            fields["recurrenceDay"] = FirestoreValue(integerValue = recurrenceDay.toString())
-        }
-
-        // Penalty configuration
-        if (penaltyMode != null) {
-            fields["penaltyMode"] = FirestoreValue(stringValue = penaltyMode)
-            fields["penaltyValue"] = FirestoreValue(integerValue = penaltyValue.toString())
-            fields["penaltyInterval"] = FirestoreValue(stringValue = penaltyInterval)
-            fields["penaltyMax"] = FirestoreValue(integerValue = penaltyMax.toString())
-        }
-
-        // Assignment rotation as array of maps
-        if (assignmentRotation.isNotEmpty()) {
-            fields["assignmentRotation"] = FirestoreValue(
-                arrayValue = FirestoreArrayValue(
-                    values = assignmentRotation.map { slot ->
-                        FirestoreValue(
-                            mapValue = FirestoreMapValue(
-                                fields = mapOf(
-                                    "dayOfWeek" to FirestoreValue(integerValue = slot.dayOfWeek.toString()),
-                                    "memberId" to FirestoreValue(stringValue = slot.memberId)
-                                )
-                            )
-                        )
-                    }
-                )
-            )
-        }
-
-        // Subtasks as array of maps
-        fields["subtasks"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = subtasks.map { st ->
-                    FirestoreValue(
-                        mapValue = FirestoreMapValue(
-                            fields = mapOf(
-                                "id" to FirestoreValue(stringValue = st.id),
-                                "text" to FirestoreValue(stringValue = st.text),
-                                "completed" to FirestoreValue(booleanValue = st.completed)
-                            )
-                        )
-                    )
-                }
-            )
-        )
-
-        val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/tasks") {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
-
-        val id = extractDocId(response.name, "createTask")
-        taskCache.clearTasks(householdId)
-        return TaskResponse(
-            id = id, householdId = householdId, createdBy = createdBy,
-            title = title, description = description, points = points,
-            frequency = frequency, recurrenceDays = recurrenceDays,
-            recurrenceDay = recurrenceDay, tags = tags,
-            subtasks = subtasks,
-            penaltyMode = penaltyMode, penaltyValue = penaltyValue,
-            penaltyInterval = penaltyInterval, penaltyMax = penaltyMax,
-            dueDate = dueDate, lastCompletedDate = null,
-            assignmentRotation = assignmentRotation,
-            createdAt = now, updatedAt = now
-        )
-    }
-
-    /**
-     * List all tasks for a household. Falls back to local cache if offline.
-     *
-     * Un 404/403 es una señal DEFINITIVA (hogar borrado / acceso perdido, igual
-     * que en [getHousehold]) y se relanza en vez de devolver la caché stale;
-     * solo fallos de transporte/servidor caen a caché.
-     */
-    suspend fun getTasks(householdId: String): List<TaskResponse> {
-        return try {
-            val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/tasks") {
-                tryAuthOrApiKey()
-            }.body()
-
-            val tasks = response.documents.map { toTaskResponse(it, householdId) }
-            taskCache.cacheTasks(householdId, tasks)
-            tasks
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: FirestoreException) {
-            if (e.statusCode == 404 || e.statusCode == 403) throw e
-            taskCache.getCachedTasks(householdId) ?: throw e
-        } catch (e: Exception) {
-            taskCache.getCachedTasks(householdId) ?: throw e
-        }
-    }
+    suspend fun getTasks(householdId: String): List<TaskResponse> = taskRepository.getTasks(householdId)
 
     /** Get a single task by id. Used where only one task is needed (avoids an N+1 full-list fetch). */
-    suspend fun getTask(householdId: String, taskId: String): TaskResponse {
-        val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$householdId/tasks/$taskId") {
-            tryAuthOrApiKey()
-        }.body()
-        return toTaskResponse(response, householdId)
-    }
+    suspend fun getTask(householdId: String, taskId: String): TaskResponse = taskRepository.getTask(householdId, taskId)
 
     /** Resultado de [completeTask]: puntos realmente otorgados (tras penalización) y puntualidad. */
     data class TaskCompletionResult(val completedAt: Long, val pointsAwarded: Int, val onTime: Boolean)
@@ -1561,29 +1115,7 @@ class FirestoreRepository(
         taskId: String,
         previousLastCompletedDate: Long?,
         previousCompletedBy: String? = null
-    ) {
-        val lcdValue = if (previousLastCompletedDate != null) {
-            FirestoreValue(integerValue = previousLastCompletedDate.toString())
-        } else {
-            FirestoreValue(nullValue = "NULL_VALUE")
-        }
-        val cbValue = if (previousCompletedBy != null) {
-            FirestoreValue(stringValue = previousCompletedBy)
-        } else {
-            FirestoreValue(nullValue = "NULL_VALUE")
-        }
-        val fields = mapOf(
-            "lastCompletedDate" to lcdValue,
-            "completedBy" to cbValue
-        )
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths("lastCompletedDate", "completedBy")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-        taskCache.clearTasks(householdId)
-    }
+    ) = taskRepository.revertTaskCompletion(householdId, taskId, previousLastCompletedDate, previousCompletedBy)
 
     /** Save a task completion record to Firestore taskHistory subcollection. */
     suspend fun saveTaskHistory(
@@ -1593,42 +1125,10 @@ class FirestoreRepository(
         points: Int,
         completedAt: Long,
         onTime: Boolean
-    ) {
-        val fields = mapOf(
-            "taskId" to FirestoreValue(stringValue = taskId),
-            "memberId" to FirestoreValue(stringValue = memberId),
-            "points" to FirestoreValue(integerValue = points.toString()),
-            "completedAt" to FirestoreValue(integerValue = completedAt.toString()),
-            "onTime" to FirestoreValue(booleanValue = onTime)
-        )
-
-        client.post("$baseUrl/households/$householdId/taskHistory") {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-    }
+    ) = taskRepository.saveTaskHistory(householdId, taskId, memberId, points, completedAt, onTime)
 
     /** Get all task history records for a household. */
-    suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = orDefault(emptyList()) {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/taskHistory"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        response.documents.map { doc ->
-            val f = doc.fields
-            TaskHistoryResponse(
-                id = extractDocId(doc.name, "getTaskHistory"),
-                taskId = f["taskId"]?.stringValue ?: "",
-                memberId = f["memberId"]?.stringValue ?: "",
-                points = f["points"]?.integerValue?.toIntOrNull() ?: 0,
-                completedAt = f["completedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-                onTime = f["onTime"]?.booleanValue ?: true
-            )
-        }
-    }
+    suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = taskRepository.getTaskHistory(householdId)
 
     /**
      * Reasigna quién ha hecho una tarea ya completada (corrección de errores).
@@ -1755,88 +1255,15 @@ class FirestoreRepository(
         mandatory: Boolean,
         dueDate: Long,
         taskTitle: String = ""
-    ): List<TaskAssignmentResponse> {
-        val now = Clock.System.now().toEpochMilliseconds()
-        val results = mutableListOf<TaskAssignmentResponse>()
-
-        for (memberId in memberIds) {
-            val fields = mutableMapOf<String, FirestoreValue>(
-                "taskId" to FirestoreValue(stringValue = taskId),
-                "memberId" to FirestoreValue(stringValue = memberId),
-                "mandatory" to FirestoreValue(booleanValue = mandatory),
-                "dueDate" to FirestoreValue(integerValue = dueDate.toString()),
-                "status" to FirestoreValue(stringValue = "assigned"),
-                "assignedAt" to FirestoreValue(integerValue = now.toString())
-            )
-
-            val response: FirestoreDocumentResponse = client.post(
-                "$baseUrl/households/$householdId/tasks/$taskId/assignments"
-            ) {
-                withAuth()
-                contentType(ContentType.Application.Json)
-                setBody(FirestoreDocument(fields))
-            }.body()
-
-            val id = extractDocId(response.name, "assignTask")
-            results.add(TaskAssignmentResponse(
-                id = id, taskId = taskId, memberId = memberId,
-                mandatory = mandatory, dueDate = dueDate, status = "assigned",
-                assignedAt = now
-            ))
-
-            // Create notification for the assigned member
-            createNotification(
-                householdId = householdId,
-                memberId = memberId,
-                taskId = taskId,
-                title = "\uD83D\uDCCB Tarea asignada",
-                message = if (taskTitle.isNotEmpty()) "Se te ha asignado: $taskTitle" else "Se te ha asignado una nueva tarea"
-            )
-        }
-
-        return results
-    }
+    ): List<TaskAssignmentResponse> = taskRepository.assignTask(householdId, taskId, memberIds, mandatory, dueDate, taskTitle)
 
     /** Get all assignments for a specific task. */
-    suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/tasks/$taskId/assignments"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        return response.documents.map { toTaskAssignmentResponse(it, taskId) }
-    }
+    suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> =
+        taskRepository.getAssignments(householdId, taskId)
 
     /** Borra todas las asignaciones de una tarea (para reasignar al editar). */
-    suspend fun deleteAssignments(householdId: String, taskId: String) {
-        val assignments = try {
-            getAssignments(householdId, taskId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-        deleteAssignmentDocs(householdId, taskId, assignments)
-    }
-
-    private suspend fun deleteAssignmentDocs(
-        householdId: String,
-        taskId: String,
-        assignments: List<TaskAssignmentResponse>
-    ) {
-        assignments.forEach { assignment ->
-            try {
-                client.delete("$baseUrl/households/$householdId/tasks/$taskId/assignments/${assignment.id}") {
-                    withAuth()
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // No crítico: si ya no existe, seguimos.
-            }
-        }
-    }
+    suspend fun deleteAssignments(householdId: String, taskId: String) =
+        taskRepository.deleteAssignments(householdId, taskId)
 
     /**
      * Sustituye las asignaciones de una tarea por unas nuevas (usado al editar
@@ -1864,43 +1291,12 @@ class FirestoreRepository(
         mandatory: Boolean,
         dueDate: Long,
         taskTitle: String = ""
-    ): List<TaskAssignmentResponse> {
-        val previous = try {
-            getAssignments(householdId, taskId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-
-        val created = if (memberIds.isNotEmpty()) {
-            assignTask(householdId, taskId, memberIds, mandatory, dueDate, taskTitle)
-        } else {
-            emptyList()
-        }
-
-        deleteAssignmentDocs(householdId, taskId, previous)
-
-        return created
-    }
+    ): List<TaskAssignmentResponse> =
+        taskRepository.replaceAssignments(householdId, taskId, memberIds, mandatory, dueDate, taskTitle)
 
     /** Get all assignments across all tasks for a household (peticiones en paralelo). */
-    suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> {
-        val tasks = getTasks(householdId)
-        return coroutineScope {
-            tasks.map { task ->
-                async {
-                    try {
-                        getAssignments(householdId, task.id)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        emptyList() // Task has no assignments yet — skip
-                    }
-                }
-            }.awaitAll().flatten()
-        }
-    }
+    suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> =
+        taskRepository.getAllAssignments(householdId)
 
     /** Marca el documento de una asignación como completada (sin tocar puntos del miembro). */
     private suspend fun markAssignmentCompleted(
@@ -2029,23 +1425,7 @@ class FirestoreRepository(
         taskId: String,
         assignmentId: String,
         googleEventId: String?
-    ) {
-        val fields = mapOf(
-            "googleEventId" to if (googleEventId != null) {
-                FirestoreValue(stringValue = googleEventId)
-            } else {
-                FirestoreValue(nullValue = "NULL_VALUE")
-            }
-        )
-        client.patch(
-            "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
-        ) {
-            withAuth()
-            updateMaskFieldPaths("googleEventId")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-    }
+    ) = taskRepository.updateAssignmentGoogleEventId(householdId, taskId, assignmentId, googleEventId)
 
     // ────────────────────────────────────────────────────────
     //  Penalty & Recurrence Logic
@@ -2159,93 +1539,10 @@ class FirestoreRepository(
         penaltyMax: Int,
         assignmentRotation: List<org.taskhub.network.models.AssignmentSlot> = emptyList(),
         dueDate: Long = 0
-    ) {
-        val now = Clock.System.now().toEpochMilliseconds()
-
-        val fields = mutableMapOf<String, FirestoreValue>(
-            "title" to FirestoreValue(stringValue = title),
-            "description" to FirestoreValue(stringValue = description),
-            "points" to FirestoreValue(integerValue = points.toString()),
-            "frequency" to FirestoreValue(stringValue = frequency),
-            "dueDate" to FirestoreValue(integerValue = dueDate.toString()),
-            "updatedAt" to FirestoreValue(integerValue = now.toString())
-        )
-
-        // Tags as array
-        fields["tags"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = tags.map { FirestoreValue(stringValue = it) }
-            )
-        )
-
-        // Recurrence days as array
-        fields["recurrenceDays"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }
-            )
-        )
-
-        // Recurrence day of month (solo "monthly"); null borra el valor previo.
-        fields["recurrenceDay"] = if (recurrenceDay != null) {
-            FirestoreValue(integerValue = recurrenceDay.toString())
-        } else {
-            FirestoreValue(nullValue = "NULL_VALUE")
-        }
-
-        // Penalty configuration
-        if (penaltyMode != null) {
-            fields["penaltyMode"] = FirestoreValue(stringValue = penaltyMode)
-            fields["penaltyValue"] = FirestoreValue(integerValue = penaltyValue.toString())
-            fields["penaltyInterval"] = FirestoreValue(stringValue = penaltyInterval)
-            fields["penaltyMax"] = FirestoreValue(integerValue = penaltyMax.toString())
-        } else {
-            fields["penaltyMode"] = FirestoreValue(nullValue = "NULL_VALUE")
-            fields["penaltyValue"] = FirestoreValue(nullValue = "NULL_VALUE")
-            fields["penaltyInterval"] = FirestoreValue(nullValue = "NULL_VALUE")
-            fields["penaltyMax"] = FirestoreValue(nullValue = "NULL_VALUE")
-        }
-
-        // Assignment rotation as array of maps
-        fields["assignmentRotation"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = assignmentRotation.map { slot ->
-                    FirestoreValue(
-                        mapValue = FirestoreMapValue(
-                            fields = mapOf(
-                                "dayOfWeek" to FirestoreValue(integerValue = slot.dayOfWeek.toString()),
-                                "memberId" to FirestoreValue(stringValue = slot.memberId)
-                            )
-                        )
-                    )
-                }
-            )
-        )
-
-        // Subtasks as array of maps
-        fields["subtasks"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = subtasks.map { st ->
-                    FirestoreValue(
-                        mapValue = FirestoreMapValue(
-                            fields = mapOf(
-                                "id" to FirestoreValue(stringValue = st.id),
-                                "text" to FirestoreValue(stringValue = st.text),
-                                "completed" to FirestoreValue(booleanValue = st.completed)
-                            )
-                        )
-                    )
-                }
-            )
-        )
-
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths(fields.keys)
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-        taskCache.clearTasks(householdId)
-    }
+    ) = taskRepository.updateTask(
+        householdId, taskId, title, description, points, frequency, recurrenceDays, recurrenceDay,
+        tags, subtasks, penaltyMode, penaltyValue, penaltyInterval, penaltyMax, assignmentRotation, dueDate
+    )
 
     /**
      * Update only the subtasks array on a task document.
@@ -2255,104 +1552,12 @@ class FirestoreRepository(
         householdId: String,
         taskId: String,
         subtasks: List<Subtask>
-    ) {
-        val fields = mapOf(
-            "subtasks" to FirestoreValue(
-                arrayValue = FirestoreArrayValue(
-                    values = subtasks.map { st ->
-                        FirestoreValue(
-                            mapValue = FirestoreMapValue(
-                                fields = mapOf(
-                                    "id" to FirestoreValue(stringValue = st.id),
-                                    "text" to FirestoreValue(stringValue = st.text),
-                                    "completed" to FirestoreValue(booleanValue = st.completed)
-                                )
-                            )
-                        )
-                    }
-                )
-            )
-        )
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths("subtasks")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-        taskCache.clearTasks(householdId)
-    }
+    ) = taskRepository.updateSubtasks(householdId, taskId, subtasks)
 
     /**
      * Delete a task document.
      */
-    suspend fun deleteTask(householdId: String, taskId: String) {
-        client.delete("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-        }
-        taskCache.clearTasks(householdId)
-    }
-
-    private fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse {
-        val f = doc.fields
-        return TaskResponse(
-            id = extractDocId(doc.name, "getTasks"),
-            householdId = f["householdId"]?.stringValue ?: householdId,
-            createdBy = f["createdBy"]?.stringValue ?: "",
-            title = f["title"]?.stringValue ?: "",
-            description = f["description"]?.stringValue ?: "",
-            points = f["points"]?.integerValue?.toIntOrNull() ?: 10,
-            frequency = f["frequency"]?.stringValue ?: "once",
-            recurrenceDays = f["recurrenceDays"]?.arrayValue?.values
-                ?.mapNotNull { it.integerValue?.toIntOrNull() } ?: emptyList(),
-            recurrenceDay = f["recurrenceDay"]?.integerValue?.toIntOrNull(),
-            tags = f["tags"]?.arrayValue?.values
-                ?.mapNotNull { it.stringValue } ?: emptyList(),
-            subtasks = f["subtasks"]?.arrayValue?.values
-                ?.mapNotNull { stValue ->
-                    val sf = stValue.mapValue?.fields ?: return@mapNotNull null
-                    val sid = sf["id"]?.stringValue ?: return@mapNotNull null
-                    val stext = sf["text"]?.stringValue ?: return@mapNotNull null
-                    val scompleted = sf["completed"]?.booleanValue ?: false
-                    Subtask(id = sid, text = stext, completed = scompleted)
-                } ?: emptyList(),
-            penaltyMode = f["penaltyMode"]?.stringValue,
-            penaltyValue = f["penaltyValue"]?.integerValue?.toIntOrNull() ?: 0,
-            penaltyInterval = f["penaltyInterval"]?.stringValue ?: "day",
-            penaltyMax = f["penaltyMax"]?.integerValue?.toIntOrNull() ?: 0,
-            dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
-            lastCompletedDate = f["lastCompletedDate"]?.integerValue?.toLongOrNull(),
-            completedBy = f["completedBy"]?.stringValue,
-            assignmentRotation = f["assignmentRotation"]?.arrayValue?.values
-                ?.mapNotNull { slotValue ->
-                    val sf = slotValue.mapValue?.fields ?: return@mapNotNull null
-                    val dow = sf["dayOfWeek"]?.integerValue?.toIntOrNull() ?: return@mapNotNull null
-                    val mid = sf["memberId"]?.stringValue ?: return@mapNotNull null
-                    org.taskhub.network.models.AssignmentSlot(dayOfWeek = dow, memberId = mid)
-                } ?: emptyList(),
-            createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
-        )
-    }
-
-    private fun toTaskAssignmentResponse(
-        doc: FirestoreDocumentResponse,
-        taskId: String
-    ): TaskAssignmentResponse {
-        val f = doc.fields
-        return TaskAssignmentResponse(
-            id = extractDocId(doc.name, "getAssignments"),
-            taskId = f["taskId"]?.stringValue ?: taskId,
-            memberId = f["memberId"]?.stringValue ?: "",
-            mandatory = f["mandatory"]?.booleanValue ?: false,
-            dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
-            status = f["status"]?.stringValue ?: "assigned",
-            completedAt = f["completedAt"]?.integerValue?.toLongOrNull(),
-            pointsAwarded = f["pointsAwarded"]?.integerValue?.toIntOrNull(),
-            onTime = f["onTime"]?.booleanValue,
-            assignedAt = f["assignedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            googleEventId = f["googleEventId"]?.stringValue
-        )
-    }
+    suspend fun deleteTask(householdId: String, taskId: String) = taskRepository.deleteTask(householdId, taskId)
 
     // ────────────────────────────────────────────────────────
     //  Comments (subcollection under households/{id}/tasks/{taskId})
@@ -2364,47 +1569,13 @@ class FirestoreRepository(
         taskId: String,
         authorName: String,
         text: String
-    ): org.taskhub.network.models.CommentResponse {
-        val now = Clock.System.now().toEpochMilliseconds()
-        val fields = mapOf(
-            "authorName" to FirestoreValue(stringValue = authorName),
-            "text" to FirestoreValue(stringValue = text),
-            "createdAt" to FirestoreValue(integerValue = now.toString())
-        )
-
-        val response: FirestoreDocumentResponse = client.post(
-            "$baseUrl/households/$householdId/tasks/$taskId/comments"
-        ) {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
-
-        val id = extractDocId(response.name, "addComment")
-        return org.taskhub.network.models.CommentResponse(id, authorName, text, now)
-    }
+    ): org.taskhub.network.models.CommentResponse = taskRepository.addComment(householdId, taskId, authorName, text)
 
     /** List comments for a task. */
     suspend fun getComments(
         householdId: String,
         taskId: String
-    ): List<org.taskhub.network.models.CommentResponse> {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/tasks/$taskId/comments"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        return response.documents.map { doc ->
-            val f = doc.fields
-            org.taskhub.network.models.CommentResponse(
-                id = extractDocId(doc.name, "getComments"),
-                authorName = f["authorName"]?.stringValue ?: "",
-                text = f["text"]?.stringValue ?: "",
-                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
-            )
-        }
-    }
+    ): List<org.taskhub.network.models.CommentResponse> = taskRepository.getComments(householdId, taskId)
 
     // ────────────────────────────────────────────────────────
     //  Messages (subcollection under households/{id})
@@ -2416,146 +1587,38 @@ class FirestoreRepository(
         memberId: String,
         authorName: String,
         text: String
-    ): org.taskhub.network.models.MessageResponse {
-        val now = Clock.System.now().toEpochMilliseconds()
-        val fields = mapOf(
-            "memberId" to FirestoreValue(stringValue = memberId),
-            "authorName" to FirestoreValue(stringValue = authorName),
-            "text" to FirestoreValue(stringValue = text),
-            "createdAt" to FirestoreValue(integerValue = now.toString())
-        )
-
-        val response: FirestoreDocumentResponse = client.post(
-            "$baseUrl/households/$householdId/messages"
-        ) {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
-
-        val id = extractDocId(response.name, "sendMessage")
-        return org.taskhub.network.models.MessageResponse(id, memberId, authorName, text, now)
-    }
+    ): org.taskhub.network.models.MessageResponse = householdRepository.sendMessage(householdId, memberId, authorName, text)
 
     /** List chat messages for a household, oldest first. */
-    suspend fun getMessages(householdId: String): List<org.taskhub.network.models.MessageResponse> {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/messages"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        return response.documents.map { doc ->
-            val f = doc.fields
-            org.taskhub.network.models.MessageResponse(
-                id = extractDocId(doc.name, "getMessages"),
-                memberId = f["memberId"]?.stringValue ?: "",
-                authorName = f["authorName"]?.stringValue ?: "",
-                text = f["text"]?.stringValue ?: "",
-                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
-            )
-        }.sortedBy { it.createdAt }
-    }
+    suspend fun getMessages(householdId: String): List<org.taskhub.network.models.MessageResponse> =
+        householdRepository.getMessages(householdId)
 
     // ────────────────────────────────────────────────────────
-    //  Notifications (subcollection under households/{id})
+    //  Notifications — delegado en NotificationRepository (fase 2.1 del
+    //  refactor). Facade temporal: firma pública idéntica, sin lógica propia.
     // ────────────────────────────────────────────────────────
 
-    /** Create a notification document for a member. */
     suspend fun createNotification(
         householdId: String,
         memberId: String,
         taskId: String,
         title: String,
         message: String
-    ): NotificationResponse {
-        val now = Clock.System.now().toEpochMilliseconds()
-        val fields = mapOf(
-            "memberId" to FirestoreValue(stringValue = memberId),
-            "taskId" to FirestoreValue(stringValue = taskId),
-            "title" to FirestoreValue(stringValue = title),
-            "message" to FirestoreValue(stringValue = message),
-            "createdAt" to FirestoreValue(integerValue = now.toString()),
-            "read" to FirestoreValue(booleanValue = false)
-        )
+    ): NotificationResponse = notificationRepository.createNotification(householdId, memberId, taskId, title, message)
 
-        val response: FirestoreDocumentResponse = client.post(
-            "$baseUrl/households/$householdId/notifications"
-        ) {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
+    suspend fun getNotifications(householdId: String): List<NotificationResponse> =
+        notificationRepository.getNotifications(householdId)
 
-        val id = extractDocId(response.name, "createNotification")
-        return NotificationResponse(id, memberId, taskId, title, message, now, read = false)
-    }
-
-    /** Get all notifications for a household. */
-    suspend fun getNotifications(householdId: String): List<NotificationResponse> = orDefault(emptyList()) {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/notifications"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        response.documents.map { doc ->
-            val f = doc.fields
-            NotificationResponse(
-                id = extractDocId(doc.name, "getNotifications"),
-                memberId = f["memberId"]?.stringValue ?: "",
-                taskId = f["taskId"]?.stringValue ?: "",
-                title = f["title"]?.stringValue ?: "",
-                message = f["message"]?.stringValue ?: "",
-                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
-                read = f["read"]?.booleanValue ?: false
-            )
-        }
-    }
-
-    /** Mark a notification as read. */
-    suspend fun markNotificationRead(householdId: String, notificationId: String) {
-        val fields = mapOf(
-            "read" to FirestoreValue(booleanValue = true)
-        )
-        client.patch(
-            "$baseUrl/households/$householdId/notifications/$notificationId"
-        ) {
-            withAuth()
-            updateMaskFieldPaths("read")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-    }
+    suspend fun markNotificationRead(householdId: String, notificationId: String) =
+        notificationRepository.markNotificationRead(householdId, notificationId)
 
     // ────────────────────────────────────────────────────────
-    //  Rewards (subcollection under households/{id})
+    //  Rewards — delegado en RewardsRepository (fase 2.2 del refactor),
+    //  salvo redeemReward (capa de puntos, se queda hasta la fase de Member).
     // ────────────────────────────────────────────────────────
 
-    /** List all rewards for a household. */
-    suspend fun getRewards(householdId: String): List<RewardResponse> = orDefault(emptyList()) {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/rewards"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
+    suspend fun getRewards(householdId: String): List<RewardResponse> = rewardsRepository.getRewards(householdId)
 
-        response.documents.map { doc ->
-            val f = doc.fields
-            RewardResponse(
-                id = extractDocId(doc.name, "getRewards"),
-                householdId = f["householdId"]?.stringValue ?: householdId,
-                title = f["title"]?.stringValue ?: "",
-                description = f["description"]?.stringValue ?: "",
-                cost = f["cost"]?.integerValue?.toIntOrNull() ?: 0,
-                icon = f["icon"]?.stringValue ?: "🎁",
-                createdBy = f["createdBy"]?.stringValue ?: "",
-                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
-            )
-        }
-    }
-
-    /** Create a reward. Requires auth (write). */
     suspend fun createReward(
         householdId: String,
         title: String,
@@ -2563,37 +1626,10 @@ class FirestoreRepository(
         cost: Int,
         icon: String,
         createdBy: String
-    ): RewardResponse {
-        val now = Clock.System.now().toEpochMilliseconds()
+    ): RewardResponse = rewardsRepository.createReward(householdId, title, description, cost, icon, createdBy)
 
-        val fields = mapOf(
-            "householdId" to FirestoreValue(stringValue = householdId),
-            "title" to FirestoreValue(stringValue = title),
-            "description" to FirestoreValue(stringValue = description),
-            "cost" to FirestoreValue(integerValue = cost.toString()),
-            "icon" to FirestoreValue(stringValue = icon),
-            "createdBy" to FirestoreValue(stringValue = createdBy),
-            "createdAt" to FirestoreValue(integerValue = now.toString())
-        )
-
-        val response: FirestoreDocumentResponse = client.post(
-            "$baseUrl/households/$householdId/rewards"
-        ) {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
-
-        val id = extractDocId(response.name, "createReward")
-        return RewardResponse(id, householdId, title, description, cost, icon, createdBy, now)
-    }
-
-    /** Delete a reward. Requires auth (write). */
-    suspend fun deleteReward(householdId: String, rewardId: String) {
-        client.delete("$baseUrl/households/$householdId/rewards/$rewardId") {
-            withAuth()
-        }
-    }
+    suspend fun deleteReward(householdId: String, rewardId: String) =
+        rewardsRepository.deleteReward(householdId, rewardId)
 
     /** Redeem a reward: subtract points from member, record redemption. Requires auth (write). */
     suspend fun redeemReward(
@@ -2643,44 +1679,15 @@ class FirestoreRepository(
     }
 
     /** Get all reward redemptions for a household. */
-    suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> = orDefault(emptyList()) {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/rewardRedemptions"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        response.documents.map { doc ->
-            val f = doc.fields
-            RewardRedemption(
-                id = extractDocId(doc.name, "getRewardRedemptions"),
-                rewardId = f["rewardId"]?.stringValue ?: "",
-                memberId = f["memberId"]?.stringValue ?: "",
-                redeemedAt = f["redeemedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-                pointsSpent = f["pointsSpent"]?.integerValue?.toIntOrNull() ?: 0
-            )
-        }
-    }
+    suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> =
+        rewardsRepository.getRewardRedemptions(householdId)
 
     // ────────────────────────────────────────────────────────
     //  Request helpers
     // ────────────────────────────────────────────────────────
 
-    /**
-     * Tries Bearer auth first; falls back to API key parameter.
-     * Used for read operations where API key alone might suffice.
-     */
-    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() {
-        try {
-            ensureAuth()
-            bearerToken?.let { header("Authorization", "Bearer $it") }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // Auth failed — fall back to API key for read-only access
-            parameter("key", apiKey)
-        }
-    }
+    /** Ver [FirestoreClient.tryAuthOrApiKey] — delegado tal cual, mismo motivo que [withAuth]. */
+    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() = with(firestoreClient) { tryAuthOrApiKey() }
 
     // ────────────────────────────────────────────────────────
     //  Helpers
@@ -2702,15 +1709,9 @@ class FirestoreRepository(
         }
     }
 
-    /** Ver [FirestoreParsers.extractDocId] — extraído para ser testable sin I/O. */
+    /** Ver [FirestoreClient.extractDocId] — delegado tal cual, mismo motivo que [withAuth]. */
     private fun extractDocId(resourceName: String, operation: String): String =
-        FirestoreParsers.extractDocId(resourceName, operation)
-
-    private fun toHouseholdResponse(
-        doc: FirestoreDocumentResponse,
-        knownId: String? = null,
-        operation: String = "getHousehold"
-    ): HouseholdResponse = FirestoreParsers.toHouseholdResponse(doc, knownId, operation)
+        firestoreClient.extractDocId(resourceName, operation)
 
     private fun toMemberResponse(
         doc: FirestoreDocumentResponse,
@@ -2718,16 +1719,8 @@ class FirestoreRepository(
         operation: String = "getMembers"
     ): MemberResponse = FirestoreParsers.toMemberResponse(doc, householdId, operation)
 
-    private fun generateInviteCode(): String {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        return (1..8).map { chars[secureRandomInt(chars.length)] }.joinToString("")
-    }
-
     companion object {
         /** Firebase Web API Key for task-hub-62f98 (Firebase Console → Project Settings → General). */
         const val DEFAULT_API_KEY = "AIzaSyD5Xo11SqvysWRgEFv_91rBjYuFIq93lV8"
-
-        /** Reintentos ante conflicto de concurrencia optimista (ver [addMemberPoints]/[addMemberAchievement]). */
-        private const val OPTIMISTIC_WRITE_MAX_RETRIES = 3
     }
 }

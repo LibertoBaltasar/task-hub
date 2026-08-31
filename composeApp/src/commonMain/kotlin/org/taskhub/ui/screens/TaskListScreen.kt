@@ -49,6 +49,7 @@ import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.EmptyTasksIllustration
+import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
@@ -56,6 +57,7 @@ import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.shouldReduceMotion
+import org.taskhub.ui.components.showErrorSnackbar
 import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
@@ -74,6 +76,15 @@ data class TaskListScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
+        // Nombre del hogar activo para la topbar (ver panel de expertos v2,
+        // Estética #4): con varios hogares, esta pantalla no dejaba claro
+        // en cuál se estaba trabajando.
+        val householdModel = koinScreenModel<HouseholdScreenModel>()
+        val householdUiState by householdModel.uiState.collectAsState()
+        LaunchedEffect(householdId) {
+            householdModel.loadHousehold(householdId)
+        }
+        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
         val listState by model.listState.collectAsState()
         val actionState by model.actionState.collectAsState()
         val filter by model.filter.collectAsState()
@@ -122,8 +133,8 @@ data class TaskListScreen(
                 // ningún mensaje y la card de TaskCard se quedaba invisible/deshabilitada
                 // para siempre (isCompleting/loadingTaskIds nunca se resetean por sí
                 // solos — ver el TaskActionState.Error pasado a TaskListContent abajo).
-                snackbarHostState.showSnackbar(
-                    message = "❌ ${state.message}",
+                snackbarHostState.showErrorSnackbar(
+                    message = state.message,
                     duration = SnackbarDuration.Short
                 )
                 model.resetActionState()
@@ -175,6 +186,7 @@ data class TaskListScreen(
                 // Top bar
                 TaskHubTopBar(
                     title = s("task_list_title"),
+                    subtitle = householdName,
                     onBack = { navigator.pop() },
                     actions = {
                         IconButton(onClick = { model.loadTasks(householdId) }) {
@@ -257,11 +269,19 @@ data class TaskListScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "❌ ${state.message}",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.error
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = s("error_icon_content_desc"),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = state.message,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Button(onClick = { model.loadTasks(householdId) }) {
                                     Text(s("tasks_retry"))
@@ -274,8 +294,9 @@ data class TaskListScreen(
                 }
             }
                 // ── Snackbar for undo ──────────────────────────
-                SnackbarHost(
+                ErrorAwareSnackbarHost(
                     hostState = snackbarHostState,
+                    errorIconContentDescription = s("error_icon_content_desc"),
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
             }

@@ -11,6 +11,7 @@ object AppStrings {
             // Common (usadas por componentes compartidos entre dominios, p.ej. DestructiveConfirmDialog)
             "common_cancel" to "Cancelar",
             "common_delete" to "Eliminar",
+            "error_icon_content_desc" to "Error",
 
             // Settings
             "settings_title" to "⚙️ Ajustes",
@@ -537,6 +538,7 @@ object AppStrings {
             // Common (shared across components used by multiple domains, e.g. DestructiveConfirmDialog)
             "common_cancel" to "Cancel",
             "common_delete" to "Delete",
+            "error_icon_content_desc" to "Error",
 
             // Settings
             "settings_title" to "⚙️ Settings",

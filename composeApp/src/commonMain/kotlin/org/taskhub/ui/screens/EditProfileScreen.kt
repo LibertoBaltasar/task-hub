@@ -6,6 +6,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -114,11 +116,19 @@ class EditProfileScreen : Screen {
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "❌ ${state.message}",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = s("error_icon_content_desc"),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    state.message,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                             Spacer(Modifier.height(16.dp))
                             Button(onClick = { model.loadMyProfile() }) {
                                 Text(s("tasks_retry"))
@@ -277,12 +287,22 @@ class EditProfileScreen : Screen {
 
                         // Error al guardar
                         if (saveState is ProfileSaveState.Error) {
-                            Text(
-                                "❌ ${(saveState as ProfileSaveState.Error).message}",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.align(Alignment.CenterHorizontally)
-                            )
+                            Row(
+                                modifier = Modifier.align(Alignment.CenterHorizontally),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = s("error_icon_content_desc"),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    (saveState as ProfileSaveState.Error).message,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
                         }
                     }
                 }

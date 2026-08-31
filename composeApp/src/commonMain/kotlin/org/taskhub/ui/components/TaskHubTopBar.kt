@@ -1,5 +1,6 @@
 package org.taskhub.ui.components
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -24,26 +25,48 @@ import org.taskhub.ui.i18n.AppStrings
  * construcción (evita los hacks de `Spacer(72.dp)`) y estandariza el botón de volver con
  * el icono [Icons.Filled.ArrowBack] + `contentDescription`.
  *
- * @param title   Título de la pantalla. Sin emoji: el texto ya es suficiente.
- * @param onBack  Acción de volver; si es `null` no se muestra el botón de atrás.
- * @param actions Contenido del área de acciones a la derecha.
+ * @param title    Título de la pantalla. Sin emoji: el texto ya es suficiente.
+ * @param subtitle Texto secundario opcional bajo el título (p.ej. el nombre del
+ *                 hogar activo en pantallas anidadas de un hogar concreto —
+ *                 ver panel de expertos v2, Estética #4).
+ * @param onBack   Acción de volver; si es `null` no se muestra el botón de atrás.
+ * @param actions  Contenido del área de acciones a la derecha.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskHubTopBar(
     title: String,
+    subtitle: String? = null,
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val lang = LocalAppSettings.current.currentLanguage
     CenterAlignedTopAppBar(
         title = {
-            Text(
-                text = title,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (subtitle.isNullOrBlank()) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Column {
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         },
         navigationIcon = {
             if (onBack != null) {

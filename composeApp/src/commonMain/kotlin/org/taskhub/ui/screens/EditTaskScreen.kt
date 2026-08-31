@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -252,11 +253,21 @@ data class EditTaskScreen(
                                     containerColor = MaterialTheme.colorScheme.errorContainer
                                 )
                             ) {
-                                Text(
-                                    text = "❌ ${(actionState as TaskActionState.Error).message}",
+                                Row(
                                     modifier = Modifier.padding(16.dp),
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = s("error_icon_content_desc"),
+                                        tint = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = (actionState as TaskActionState.Error).message,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
                             }
                         }
                     }

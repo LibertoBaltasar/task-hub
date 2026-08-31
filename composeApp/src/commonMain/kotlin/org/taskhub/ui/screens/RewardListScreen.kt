@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,8 +21,10 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.DestructiveConfirmDialog
+import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
+import org.taskhub.ui.components.showErrorSnackbar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
@@ -45,7 +48,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
     LaunchedEffect(rewardActionState) {
         val state = rewardActionState
         if (state is org.taskhub.ui.models.RewardActionState.Error) {
-            snackbarHostState.showSnackbar(message = "❌ ${state.message}", duration = SnackbarDuration.Short)
+            snackbarHostState.showErrorSnackbar(message = state.message, duration = SnackbarDuration.Short)
             memberModel.clearRewardAction()
         }
     }
@@ -180,11 +183,19 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "❌ ${rState.message}",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = s("error_icon_content_desc"),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = rState.message,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                         Spacer(Modifier.height(16.dp))
                         Button(onClick = { memberModel.loadRewards(householdId) }) {
                             Text(s("tasks_retry"))
@@ -197,8 +208,9 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
         }
     }
 
-        SnackbarHost(
+        ErrorAwareSnackbarHost(
             hostState = snackbarHostState,
+            errorIconContentDescription = s("error_icon_content_desc"),
             modifier = Modifier.align(Alignment.BottomCenter)
         )
     }

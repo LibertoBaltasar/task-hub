@@ -18,12 +18,14 @@ import org.koin.compose.koinInject
 import org.taskhub.network.models.MemberResponse
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import org.taskhub.ui.components.AppreciateDialog
 import org.taskhub.ui.components.DeleteHouseholdConfirmDialog1
 import org.taskhub.ui.components.DeleteHouseholdConfirmDialog2
 import org.taskhub.ui.components.DonateDialog
+import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.HouseholdChatSection
 import org.taskhub.ui.components.HouseholdSettingsDialog
 import org.taskhub.ui.components.LeaveHouseholdDialog
@@ -32,6 +34,7 @@ import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.QrShareDialog
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.showErrorSnackbar
 import org.taskhub.ui.components.householdMemberList
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.AppreciateActionState
@@ -74,7 +77,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         LaunchedEffect(householdErrorMessage) {
             val msg = householdErrorMessage
             if (msg != null) {
-                householdSnackbarHostState.showSnackbar(message = "❌ $msg", duration = SnackbarDuration.Long)
+                householdSnackbarHostState.showErrorSnackbar(message = msg, duration = SnackbarDuration.Long)
                 householdErrorMessage = null
             }
         }
@@ -304,7 +307,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
-                    title = "Task Hub",
+                    // Nombre del hogar activo en vez del genérico "Task Hub":
+                    // con varios hogares, la topbar era el único punto de la
+                    // pantalla que no dejaba claro en cuál se estaba (ver
+                    // panel de expertos v2, Estética #4).
+                    title = householdName.ifBlank { "Task Hub" },
                     // pop() en vez de replaceAll(HomeScreen()): unifica con el atrás del
                     // sistema (que Voyager ya resuelve como pop() por defecto) y con la
                     // convención del resto de pantallas de la app (todas usan pop() en su
@@ -572,12 +579,20 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "❌ ${hState.message}",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.error,
-                                        textAlign = TextAlign.Center
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = s("error_icon_content_desc"),
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = hState.message,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.error,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                     Spacer(modifier = Modifier.height(16.dp))
                                     if (hState.removable) {
                                         Button(
@@ -611,8 +626,9 @@ data class HouseholdScreen(val householdId: String) : Screen {
                 }
             }
 
-            SnackbarHost(
+            ErrorAwareSnackbarHost(
                 hostState = householdSnackbarHostState,
+                errorIconContentDescription = s("error_icon_content_desc"),
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
             }

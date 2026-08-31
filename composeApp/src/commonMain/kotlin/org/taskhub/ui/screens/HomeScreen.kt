@@ -133,10 +133,18 @@ class HomeScreen : Screen {
                         }
                         if (authState is GoogleAuthState.Error) {
                             Spacer(Modifier.height(16.dp))
-                            Text(
-                                text = "❌ ${(authState as GoogleAuthState.Error).message}",
-                                color = MaterialTheme.colorScheme.error
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = s("error_icon_content_desc"),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = (authState as GoogleAuthState.Error).message,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 },

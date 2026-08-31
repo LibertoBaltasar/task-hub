@@ -3,6 +3,8 @@ package org.taskhub.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -158,11 +160,19 @@ class JoinHouseholdScreen : Screen {
 
                     if (householdState is HouseholdUiState.Error) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "❌ ${(householdState as HouseholdUiState.Error).message}",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = s("error_icon_content_desc"),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = (householdState as HouseholdUiState.Error).message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
 
@@ -233,11 +243,19 @@ class JoinHouseholdScreen : Screen {
 
                     if (memberState is MemberUiState.Error) {
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "❌ ${(memberState as MemberUiState.Error).message}",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = s("error_icon_content_desc"),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = (memberState as MemberUiState.Error).message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
                 }

@@ -104,6 +104,16 @@ data class CalendarScreen(
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
         val lang = appSettings.currentLanguage
 
+        // Nombre del hogar activo para la topbar (ver panel de expertos v2,
+        // Estética #4): con varios hogares, esta pantalla no dejaba claro
+        // en cuál se estaba trabajando.
+        val householdModel = koinScreenModel<HouseholdScreenModel>()
+        val householdUiState by householdModel.uiState.collectAsState()
+        LaunchedEffect(householdId) {
+            householdModel.loadHousehold(householdId)
+        }
+        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+
         LaunchedEffect(householdId) {
             model.setCurrentMemberId(memberId)
             model.loadTasks(householdId)
@@ -171,6 +181,7 @@ data class CalendarScreen(
                 // ── Top bar ─────────────────────────────────
                 TaskHubTopBar(
                     title = s("personal_space_calendar"),
+                    subtitle = householdName,
                     onBack = { navigator.pop() },
                     actions = {
                         TextButton(
