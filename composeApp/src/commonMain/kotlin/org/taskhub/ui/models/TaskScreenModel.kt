@@ -415,6 +415,14 @@ class TaskScreenModel(
                 )
                 _undoState.value = _undoState.value?.copy(completedAt = completedAt)
 
+                // Si había una asignación pendiente para este miembro, sincronizarla
+                // como completada (ver KDoc de syncAssignmentOnTaskCompleted) — evita
+                // que el detalle siga ofreciendo "Marcar hecho" sobre una tarea ya
+                // completada por la lista, lo que duplicaría los puntos ya otorgados.
+                try {
+                    repo.syncAssignmentOnTaskCompleted(householdId, taskId, memberId, task.points, completedAt)
+                } catch (_: Exception) { }
+
                 // Cancel any scheduled reminder for this task.
                 // La tarea ya está completada y los puntos ya se otorgaron en el
                 // servidor en este punto: un fallo aquí (WorkManager/AlarmManager)

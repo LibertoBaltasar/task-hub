@@ -61,9 +61,10 @@ class WelcomeScreen : Screen {
                 ) {
                     SettingsSheet(
                         callbacks = SettingsCallbacks(
-                            onExportCsv = { /* No tasks to export on welcome screen */ },
+                            onExportCsv = { },
                             onDismiss = { showSettings = false },
-                            onEditProfile = { navigator.push(EditProfileScreen()) }
+                            onEditProfile = { navigator.push(EditProfileScreen()) },
+                            showExportCsv = false // No tasks to export on welcome screen
                         )
                     )
                 }

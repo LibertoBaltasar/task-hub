@@ -105,7 +105,8 @@ class HomeScreen : Screen {
                         callbacks = SettingsCallbacks(
                             onExportCsv = { },
                             onDismiss = { showSettings = false },
-                            onEditProfile = { navigator.push(EditProfileScreen()) }
+                            onEditProfile = { navigator.push(EditProfileScreen()) },
+                            showExportCsv = false // exportar disponible desde la lista de tareas
                         )
                     )
                 }

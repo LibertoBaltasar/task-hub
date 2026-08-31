@@ -167,6 +167,15 @@ private fun RankingRow(
         3 -> Teal50
         else -> MaterialTheme.colorScheme.surface
     }
+    // Teal50/Coral100 son fondos fijos (no siguen el tema oscuro): el texto
+    // secundario debe emparejarse con un color fijo también, no con
+    // onSurfaceVariant (que en oscuro cae hasta ~1.3:1 sobre estos fondos
+    // claros — mismo patrón ya corregido en otras 6 cards de la app).
+    val secondaryTextColor = when (position) {
+        1 -> Coral800
+        2, 3 -> Teal800
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -198,7 +207,7 @@ private fun RankingRow(
                         else -> ""
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = secondaryTextColor,
                     textAlign = TextAlign.Center
                 )
             }
@@ -221,12 +230,13 @@ private fun RankingRow(
                 Text(
                     text = member.displayName,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = if (member.role == "admin") s("ranking_role_admin") else s("member_role_child_full"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = secondaryTextColor
                 )
             }
 
@@ -241,7 +251,7 @@ private fun RankingRow(
                 Text(
                     text = "🔥 ${member.currentStreak}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = secondaryTextColor
                 )
             }
         }

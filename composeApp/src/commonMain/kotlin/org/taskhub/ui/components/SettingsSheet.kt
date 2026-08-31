@@ -25,7 +25,12 @@ import org.taskhub.platform.saveWidgetThemeToCache
 data class SettingsCallbacks(
     val onExportCsv: () -> Unit,
     val onDismiss: () -> Unit,
-    val onEditProfile: () -> Unit = {}
+    val onEditProfile: () -> Unit = {},
+    // false en pantallas sin contexto de tareas cargado (Home, Perfil): antes
+    // el botón se mostraba igual en las 4 pantallas con onExportCsv = {} (no-op)
+    // en 3 de ellas — un control muerto real. Exportar sigue disponible desde
+    // la lista de tareas, que sí tiene los datos.
+    val showExportCsv: Boolean = true
 )
 
 /**
@@ -431,22 +436,23 @@ fun SettingsSheet(
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-
         // ── Export CSV ───────────────────────────────────
-        Button(
-            onClick = {
-                callbacks.onDismiss()
-                callbacks.onExportCsv()
-            },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-            shape = MaterialTheme.shapes.large
-        ) {
-            Text(
-                text = s("settings_export_csv"),
-                style = MaterialTheme.typography.titleMedium
-            )
+        if (callbacks.showExportCsv) {
+            Spacer(Modifier.height(24.dp))
+            Button(
+                onClick = {
+                    callbacks.onDismiss()
+                    callbacks.onExportCsv()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Text(
+                    text = s("settings_export_csv"),
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
         }
 
         Spacer(Modifier.height(16.dp))

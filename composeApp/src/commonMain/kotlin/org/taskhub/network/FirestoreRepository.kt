@@ -339,7 +339,7 @@ class FirestoreRepository(
         )
         client.patch("$baseUrl/users/$uid") {
             withAuth()
-            parameter("updateMask.fieldPaths", "fcmToken,fcmTokenUpdatedAt")
+            updateMaskFieldPaths("fcmToken", "fcmTokenUpdatedAt")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -384,6 +384,21 @@ class FirestoreRepository(
     private suspend fun HttpRequestBuilder.withAuth() {
         ensureAuth()
         bearerToken?.let { header("Authorization", "Bearer $it") }
+    }
+
+    /**
+     * Añade `updateMask.fieldPaths` como parámetros de query repetidos (uno por
+     * campo), tal y como exige la API REST de Firestore. Un único string con
+     * los campos unidos por comas ("a,b,c") es inválido y produce el error
+     * "Invalid property path" — Firestore espera múltiples pares
+     * `updateMask.fieldPaths=a&updateMask.fieldPaths=b&updateMask.fieldPaths=c`.
+     */
+    private fun HttpRequestBuilder.updateMaskFieldPaths(vararg fields: String) {
+        fields.forEach { parameter("updateMask.fieldPaths", it) }
+    }
+
+    private fun HttpRequestBuilder.updateMaskFieldPaths(fields: Collection<String>) {
+        fields.forEach { parameter("updateMask.fieldPaths", it) }
     }
 
     // ────────────────────────────────────────────────────────
@@ -860,7 +875,7 @@ class FirestoreRepository(
 
         client.patch("$baseUrl/households/$householdId/members/$memberId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "leftAt")
+            updateMaskFieldPaths("leftAt")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -878,7 +893,7 @@ class FirestoreRepository(
         )
         client.patch("$baseUrl/households/$householdId/members/$memberId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "role")
+            updateMaskFieldPaths("role")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -935,7 +950,7 @@ class FirestoreRepository(
 
         client.patch("$baseUrl/users/$userId") {
             withAuth()
-            parameter("updateMask.fieldPaths", fields.keys.joinToString(","))
+            updateMaskFieldPaths(fields.keys)
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -956,7 +971,7 @@ class FirestoreRepository(
         )
         client.patch("$baseUrl/households/$householdId/members/$memberId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "currentStreak,bestStreak,lastStreakDate")
+            updateMaskFieldPaths("currentStreak", "bestStreak", "lastStreakDate")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -989,7 +1004,7 @@ class FirestoreRepository(
             try {
                 client.patch(docUrl) {
                     withAuth()
-                    parameter("updateMask.fieldPaths", "totalPoints")
+                    updateMaskFieldPaths("totalPoints")
                     current.updateTime?.let { parameter("currentDocument.updateTime", it) }
                     contentType(ContentType.Application.Json)
                     setBody(FirestoreDocument(mapOf("totalPoints" to FirestoreValue(integerValue = newTotal.toString()))))
@@ -1082,7 +1097,7 @@ class FirestoreRepository(
         )
         client.patch("$baseUrl/households/$householdId/members/$fromMemberId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "appreciationGiven,appreciationWeekStart")
+            updateMaskFieldPaths("appreciationGiven", "appreciationWeekStart")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -1177,7 +1192,7 @@ class FirestoreRepository(
             try {
                 client.patch(docUrl) {
                     withAuth()
-                    parameter("updateMask.fieldPaths", "unlocked,updatedAt")
+                    updateMaskFieldPaths("unlocked", "updatedAt")
                     current?.updateTime?.let { parameter("currentDocument.updateTime", it) }
                     contentType(ContentType.Application.Json)
                     setBody(FirestoreDocument(fields))
@@ -1383,7 +1398,7 @@ class FirestoreRepository(
 
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "lastCompletedDate,completedBy")
+            updateMaskFieldPaths("lastCompletedDate", "completedBy")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -1433,7 +1448,7 @@ class FirestoreRepository(
         )
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "lastCompletedDate,completedBy")
+            updateMaskFieldPaths("lastCompletedDate", "completedBy")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -1526,7 +1541,7 @@ class FirestoreRepository(
         val fields = mapOf("completedBy" to FirestoreValue(stringValue = newMemberId))
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "completedBy")
+            updateMaskFieldPaths("completedBy")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -1570,7 +1585,7 @@ class FirestoreRepository(
         val fields = mapOf("memberId" to FirestoreValue(stringValue = newMemberId))
         client.patch("$baseUrl/households/$householdId/taskHistory/${record.id}") {
             withAuth()
-            parameter("updateMask.fieldPaths", "memberId")
+            updateMaskFieldPaths("memberId")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -1691,6 +1706,51 @@ class FirestoreRepository(
         }
     }
 
+    /** Marca el documento de una asignación como completada (sin tocar puntos del miembro). */
+    private suspend fun markAssignmentCompleted(
+        householdId: String,
+        taskId: String,
+        assignmentId: String,
+        completedAt: Long,
+        pointsAwarded: Int,
+        onTime: Boolean
+    ) {
+        val fields = mapOf<String, FirestoreValue>(
+            "status" to FirestoreValue(stringValue = "completed"),
+            "completedAt" to FirestoreValue(integerValue = completedAt.toString()),
+            "pointsAwarded" to FirestoreValue(integerValue = pointsAwarded.toString()),
+            "onTime" to FirestoreValue(booleanValue = onTime)
+        )
+        client.patch(
+            "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
+        ) {
+            withAuth()
+            updateMaskFieldPaths("status", "completedAt", "pointsAwarded", "onTime")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+    }
+
+    /**
+     * Tras completar una tarea vía [completeTask] (lista principal), sincroniza la
+     * asignación pendiente del miembro (si existe) como completada — sin esto,
+     * quedaba en `status="assigned"` para siempre y el botón "Marcar hecho" del
+     * detalle (basado en assignments, ver [completeAssignment]) seguía activo,
+     * permitiendo volver a "completarla" y duplicar los puntos ya otorgados por
+     * [completeTask]. No otorga puntos (ya se otorgaron en [completeTask]).
+     */
+    suspend fun syncAssignmentOnTaskCompleted(
+        householdId: String,
+        taskId: String,
+        memberId: String,
+        points: Int,
+        completedAt: Long
+    ) {
+        val assignment = getAssignments(householdId, taskId)
+            .find { it.memberId == memberId && it.status == "assigned" } ?: return
+        markAssignmentCompleted(householdId, taskId, assignment.id, completedAt, points, onTime = true)
+    }
+
     /**
      * Complete a task assignment. Calculates penalty if overdue, handles recurrence.
      * Returns the updated assignment.
@@ -1717,20 +1777,31 @@ class FirestoreRepository(
         }
 
         // Update assignment
-        val fields = mapOf<String, FirestoreValue>(
-            "status" to FirestoreValue(stringValue = "completed"),
-            "completedAt" to FirestoreValue(integerValue = now.toString()),
-            "pointsAwarded" to FirestoreValue(integerValue = pointsAwarded.toString()),
-            "onTime" to FirestoreValue(booleanValue = onTime)
-        )
+        markAssignmentCompleted(householdId, taskId, assignmentId, now, pointsAwarded, onTime)
 
-        client.patch(
-            "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
-        ) {
+        // Award points + persist history + sincronizar completedBy/lastCompletedDate
+        // en la propia tarea, igual que [completeTask] — antes esta función solo
+        // marcaba la asignación como completada sin que los puntos llegaran al saldo
+        // real del miembro (bug crítico: la UI mostraba "+N pts" que nunca se sumaban
+        // a totalPoints ni podían canjearse por recompensas).
+        addMemberPoints(householdId, assignment.memberId, pointsAwarded)
+        saveTaskHistory(
+            householdId = householdId,
+            taskId = taskId,
+            memberId = assignment.memberId,
+            points = pointsAwarded,
+            completedAt = now,
+            onTime = onTime
+        )
+        val taskFields = mapOf(
+            "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
+            "completedBy" to FirestoreValue(stringValue = assignment.memberId)
+        )
+        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "status,completedAt,pointsAwarded,onTime")
+            updateMaskFieldPaths("lastCompletedDate", "completedBy")
             contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
+            setBody(FirestoreDocument(taskFields))
         }
 
         // Handle recurrence: create next assignment for recurring tasks.
@@ -1781,7 +1852,7 @@ class FirestoreRepository(
             "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
         ) {
             withAuth()
-            parameter("updateMask.fieldPaths", "googleEventId")
+            updateMaskFieldPaths("googleEventId")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -1984,11 +2055,9 @@ class FirestoreRepository(
             )
         )
 
-        val updateMask = fields.keys.joinToString(",")
-
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            parameter("updateMask.fieldPaths", updateMask)
+            updateMaskFieldPaths(fields.keys)
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -2022,7 +2091,7 @@ class FirestoreRepository(
         )
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            parameter("updateMask.fieldPaths", "subtasks")
+            updateMaskFieldPaths("subtasks")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -2267,7 +2336,7 @@ class FirestoreRepository(
             "$baseUrl/households/$householdId/notifications/$notificationId"
         ) {
             withAuth()
-            parameter("updateMask.fieldPaths", "read")
+            updateMaskFieldPaths("read")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -2348,6 +2417,19 @@ class FirestoreRepository(
         pointsSpent: Int
     ): RewardRedemption {
         val now = Clock.System.now().toEpochMilliseconds()
+
+        // Validar saldo contra una lectura fresca del miembro — a diferencia de
+        // donatePoints (que sí valida vía PointsRules), esta función descontaba
+        // puntos sin comprobar el saldo en ningún punto del repositorio,
+        // confiando solo en el `canAfford` (potencialmente obsoleto) de la UI.
+        // No elimina la carrera entre dos canjes concurrentes (ver
+        // docs/atomicidad-commit-pendiente.md), pero evita el caso más común:
+        // un único canje con saldo insuficiente por datos ya desincronizados.
+        val member = getMembers(householdId).find { it.id == memberId }
+            ?: throw IllegalStateException("Miembro no encontrado")
+        if (member.totalPoints < pointsSpent) {
+            throw IllegalStateException("Saldo insuficiente para canjear esta recompensa")
+        }
 
         // 1. Guardar primero el registro de canje: si el paso 2 (descontar
         //    puntos) falla a mitad de camino, queda un registro auditable en

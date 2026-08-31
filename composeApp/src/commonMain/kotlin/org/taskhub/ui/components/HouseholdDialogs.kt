@@ -199,9 +199,10 @@ fun HouseholdSettingsDialog(
         ) {
             SettingsSheet(
                 callbacks = SettingsCallbacks(
-                    onExportCsv = { /* CSV export available from task list */ },
+                    onExportCsv = { },
                     onDismiss = onDismiss,
-                    onEditProfile = onEditProfile
+                    onEditProfile = onEditProfile,
+                    showExportCsv = false // CSV export available from task list
                 )
             )
         }

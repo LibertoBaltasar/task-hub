@@ -218,6 +218,7 @@ data class EditTaskScreen(
                                     )
                                 },
                                 enabled = actionState !is TaskActionState.Loading &&
+                                    !assignmentsLoadFailed &&
                                     title.isNotBlank() &&
                                     (pointsText.toIntOrNull() ?: -1) > 0 &&
                                     (!hasDeadline || deadlineTime.isValidTimeFormat()) &&
