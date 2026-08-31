@@ -22,6 +22,16 @@ import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 
+/**
+ * Crea el PRIMER perfil de miembro justo tras crear un hogar nuevo
+ * (navegado únicamente desde [CreateHouseholdScreen]). A diferencia de
+ * [JoinHouseholdScreen] (alta por invitación, rol forzado a "child"), aquí
+ * SÍ se deja elegir rol libremente porque quien llega a esta pantalla es,
+ * por construcción, el `ownerId` del hogar recién creado (nadie más puede
+ * alcanzarla) — coincide con la rama `isOwner(hid)` de
+ * `firestore.rules` (households/{hid}/members/{mid}.create), que también
+ * permite elegir rol libremente para esta cuenta.
+ */
 data class CreateProfileScreen(val householdId: String) : Screen {
 
     @Composable

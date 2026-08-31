@@ -56,6 +56,7 @@ data class TaskDetailScreen(
         val detailState by model.detailState.collectAsState()
         val actionState by model.actionState.collectAsState()
         val reassignState by model.reassignState.collectAsState()
+        val currentMemberId by model.currentMemberId.collectAsState()
         val calendarActionState by model.calendarActionState.collectAsState()
         val myAssignment by model.myAssignment.collectAsState()
         val commentsState by model.commentsState.collectAsState()
@@ -147,12 +148,17 @@ data class TaskDetailScreen(
                         val memberMap = state.members.associateBy { it.id }
                         val isGoogleLinked = settingsStore.hasGoogleLinked()
                         val isCalendarSyncEnabled = settingsStore.isCalendarSyncEnabled()
+                        // Reasignar quién hizo una tarea mueve puntos entre miembros:
+                        // gateado a admin/owner tanto aquí como en firestore.rules
+                        // (ver el `update` de households/{hid}/tasks/{tid}).
+                        val isAdmin = memberMap[currentMemberId]?.role == "admin"
                         TaskDetailContent(
                             task = state.task,
                             assignments = state.assignments,
                             memberMap = memberMap,
                             actionState = actionState,
                             reassignState = reassignState,
+                            isAdmin = isAdmin,
                             commentsState = commentsState,
                             newCommentText = newCommentText,
                             s = s,
@@ -249,6 +255,7 @@ private fun TaskDetailContent(
     memberMap: Map<String, MemberResponse>,
     actionState: TaskActionState,
     reassignState: TaskActionState = TaskActionState.Idle,
+    isAdmin: Boolean = false,
     commentsState: CommentsUiState,
     newCommentText: String,
     s: (String) -> String = { it },
@@ -502,17 +509,21 @@ private fun TaskDetailContent(
                             )
                         }
                     }
-                    TextButton(onClick = {
-                        selectedCompleterId = task.completedBy
-                        showChangeWhoDialog = true
-                    }) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = s("task_detail_change_completer_desc"),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(s("task_detail_change_btn"))
+                    // Reasignar quién completó la tarea mueve puntos entre
+                    // miembros: solo admin/owner (ver firestore.rules v4).
+                    if (isAdmin) {
+                        TextButton(onClick = {
+                            selectedCompleterId = task.completedBy
+                            showChangeWhoDialog = true
+                        }) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = s("task_detail_change_completer_desc"),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(s("task_detail_change_btn"))
+                        }
                     }
                 }
             }
@@ -982,7 +993,7 @@ private fun AssignmentCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     UserAvatar(
                         avatarUrl = member?.avatarUrl,
-                        fallbackEmoji = if (member?.role == "admin") "👑" else "🧒",
+                        fallbackEmoji = if (member?.role == "admin") "👑" else "👤",
                         displayName = member?.displayName ?: "",
                         contentDescription = member?.displayName ?: "",
                         size = 32.dp,

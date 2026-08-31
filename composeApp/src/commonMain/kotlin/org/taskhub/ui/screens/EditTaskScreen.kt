@@ -631,7 +631,7 @@ data class EditTaskScreen(
                                                 )
                                             )
                                             Text(
-                                                text = "${if (member.role == "admin") "👑" else "🧒"} ${member.displayName}",
+                                                text = "${if (member.role == "admin") "👑" else "👤"} ${member.displayName}",
                                                 style = MaterialTheme.typography.bodyLarge
                                             )
                                         }
@@ -725,7 +725,7 @@ data class EditTaskScreen(
                                                     members.forEach { member ->
                                                         DropdownMenuItem(
                                                             text = {
-                                                                Text("${if (member.role == "admin") "👑" else "🧒"} ${member.displayName}")
+                                                                Text("${if (member.role == "admin") "👑" else "👤"} ${member.displayName}")
                                                             },
                                                             onClick = {
                                                                 rotationSlots = rotationSlots.toMutableMap().apply { put(day, member.id) }

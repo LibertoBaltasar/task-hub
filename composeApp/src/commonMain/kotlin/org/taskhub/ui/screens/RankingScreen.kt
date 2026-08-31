@@ -208,7 +208,7 @@ private fun RankingRow(
             // Avatar
             UserAvatar(
                 avatarUrl = member.avatarUrl,
-                fallbackEmoji = if (member.role == "admin") "👑" else "🧒",
+                fallbackEmoji = if (member.role == "admin") "👑" else "👤",
                 displayName = member.displayName,
                 contentDescription = member.displayName,
                 backgroundColor = if (member.role == "admin") Coral100 else Teal100

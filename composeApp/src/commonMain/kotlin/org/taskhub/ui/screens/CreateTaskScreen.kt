@@ -601,7 +601,7 @@ data class CreateTaskScreen(
                                                 )
                                             )
                                             Text(
-                                                text = "${if (member.role == "admin") "👑" else "🧒"} ${member.displayName}",
+                                                text = "${if (member.role == "admin") "👑" else "👤"} ${member.displayName}",
                                                 style = MaterialTheme.typography.bodyLarge
                                             )
                                             Spacer(Modifier.weight(1f))

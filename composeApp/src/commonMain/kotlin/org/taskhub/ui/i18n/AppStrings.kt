@@ -194,9 +194,9 @@ object AppStrings {
             "household_member_list_invite_cta" to "Invitar miembros",
             "household_member_list_error" to "Error: %s",
             "member_role_admin_full" to "Administrador",
-            "member_role_child_full" to "Niño/a",
+            "member_role_child_full" to "Miembro",
             "member_role_admin_short" to "👑 Admin",
-            "member_role_child_short" to "🧒 Niño/a",
+            "member_role_child_short" to "👤 Miembro",
             "member_create_task_short" to "+ Tarea",
 
             // Sección de tareas del hogar (HouseholdTaskSection.kt)
@@ -713,9 +713,9 @@ object AppStrings {
             "household_member_list_invite_cta" to "Invite members",
             "household_member_list_error" to "Error: %s",
             "member_role_admin_full" to "Admin",
-            "member_role_child_full" to "Child",
+            "member_role_child_full" to "Member",
             "member_role_admin_short" to "👑 Admin",
-            "member_role_child_short" to "🧒 Child",
+            "member_role_child_short" to "👤 Member",
             "member_create_task_short" to "+ Task",
 
             // Household task section (HouseholdTaskSection.kt)

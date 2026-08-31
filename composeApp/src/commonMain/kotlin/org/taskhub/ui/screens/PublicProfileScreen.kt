@@ -149,7 +149,7 @@ private fun PublicProfileContent(
         // ── Avatar grande ──
         UserAvatar(
             avatarUrl = avatarUrl,
-            fallbackEmoji = avatarEmoji.ifEmpty { if (role == "admin") "👑" else "🧒" },
+            fallbackEmoji = avatarEmoji.ifEmpty { if (role == "admin") "👑" else "👤" },
             displayName = displayName,
             contentDescription = displayName,
             size = 100.dp,

@@ -40,7 +40,12 @@ data class MemberResponse(
     val householdId: String,
     val displayName: String,
     val avatarUrl: String? = null,
-    /** "admin" | "child" */
+    /**
+     * "admin" | "child". Valor interno en código/Firestore — NO se
+     * renombra (evita migración de datos). El nombre de display para
+     * "child" en la UI es "Miembro" (`member_role_child_*` en
+     * [org.taskhub.ui.i18n.AppStrings]), no "Niño/a".
+     */
     val role: String,
     /** Puntos acumulados totales (histórico). */
     val totalPoints: Int = 0,

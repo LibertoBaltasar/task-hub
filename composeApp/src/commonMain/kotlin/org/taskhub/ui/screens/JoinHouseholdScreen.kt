@@ -36,7 +36,6 @@ class JoinHouseholdScreen : Screen {
 
         var inviteCode by remember { mutableStateOf("") }
         var displayName by remember { mutableStateOf("") }
-        var role by remember { mutableStateOf("child") }
         val focusManager = LocalFocusManager.current
 
         // Track the joined household
@@ -203,41 +202,17 @@ class JoinHouseholdScreen : Screen {
                         enabled = memberState !is MemberUiState.Loading
                     )
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Text(
-                        text = s("create_profile_role_label"),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.align(Alignment.Start)
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        FilterChip(
-                            selected = role == "admin",
-                            onClick = { role = "admin" },
-                            label = { Text(s("create_profile_role_admin")) },
-                            modifier = Modifier.weight(1f)
-                        )
-                        FilterChip(
-                            selected = role == "child",
-                            onClick = { role = "child" },
-                            label = { Text(s("member_role_child_short")) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
                     Spacer(modifier = Modifier.height(24.dp))
 
                     Button(
                         onClick = {
                             focusManager.clearFocus()
                             val userId = householdModel.getLocalId()
-                            memberModel.addMember(joinedHouseholdId!!, displayName.trim(), role, userId = userId, inviteCode = inviteCode.trim())
+                            // Unirse por invitación siempre entra como "child"
+                            // (display "Miembro") — nadie se autoproclama admin.
+                            // Reforzado también en firestore.rules v4. Un
+                            // admin/owner existente puede ascenderlo después.
+                            memberModel.addMember(joinedHouseholdId!!, displayName.trim(), "child", userId = userId, inviteCode = inviteCode.trim())
                         },
                         modifier = Modifier
                             .fillMaxWidth()

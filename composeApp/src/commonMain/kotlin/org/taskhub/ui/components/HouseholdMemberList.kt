@@ -197,7 +197,7 @@ private fun MemberCard(
                 // Avatar
                 UserAvatar(
                     avatarUrl = member.avatarUrl,
-                    fallbackEmoji = if (member.role == "admin") "👑" else "🧒",
+                    fallbackEmoji = if (member.role == "admin") "👑" else "👤",
                     displayName = member.displayName,
                     contentDescription = member.displayName,
                     size = 48.dp,
