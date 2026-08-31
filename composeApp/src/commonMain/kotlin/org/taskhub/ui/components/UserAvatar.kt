@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -40,11 +42,17 @@ fun UserAvatar(
     size: Dp = 40.dp,
     backgroundColor: Color = Teal100
 ) {
+    val avatarContentDescription = contentDescription
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(backgroundColor),
+            .background(backgroundColor)
+            // Fija la descripción accesible en el contenedor y anula la de los hijos:
+            // sin esto, la rama de emoji (la más común, sin ningún Modifier.semantics
+            // propio) dejaba que TalkBack/VoiceOver leyera el glifo unicode crudo del
+            // emoji en vez del contentDescription recibido por el componente.
+            .clearAndSetSemantics { this.contentDescription = avatarContentDescription },
         contentAlignment = Alignment.Center
     ) {
         when {

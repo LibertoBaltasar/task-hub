@@ -25,6 +25,7 @@ import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.Coral500
 import org.taskhub.ui.theme.Teal600
+import org.taskhub.ui.theme.Teal800
 import org.taskhub.ui.theme.Teal50
 
 class WelcomeScreen : Screen {
@@ -160,7 +161,10 @@ class WelcomeScreen : Screen {
                                 .height(56.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Teal50,
-                                contentColor = Teal600
+                                // Teal800 (no Teal600): Teal600 sobre Teal50 da 3.22:1,
+                                // por debajo del umbral WCAG AA (4.5:1) — y como ambos
+                                // colores son fijos, fallaba en cualquier tema/modo.
+                                contentColor = Teal800
                             ),
                             shape = MaterialTheme.shapes.large
                         ) {
@@ -177,7 +181,7 @@ class WelcomeScreen : Screen {
                         // Sin acceso multiplataforma trivial al versionName de Gradle desde
                         // commonMain: recuerda actualizar este literal en cada
                         // "chore: bump versión X.Y.Z" (ver CLAUDE.md).
-                        text = "v0.7.22",
+                        text = "v0.7.23",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

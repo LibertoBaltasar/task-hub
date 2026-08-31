@@ -68,6 +68,19 @@ data class HouseholdScreen(val householdId: String) : Screen {
         var showLeaveDialog by remember { mutableStateOf(false) }
         var isLeaving by remember { mutableStateOf(false) }
 
+        // Error de borrar/salir del hogar: antes se descartaba en silencio
+        // (onError = { _ -> isDeleting/isLeaving = false }), dejando al usuario
+        // sin ninguna pista de que la acción (destructiva) había fallado.
+        var householdErrorMessage by remember { mutableStateOf<String?>(null) }
+        val householdSnackbarHostState = remember { SnackbarHostState() }
+        LaunchedEffect(householdErrorMessage) {
+            val msg = householdErrorMessage
+            if (msg != null) {
+                householdSnackbarHostState.showSnackbar(message = "❌ $msg", duration = SnackbarDuration.Long)
+                householdErrorMessage = null
+            }
+        }
+
         // QR / Share dialog state
         var showQrDialog by remember { mutableStateOf(false) }
 
@@ -116,7 +129,16 @@ data class HouseholdScreen(val householdId: String) : Screen {
             currentMemberId = repo.resolveCurrentMember(householdId)
         }
         val myMember = (memberState as? MemberUiState.Success)?.members?.firstOrNull { it.id == currentMemberId }
-        val isAdmin = myMember?.role == "admin"
+        // El owner del hogar (quien lo creó) es siempre "de confianza" para
+        // gestionar roles/recompensas, igual que isTrusted(hid) en
+        // firestore.rules, independientemente de qué rol se auto-asignara al
+        // crear su propio perfil en CreateProfileScreen. Sin esto, un creador
+        // que eligiera "Miembro" para sí mismo dejaba el hogar sin nadie con
+        // controles de admin visibles en la UI (bloqueo permanente).
+        val currentUserId = repo.getLocalId()
+        val ownerHousehold = (householdState as? HouseholdUiState.Success)?.household
+        val isAdmin = myMember?.role == "admin" ||
+            (currentUserId != null && ownerHousehold != null && currentUserId == ownerHousehold.ownerId)
 
         // ── Chat de mensajes ──
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -194,8 +216,9 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         onSuccess = {
                             navigator.replaceAll(HomeScreen())
                         },
-                        onError = { _ ->
+                        onError = { msg ->
                             isDeleting = false
+                            householdErrorMessage = msg
                         }
                     )
                 }
@@ -216,8 +239,9 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         onSuccess = {
                             navigator.replaceAll(HomeScreen())
                         },
-                        onError = { _ ->
+                        onError = { msg ->
                             isLeaving = false
+                            householdErrorMessage = msg
                         }
                     )
                 }
@@ -278,6 +302,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
+            Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
@@ -390,7 +415,11 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = s("household_invite_code"),
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.primary,
+                                                // Color fijo (no colorScheme.primary): el fondo de esta card
+                                                // (Teal50) tampoco cambia con el tema/modo oscuro, así que un
+                                                // color de texto que SÍ cambia (colorScheme.primary se aclara
+                                                // en modo oscuro) rompía el contraste (1.87:1 en dark).
+                                                color = Teal800,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -398,7 +427,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = household.inviteCode,
                                                 style = MaterialTheme.typography.headlineMedium,
-                                                color = MaterialTheme.colorScheme.primary,
+                                                color = Teal800,
                                                 fontWeight = FontWeight.Bold,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
@@ -409,7 +438,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = s("household_share_code"),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.primary,
+                                                color = Teal800,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -577,6 +606,12 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         is HouseholdUiState.Idle -> {}
                     }
                 }
+            }
+
+            SnackbarHost(
+                hostState = householdSnackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
             }
         }
     }

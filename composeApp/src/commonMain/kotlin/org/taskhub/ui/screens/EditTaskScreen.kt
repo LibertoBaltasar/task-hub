@@ -220,7 +220,8 @@ data class EditTaskScreen(
                                 enabled = actionState !is TaskActionState.Loading &&
                                     title.isNotBlank() &&
                                     (pointsText.toIntOrNull() ?: -1) > 0 &&
-                                    (!hasDeadline || deadlineTime.isValidTimeFormat()),
+                                    (!hasDeadline || deadlineTime.isValidTimeFormat()) &&
+                                    (!hasPenalty || (penaltyValue.toIntOrNull() ?: -1) > 0),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.primary
                                 )
@@ -631,7 +632,7 @@ data class EditTaskScreen(
                                                 )
                                             )
                                             Text(
-                                                text = "${if (member.role == "admin") "👑" else "👤"} ${member.displayName}",
+                                                text = "${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}",
                                                 style = MaterialTheme.typography.bodyLarge
                                             )
                                         }
@@ -725,7 +726,7 @@ data class EditTaskScreen(
                                                     members.forEach { member ->
                                                         DropdownMenuItem(
                                                             text = {
-                                                                Text("${if (member.role == "admin") "👑" else "👤"} ${member.displayName}")
+                                                                Text("${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}")
                                                             },
                                                             onClick = {
                                                                 rotationSlots = rotationSlots.toMutableMap().apply { put(day, member.id) }
@@ -889,6 +890,7 @@ data class EditTaskScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                isError = (penaltyValue.toIntOrNull() ?: -1) <= 0,
                                 supportingText = {
                                     Text(if (penaltyMode == "fixed")
                                         s("create_task_penalty_fixed_hint")

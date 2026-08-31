@@ -3,8 +3,6 @@ package org.taskhub.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +17,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.UserProfile
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.ProfileScreenModel
@@ -52,14 +51,12 @@ data class PublicProfileScreen(
         }
 
         Scaffold(
+            // TaskHubTopBar (no TopAppBar manual): consistencia con las otras
+            // pantallas — la barra manual dejaba el título alineado a la izquierda.
             topBar = {
-                TopAppBar(
-                    title = { Text(member.displayName, fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = { navigator.pop() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, s("nav_back_content_description"))
-                        }
-                    }
+                TaskHubTopBar(
+                    title = member.displayName,
+                    onBack = { navigator.pop() }
                 )
             }
         ) { padding ->

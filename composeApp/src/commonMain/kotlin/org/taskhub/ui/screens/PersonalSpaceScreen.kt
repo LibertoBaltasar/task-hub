@@ -83,7 +83,11 @@ data class PersonalSpaceScreen(
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Teal500.copy(alpha = 0.08f))
+                            // primaryContainer/onPrimaryContainer (no Teal500 con alpha + Teal900
+                            // fijo): el alpha compuesto sobre el fondo oscuro da un contenedor casi
+                            // negro con texto Teal900 encima -> 1.89:1. El par del tema ya está
+                            // auditado >=4.5:1 en los 3 temas x claro/oscuro.
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                         ) {
                             Column(
                                 modifier = Modifier
@@ -99,7 +103,7 @@ data class PersonalSpaceScreen(
                                 Text(
                                     text = s("personal_space_hero_title"),
                                     style = MaterialTheme.typography.headlineSmall,
-                                    color = Teal900,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
@@ -108,7 +112,7 @@ data class PersonalSpaceScreen(
                                 Text(
                                     text = s("personal_space_hero_subtitle"),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
                                 )

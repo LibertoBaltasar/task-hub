@@ -25,6 +25,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
+import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.storage.SettingsStore
@@ -50,6 +51,7 @@ data class TaskDetailScreen(
         val model = koinScreenModel<TaskScreenModel>()
         val settingsStore = koinInject<SettingsStore>()
         val authManager = koinInject<GoogleAuthManager>()
+        val repo = koinInject<FirestoreRepository>()
         val coroutineScope = rememberCoroutineScope()
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -64,6 +66,22 @@ data class TaskDetailScreen(
 
         var isLinkingCalendar by remember { mutableStateOf(false) }
         var showDeleteDialog by remember { mutableStateOf(false) }
+
+        // El owner del hogar (quien lo creó) es siempre "de confianza" para
+        // reasignar completados, igual que isTrusted(hid) en firestore.rules,
+        // independientemente de qué rol se auto-asignara al crear su propio
+        // perfil — ver el mismo fix en HouseholdScreen.kt.
+        var isOwner by remember { mutableStateOf(false) }
+        LaunchedEffect(householdId) {
+            try {
+                val household = repo.getHousehold(householdId)
+                val uid = repo.getLocalId()
+                isOwner = uid != null && uid == household.ownerId
+            } catch (_: Exception) {
+                // best-effort: si falla, isOwner se queda en false (solo se
+                // pierde el atajo de "owner", el rol "admin" normal sigue igual)
+            }
+        }
 
         LaunchedEffect(taskId) {
             model.resetActionState()
@@ -151,7 +169,7 @@ data class TaskDetailScreen(
                         // Reasignar quién hizo una tarea mueve puntos entre miembros:
                         // gateado a admin/owner tanto aquí como en firestore.rules
                         // (ver el `update` de households/{hid}/tasks/{tid}).
-                        val isAdmin = memberMap[currentMemberId]?.role == "admin"
+                        val isAdmin = memberMap[currentMemberId]?.role == "admin" || isOwner
                         TaskDetailContent(
                             task = state.task,
                             assignments = state.assignments,
@@ -207,6 +225,13 @@ data class TaskDetailScreen(
                                     isLinkingCalendar = false
                                     if (linked) {
                                         settingsStore.setCalendarSyncEnabled(true)
+                                    } else {
+                                        // Antes fallaba en silencio: solo se apagaba el
+                                        // spinner y volvía a "No vinculado" sin ninguna
+                                        // pista de si el usuario canceló o hubo un fallo
+                                        // real — reutiliza la misma tarjeta de error que
+                                        // ya usa "Sincronizar ahora".
+                                        model.setCalendarLinkError(s("calendar_link_error"))
                                     }
                                     model.loadTaskDetail(householdId, taskId)
                                 }
@@ -335,7 +360,9 @@ private fun TaskDetailContent(
                         Text(
                             text = task.description,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            // Color fijo (no onSurfaceVariant): el fondo Teal50 de esta card
+                            // tampoco cambia con el modo oscuro (1.52:1 en dark).
+                            color = Teal800
                         )
                     }
 
@@ -736,8 +763,12 @@ private fun TaskDetailContent(
                     items(commentsState.comments, key = { it.id }) { comment ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
+                            // surfaceVariant (no Teal50 con alpha 0.5f): el alpha compuesto sobre
+                            // el fondo oscuro daba un contenedor de contraste insuficiente para
+                            // onSurfaceVariant/onSurface (2.1-2.8:1) — surfaceVariant ya está
+                            // pensado para combinarse con esos colores "on*" en los 3 temas/modos.
                             colors = CardDefaults.cardColors(
-                                containerColor = Teal50.copy(alpha = 0.5f)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
@@ -749,7 +780,7 @@ private fun TaskDetailContent(
                                         text = comment.authorName,
                                         style = MaterialTheme.typography.labelMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = Teal700
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     if (comment.createdAt > 0) {
                                         Text(

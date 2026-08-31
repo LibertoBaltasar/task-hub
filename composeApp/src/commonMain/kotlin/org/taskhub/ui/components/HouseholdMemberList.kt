@@ -239,7 +239,10 @@ private fun MemberCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isAdmin) {
+                // Nunca sobre uno mismo: un admin que se auto-degrada a "Miembro"
+                // (y era el único admin) deja el hogar sin nadie que pueda volver
+                // a abrir este menú para revertirlo — bloqueo permanente evitable.
+                if (isAdmin && !isSelf) {
                     var roleMenuExpanded by remember { mutableStateOf(false) }
                     Box {
                         OutlinedButton(onClick = { roleMenuExpanded = true }) {

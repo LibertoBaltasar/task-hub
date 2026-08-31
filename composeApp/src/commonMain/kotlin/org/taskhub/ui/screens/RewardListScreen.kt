@@ -62,8 +62,21 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
     val navigator = LocalNavigator.currentOrThrow
     val rewardState by memberModel.rewardState.collectAsState()
     val memberState by memberModel.uiState.collectAsState()
+    val rewardActionState by memberModel.rewardActionState.collectAsState()
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Sin esto, un fallo al borrar una recompensa (p.ej. red) no mostraba nada:
+    // rewardActionState pasaba a Error pero ningún composable estaba suscrito,
+    // así que la tarjeta simplemente seguía ahí sin explicación.
+    LaunchedEffect(rewardActionState) {
+        val state = rewardActionState
+        if (state is org.taskhub.ui.models.RewardActionState.Error) {
+            snackbarHostState.showSnackbar(message = "❌ ${state.message}", duration = SnackbarDuration.Short)
+            memberModel.clearRewardAction()
+        }
+    }
 
     // Determine if current user is admin
     var isAdmin by remember { mutableStateOf(false) }
@@ -74,17 +87,34 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
         memberModel.loadMembers(householdId)
     }
 
-    val localId = koinInject<org.taskhub.network.FirestoreRepository>().getLocalId()
+    val repo = koinInject<org.taskhub.network.FirestoreRepository>()
+    val localId = repo.getLocalId()
+
+    // El owner del hogar es siempre "de confianza" para gestionar recompensas,
+    // igual que isTrusted(hid) en firestore.rules — ver mismo fix en
+    // HouseholdScreen.kt/TaskDetailScreen.kt.
+    var isOwner by remember { mutableStateOf(false) }
+    LaunchedEffect(householdId) {
+        try {
+            val household = repo.getHousehold(householdId)
+            isOwner = localId != null && localId == household.ownerId
+        } catch (_: Exception) {
+        }
+    }
 
     LaunchedEffect(memberState) {
         if (memberState is MemberUiState.Success) {
             val members = (memberState as MemberUiState.Success).members
             val myMember = members.find { it.userId == localId }
-            isAdmin = myMember?.role == "admin"
+            isAdmin = myMember?.role == "admin" || isOwner
             currentMemberId = myMember?.id ?: ""
         }
     }
+    LaunchedEffect(isOwner) {
+        if (isOwner) isAdmin = true
+    }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize()) {
         // Acción de crear (solo admins)
         if (isAdmin) {
@@ -199,6 +229,12 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
 
             is RewardUiState.Idle -> {}
         }
+    }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 

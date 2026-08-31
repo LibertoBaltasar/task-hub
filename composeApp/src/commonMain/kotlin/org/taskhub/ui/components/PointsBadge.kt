@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 import org.taskhub.ui.theme.semanticColors
 
 /** Tono visual de un [PointsBadge] (fondo/texto accesibles tomados del tema). */
-enum class BadgeTone { Coral, Teal, Neutral, Success, Warning, Info }
+enum class BadgeTone { Coral, Teal, Neutral, Success, Warning, Info, Error }
 
 /**
  * Chip reutilizable para puntos, urgencia y costes.
@@ -60,6 +60,10 @@ fun PointsBadge(
         BadgeTone.Info -> {
             container = MaterialTheme.semanticColors.infoContainer
             content = MaterialTheme.semanticColors.onInfoContainer
+        }
+        BadgeTone.Error -> {
+            container = MaterialTheme.colorScheme.errorContainer
+            content = MaterialTheme.colorScheme.onErrorContainer
         }
     }
     Surface(shape = MaterialTheme.shapes.small, color = container, modifier = modifier) {

@@ -127,7 +127,11 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                         ) {
                             LazyVerticalGrid(
-                                columns = GridCells.Fixed(8),
+                                // Adaptive(minSize=48.dp) en vez de Fixed(8): con Fixed, el ancho
+                                // de columna es anchoDisponible/8 (restricción "tight"), que en
+                                // móviles estrechos deja cada celda por debajo de 48dp aunque el
+                                // Surface interior pida size(48.dp) — Adaptive garantiza el mínimo.
+                                columns = GridCells.Adaptive(minSize = 48.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp)
@@ -246,7 +250,9 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                 Text(
                                     text = description,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    // Color fijo (no onSurfaceVariant): el fondo Teal50 de esta
+                                    // card tampoco cambia con el modo oscuro (1.52:1 en dark).
+                                    color = Teal800
                                 )
                             }
                             Surface(

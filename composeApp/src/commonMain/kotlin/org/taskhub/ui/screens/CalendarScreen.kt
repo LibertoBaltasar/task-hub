@@ -31,7 +31,9 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.*
 import org.taskhub.network.RecurrenceRules
 import org.taskhub.network.models.TaskResponse
+import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.*
@@ -695,7 +697,11 @@ private fun TaskPopupItem(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                // Status label
+                // Status label — colores fijos (0xFF2E7D32/0xFFC62828/Teal600) sobre el
+                // fondo de esta card (colorScheme.surfaceVariant, que SÍ cambia con el
+                // tema/modo) fallaban WCAG AA en varias combinaciones (hasta 2.47:1 en
+                // oscuro). PointsBadge ya usa pares container/onContainer auditados
+                // (>=4.5:1 en los 3 temas x claro/oscuro), independientes del fondo.
                 val statusLabel = when {
                     entry.isCompleted -> s("calendar_task_status_completed")
                     entry.isOverdue -> s("calendar_task_status_overdue")
@@ -703,32 +709,22 @@ private fun TaskPopupItem(
                     else -> ""
                 }
                 if (statusLabel.isNotEmpty()) {
-                    Text(
+                    PointsBadge(
                         text = statusLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = when {
-                            entry.isCompleted -> Color(0xFF2E7D32)
-                            entry.isOverdue -> Color(0xFFC62828)
-                            else -> Teal600
-                        },
-                        fontWeight = FontWeight.Medium
+                        tone = when {
+                            entry.isCompleted -> BadgeTone.Success
+                            entry.isOverdue -> BadgeTone.Error
+                            else -> BadgeTone.Info
+                        }
                     )
                 }
             }
 
             // Points badge
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = Teal100
-            ) {
-                Text(
-                    text = "⭐ ${entry.task.points}",
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Teal800,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            PointsBadge(
+                text = "⭐ ${entry.task.points}",
+                tone = BadgeTone.Teal
+            )
         }
     }
 }

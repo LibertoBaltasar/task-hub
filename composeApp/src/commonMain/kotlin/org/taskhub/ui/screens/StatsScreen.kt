@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -101,8 +100,14 @@ internal fun StatsBody(householdId: String, memberId: String) {
                 statsData = computeStats(tasks, assignments, history, member, appSettings.currentLanguage)
                 val unlocked = repo.getMemberAchievements(householdId, memberId)
                 achievements = AchievementChecker.getAchievementsWithStatus(unlocked)
+                errorMessage = null
+            } else {
+                // Sin esto, la pantalla se quedaba completamente en blanco (ni error, ni
+                // reintento) cuando memberId aún no se había resuelto (currentMemberId
+                // arranca en "" y se resuelve de forma asíncrona vía red) — el usuario no
+                // podía distinguir "cargando" de "roto".
+                errorMessage = s("transfer_error_member_not_found")
             }
-            errorMessage = null
         } catch (e: Exception) {
             errorMessage = e.message ?: s("stats_error_loading")
         }
@@ -328,7 +333,7 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Coral100),
-        shape = RoundedCornerShape(16.dp)
+        shape = MaterialTheme.shapes.large
     ) {
         Row(
             modifier = Modifier
@@ -342,7 +347,9 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
                 Text(
                     s("stats_current_streak_label"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // Color fijo (no onSurfaceVariant): el fondo Coral100 de esta card
+                    // tampoco cambia con el tema/modo oscuro (1.30:1 con onSurfaceVariant en dark).
+                    color = Coral800
                 )
                 Text(
                     s("stats_days_suffix").replace("%d", currentStreak.toString()),
@@ -356,7 +363,7 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
                 Text(
                     s("stats_best_streak_label"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Coral800
                 )
                 Text(
                     s("stats_days_suffix").replace("%d", bestStreak.toString()),
@@ -373,7 +380,7 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
 private fun BarChartCard(title: String, data: List<DayCount>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = MaterialTheme.shapes.large
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -452,7 +459,7 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
 private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = MaterialTheme.shapes.large
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -528,7 +535,7 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
 private fun PieChartCard(title: String, data: List<TagCount>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = MaterialTheme.shapes.large
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -601,7 +608,7 @@ private fun SummaryStatsCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp)
+        shape = MaterialTheme.shapes.large
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -647,7 +654,7 @@ private fun AchievementCard(achievement: Achievement) {
         colors = CardDefaults.cardColors(
             containerColor = if (achievement.isUnlocked) Teal50 else MaterialTheme.colorScheme.surfaceVariant
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = MaterialTheme.shapes.medium
     ) {
         Row(
             modifier = Modifier

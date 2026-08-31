@@ -1040,6 +1040,18 @@ class TaskScreenModel(
         _calendarActionState.value = CalendarActionState.Idle
     }
 
+    /**
+     * Reporta un fallo del flujo de "Vincular cuenta" de Google Calendar (fuera
+     * del propio ScreenModel, ya que el consentimiento OAuth lo dispara
+     * [org.taskhub.ui.models.GoogleAuthManager] desde la pantalla). Sin esto,
+     * un `linkCalendar()` fallido solo apagaba el spinner y volvía a "No
+     * vinculado" sin explicación, a diferencia de "Sincronizar ahora" que sí
+     * reutiliza esta misma tarjeta de error.
+     */
+    fun setCalendarLinkError(message: String) {
+        _calendarActionState.value = CalendarActionState.Error(message)
+    }
+
     // ── Sync automático con Google Calendar (best-effort) ────
 
     /** Tras asignar/reasignar: crea eventos para las asignaciones mías con fecha. */

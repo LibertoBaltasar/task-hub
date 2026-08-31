@@ -45,7 +45,8 @@ object FirestoreParsers {
             inviteCode = f["inviteCode"]?.stringValue ?: "",
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
             updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            isPersonal = f["isPersonal"]?.booleanValue ?: false
+            isPersonal = f["isPersonal"]?.booleanValue ?: false,
+            ownerId = f["ownerId"]?.stringValue ?: ""
         )
     }
 

@@ -423,7 +423,7 @@ class FirestoreRepository(
             }
         }
 
-        val household = HouseholdResponse(id, name, inviteCode, now, now, isPersonal)
+        val household = HouseholdResponse(id, name, inviteCode, now, now, isPersonal, ownerId)
         // Cache immediately so getHousehold has it on first load
         taskCache.cacheHousehold(household)
         return household
@@ -487,7 +487,8 @@ class FirestoreRepository(
             inviteCode = "PERSONAL",
             createdAt = now,
             updatedAt = now,
-            isPersonal = true
+            isPersonal = true,
+            ownerId = uid
         )
         taskCache.cacheHousehold(household)
         return household

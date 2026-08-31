@@ -82,7 +82,9 @@ fun SplashScreen(lang: String, onFinished: () -> Unit) {
                 text = AppStrings.get("splash_subtitle", lang),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Normal,
-                color = Color.White.copy(alpha = 0.8f),
+                // alpha=0.95 (no 0.8): blanco 80% sobre Teal800 da 4.15:1, por debajo
+                // de WCAG AA para texto normal de 14sp.
+                color = Color.White.copy(alpha = 0.95f),
                 modifier = Modifier.alpha(alpha)
             )
         }

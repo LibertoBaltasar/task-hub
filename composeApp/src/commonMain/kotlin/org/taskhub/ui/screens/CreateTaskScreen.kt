@@ -175,7 +175,8 @@ data class CreateTaskScreen(
                                 enabled = actionState !is TaskActionState.Loading &&
                                     title.isNotBlank() &&
                                     (pointsText.toIntOrNull() ?: -1) > 0 &&
-                                    (!hasDeadline || deadlineTime.isValidTimeFormat()),
+                                    (!hasDeadline || deadlineTime.isValidTimeFormat()) &&
+                                    (!hasPenalty || (penaltyValue.toIntOrNull() ?: -1) > 0),
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = MaterialTheme.colorScheme.primary
                                 )
@@ -601,7 +602,11 @@ data class CreateTaskScreen(
                                                 )
                                             )
                                             Text(
-                                                text = "${if (member.role == "admin") "👑" else "👤"} ${member.displayName}",
+                                                // s("member_role_*_short") ya incluye el emoji + texto de rol
+                                                // ("👑 Admin"/"👤 Miembro"): un emoji sin texto de apoyo es el
+                                                // único diferenciador de rol para TalkBack/VoiceOver, que solo
+                                                // anuncia el nombre unicode del glifo ("corona"/"busto").
+                                                text = "${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}",
                                                 style = MaterialTheme.typography.bodyLarge
                                             )
                                             Spacer(Modifier.weight(1f))
@@ -764,6 +769,12 @@ data class CreateTaskScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                // A diferencia de "Puntos", este campo no validaba nada: con
+                                // "Aplicar penalización" activado y el valor vacío/0,
+                                // pValue caía en un fallback silencioso a 0 (createTask()
+                                // más abajo) — se guardaba "con penalización" que en
+                                // realidad nunca descontaba nada.
+                                isError = (penaltyValue.toIntOrNull() ?: -1) <= 0,
                                 supportingText = {
                                     Text(if (penaltyMode == "fixed")
                                         s("create_task_penalty_fixed_hint")

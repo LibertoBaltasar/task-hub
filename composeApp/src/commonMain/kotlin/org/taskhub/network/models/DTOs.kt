@@ -29,7 +29,13 @@ data class HouseholdResponse(
     val createdAt: Long = 0,
     val updatedAt: Long = 0,
     /** True si es el espacio "Personal" auto-creado (sin invitaciones). */
-    val isPersonal: Boolean = false
+    val isPersonal: Boolean = false,
+    /**
+     * UID de quien creó el hogar. Siempre "de confianza" (equivalente a admin)
+     * independientemente de su [MemberResponse.role] — coincide con `isOwner(hid)`
+     * en firestore.rules. Ver `isAdmin` en HouseholdScreen/TaskDetailScreen.
+     */
+    val ownerId: String = ""
 )
 
 /** Miembro de un hogar. Cada usuario que se une crea un Member doc. */

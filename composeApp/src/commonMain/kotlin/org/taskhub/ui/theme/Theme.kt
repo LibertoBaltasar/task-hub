@@ -298,7 +298,11 @@ private val MinimalDarkColorScheme = darkColorScheme(
     surface = MonoBlack,
     onSurface = MonoGray100,
     surfaceVariant = MonoGray800,
-    onSurfaceVariant = MonoGray400,
+    // MonoGray200 (no MonoGray400): MonoGray400 sobre MonoGray800 da 3.49:1,
+    // por debajo del umbral WCAG AA de texto normal (4.5:1) — es el color
+    // "secundario"/caption por defecto del tema Minimal oscuro completo, no
+    // un caso aislado. MonoGray200 da 8.57:1.
+    onSurfaceVariant = MonoGray200,
 
     outline = MonoGray400,
     outlineVariant = MonoGray600,

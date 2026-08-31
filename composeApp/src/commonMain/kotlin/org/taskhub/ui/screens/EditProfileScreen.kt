@@ -6,8 +6,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +21,7 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.ProfileScreenModel
@@ -90,14 +89,13 @@ class EditProfileScreen : Screen {
         }
 
         Scaffold(
+            // TaskHubTopBar (no TopAppBar manual): consistencia con las otras 19
+            // pantallas — la barra manual dejaba el título alineado a la izquierda
+            // en vez de centrado.
             topBar = {
-                TopAppBar(
-                    title = { Text(s("edit_profile_title"), fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = { navigator.pop() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, s("nav_back_content_description"))
-                        }
-                    }
+                TaskHubTopBar(
+                    title = s("edit_profile_title"),
+                    onBack = { navigator.pop() }
                 )
             }
         ) { padding ->

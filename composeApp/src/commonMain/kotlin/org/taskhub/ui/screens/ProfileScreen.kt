@@ -28,6 +28,7 @@ import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
+import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.Coral500
 import org.taskhub.ui.theme.Teal600
@@ -76,14 +77,12 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
         }
 
         Scaffold(
+            // TaskHubTopBar (no TopAppBar manual): consistencia con las otras
+            // pantallas — la barra manual dejaba el título alineado a la izquierda.
             topBar = {
-                TopAppBar(
-                    title = { Text(s("profile_title"), fontWeight = FontWeight.Bold) },
-                    navigationIcon = {
-                        IconButton(onClick = { navigator.pop() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, s("nav_back_content_description"))
-                        }
-                    }
+                TaskHubTopBar(
+                    title = s("profile_title"),
+                    onBack = { navigator.pop() }
                 )
             }
         ) { padding ->
