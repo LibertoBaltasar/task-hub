@@ -39,6 +39,22 @@ sealed class RewardActionState {
     data class Error(val message: String) : RewardActionState()
 }
 
+/**
+ * Resultado de mutaciones sobre un miembro (cambiar rol, eliminar) — separado
+ * de [MemberUiState] igual que [RewardActionState] lo está de [RewardUiState].
+ * Antes, un fallo en `updateMemberRole`/`removeMember` escribía directamente
+ * en `_uiState` (que contenía la lista de miembros en `Success`), así que el
+ * error sustituía la lista visible entera en vez de solo mostrarse como aviso
+ * puntual — un fallo de red al cambiar un rol borraba de la pantalla a todos
+ * los demás miembros.
+ */
+sealed class MemberActionState {
+    data object Idle : MemberActionState()
+    data object Loading : MemberActionState()
+    data object Success : MemberActionState()
+    data class Error(val message: String) : MemberActionState()
+}
+
 sealed class AppreciateActionState {
     data object Idle : AppreciateActionState()
     data object Loading : AppreciateActionState()
@@ -69,6 +85,9 @@ class MemberScreenModel(
 
     private val _lastCreatedMember = MutableStateFlow<MemberResponse?>(null)
     val lastCreatedMember: StateFlow<MemberResponse?> = _lastCreatedMember.asStateFlow()
+
+    private val _memberActionState = MutableStateFlow<MemberActionState>(MemberActionState.Idle)
+    val memberActionState: StateFlow<MemberActionState> = _memberActionState.asStateFlow()
 
     private val _rewardState = MutableStateFlow<RewardUiState>(RewardUiState.Idle)
     val rewardState: StateFlow<RewardUiState> = _rewardState.asStateFlow()
@@ -124,16 +143,19 @@ class MemberScreenModel(
     }
 
     fun removeMember(householdId: String, memberId: String) {
+        if (_memberActionState.value == MemberActionState.Loading) return // evita doble-tap
         screenModelScope.launch {
+            _memberActionState.value = MemberActionState.Loading
             try {
                 repo.deleteMember(householdId, memberId)
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
+                _memberActionState.value = MemberActionState.Success
                 buzz(HapticKind.SUCCESS)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = MemberUiState.Error(
+                _memberActionState.value = MemberActionState.Error(
                     e.message ?: "Error al eliminar miembro"
                 )
                 buzz(HapticKind.ERROR)
@@ -146,16 +168,19 @@ class MemberScreenModel(
      * Recarga la lista al terminar.
      */
     fun updateMemberRole(householdId: String, memberId: String, role: String) {
+        if (_memberActionState.value == MemberActionState.Loading) return // evita doble-tap
         screenModelScope.launch {
+            _memberActionState.value = MemberActionState.Loading
             try {
                 repo.updateMemberRole(householdId, memberId, role)
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
+                _memberActionState.value = MemberActionState.Success
                 buzz(HapticKind.SUCCESS)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.value = MemberUiState.Error(
+                _memberActionState.value = MemberActionState.Error(
                     e.message ?: "Error al cambiar el rol"
                 )
                 buzz(HapticKind.ERROR)
@@ -163,9 +188,14 @@ class MemberScreenModel(
         }
     }
 
+    fun clearMemberAction() {
+        _memberActionState.value = MemberActionState.Idle
+    }
+
     fun reset() {
         _uiState.value = MemberUiState.Idle
         _lastCreatedMember.value = null
+        _memberActionState.value = MemberActionState.Idle
     }
 
     fun clearLastCreated() {

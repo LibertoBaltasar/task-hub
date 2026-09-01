@@ -328,4 +328,62 @@ class RecurrenceRulesTest {
             )
         )
     }
+
+    // ── isDueOn: fecha arbitraria (usada por CalendarScreen) ──────
+
+    @Test
+    fun isDueOn_daily_sameAsIsDueToday_whenDateIsToday() {
+        // isDueToday debe seguir siendo un caso particular de isDueOn con date=hoy.
+        val now = epochOf(2024, 3, 15)
+        val today = dateOf(now)
+        val completedYesterday = epochOf(2024, 3, 14)
+        assertEquals(
+            RecurrenceRules.isDueToday("daily", emptyList(), null, completedYesterday, now, tz),
+            RecurrenceRules.isDueOn(today, "daily", emptyList(), null, completedYesterday, tz)
+        )
+    }
+
+    @Test
+    fun isDueOn_daily_pastDateBeforeLastCompletion_isNotDue() {
+        // CalendarScreen puede consultar una fecha PASADA anterior a la última
+        // compleción (navegando a un mes anterior tras completar la tarea más
+        // tarde) — no debe marcarse como pendiente retroactivamente.
+        val lastCompleted = epochOf(2024, 3, 20)
+        val pastDate = dateOf(epochOf(2024, 3, 10))
+        assertFalse(RecurrenceRules.isDueOn(pastDate, "daily", emptyList(), null, lastCompleted, tz))
+    }
+
+    @Test
+    fun isDueOn_daily_dateAfterLastCompletion_isDue() {
+        val lastCompleted = epochOf(2024, 3, 10)
+        val futureDate = dateOf(epochOf(2024, 3, 20))
+        assertTrue(RecurrenceRules.isDueOn(futureDate, "daily", emptyList(), null, lastCompleted, tz))
+    }
+
+    @Test
+    fun isDueOn_daily_exactCompletionDate_isNotDue() {
+        val lastCompleted = epochOf(2024, 3, 15)
+        val sameDate = dateOf(lastCompleted)
+        assertFalse(RecurrenceRules.isDueOn(sameDate, "daily", emptyList(), null, lastCompleted, tz))
+    }
+
+    @Test
+    fun isDueOn_monthlyLegacy_pastDateBeforeLastCompletion_isNotDue() {
+        val lastCompleted = epochOf(2024, 3, 20)
+        val pastDate = dateOf(epochOf(2024, 1, 10))
+        assertFalse(RecurrenceRules.isDueOn(pastDate, "monthly", emptyList(), null, lastCompleted, tz))
+    }
+
+    @Test
+    fun isDueOn_weekly_withRecurrenceDays_matchesScheduledDayInThePast() {
+        // Lunes(1) programado, nunca completada: cualquier lunes pasado debe tocar.
+        val pastMonday = dateOf(epochOf(2024, 2, 26)) // lunes
+        assertTrue(RecurrenceRules.isDueOn(pastMonday, "weekly", listOf(1), null, null, tz))
+    }
+
+    @Test
+    fun isDueOn_monthlyWithDay_matchesTargetDayInAFutureMonth() {
+        val targetDate = dateOf(epochOf(2024, 6, 15))
+        assertTrue(RecurrenceRules.isDueOn(targetDate, "monthly", emptyList(), 15, null, tz))
+    }
 }

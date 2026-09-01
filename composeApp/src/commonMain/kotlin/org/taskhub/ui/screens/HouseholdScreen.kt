@@ -42,6 +42,7 @@ import org.taskhub.ui.models.CalendarSyncManager
 import org.taskhub.ui.models.DonateActionState
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
+import org.taskhub.ui.models.MemberActionState
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.NotificationScreenModel
@@ -58,6 +59,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val calendarSync = koinInject<CalendarSyncManager>()
         val householdState by householdModel.uiState.collectAsState()
         val memberState by memberModel.uiState.collectAsState()
+        val memberActionState by memberModel.memberActionState.collectAsState()
         val notificationUnreadCount by notificationModel.unreadCount.collectAsState()
 
         // Double-confirmation dialog state
@@ -79,6 +81,17 @@ data class HouseholdScreen(val householdId: String) : Screen {
             if (msg != null) {
                 householdSnackbarHostState.showErrorSnackbar(message = msg, duration = SnackbarDuration.Long)
                 householdErrorMessage = null
+            }
+        }
+
+        // Fallo al cambiar rol/eliminar miembro: se muestra como aviso puntual
+        // (memberActionState, separado de la lista) en vez de sustituir la
+        // lista de miembros por un error — ver MemberActionState.
+        LaunchedEffect(memberActionState) {
+            val state = memberActionState
+            if (state is MemberActionState.Error) {
+                householdSnackbarHostState.showErrorSnackbar(message = state.message, duration = SnackbarDuration.Short)
+                memberModel.clearMemberAction()
             }
         }
 
@@ -516,6 +529,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     membersExpanded = membersExpanded,
                                     onToggleExpanded = { membersExpanded = !membersExpanded },
                                     memberState = memberState,
+                                    isMemberActionPending = memberActionState is MemberActionState.Loading,
                                     isAdmin = isAdmin,
                                     myMember = myMember,
                                     s = s,

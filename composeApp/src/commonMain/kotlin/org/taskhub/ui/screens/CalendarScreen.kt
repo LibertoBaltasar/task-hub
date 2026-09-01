@@ -832,52 +832,35 @@ private fun computeMonthGrid(anchorDate: LocalDate): List<List<LocalDate?>> {
 
 /**
  * Determines if a task is due on a specific [date].
- * Same logic as isTaskDueToday but for an arbitrary date.
+ *
+ * daily/weekly/monthly delegan en [RecurrenceRules.isDueOn] — antes esta
+ * función reimplementaba esa misma lógica de recurrencia (con riesgo real de
+ * divergencia respecto a la regla usada en `TaskListScreen`/`HomeScreenModel`).
+ * "once" se queda fuera de [RecurrenceRules]: a diferencia de
+ * `isDueToday`/`isDueOn` (que solo miran si está pendiente, ignorando
+ * `dueDate`), el calendario necesita saber en qué celda de día concreto cae
+ * la tarea, así que sí usa `dueDate` — un propósito distinto, no una
+ * duplicación de la misma regla.
  */
 private fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): Boolean {
-    when (task.frequency) {
-        "daily" -> {
-            val lcd = task.lastCompletedDate
-            if (lcd == null) return true
-            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-            // Due if last completed date is before the target date
-            return lcdDate < date
+    if (task.frequency == "once") {
+        // Due if not completed yet
+        if (task.lastCompletedDate != null) return false
+        if (task.dueDate > 0) {
+            val dueDate = Instant.fromEpochMilliseconds(task.dueDate).toLocalDateTime(tz).date
+            return date >= dueDate
         }
-        "weekly" -> {
-            val dow = date.dayOfWeek.ordinal + 1 // 1=Monday
-            if (task.recurrenceDays.isNotEmpty() && dow !in task.recurrenceDays) {
-                return false
-            }
-            val lcd = task.lastCompletedDate
-            if (lcd == null) return true
-            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-            return lcdDate < date
-        }
-        "monthly" -> {
-            val lcd = task.lastCompletedDate
-            if (task.recurrenceDay != null) {
-                val targetDay = RecurrenceRules.clampDayOfMonth(task.recurrenceDay, date.year, date.monthNumber)
-                if (date.dayOfMonth != targetDay) return false
-                if (lcd == null) return true
-                val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-                return lcdDate < date
-            }
-            if (lcd == null) return true
-            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-            return lcdDate.year < date.year || (lcdDate.year == date.year && lcdDate.month < date.month)
-        }
-        "once" -> {
-            // Due if not completed yet
-            if (task.lastCompletedDate != null) return false
-            if (task.dueDate > 0) {
-                val dueDate = Instant.fromEpochMilliseconds(task.dueDate).toLocalDateTime(tz).date
-                return date >= dueDate
-            }
-            // No dueDate and not completed: show as due
-            return true
-        }
-        else -> return false
+        // No dueDate and not completed: show as due
+        return true
     }
+    return RecurrenceRules.isDueOn(
+        date = date,
+        frequency = task.frequency,
+        recurrenceDays = task.recurrenceDays,
+        recurrenceDay = task.recurrenceDay,
+        lastCompletedDate = task.lastCompletedDate,
+        tz = tz
+    )
 }
 
 /**

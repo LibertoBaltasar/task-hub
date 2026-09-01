@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -20,6 +21,9 @@ import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.platform.saveWidgetThemeToCache
+
+/** Misma URL publicada en la ficha de Play (ver docs/play-store-listing.md). */
+private const val PRIVACY_POLICY_URL = "https://libertobaltasar.github.io/task-hub/privacy.html"
 
 /**
  * Callbacks that the settings sheet needs from its host screen.
@@ -50,6 +54,7 @@ fun SettingsSheet(
     val appSettings = LocalAppSettings.current
     val authManager = koinInject<GoogleAuthManager>()
     val authState by authManager.state.collectAsState()
+    val uriHandler = LocalUriHandler.current
 
     var notificationsEnabled by remember {
         mutableStateOf(settingsStore.isNotificationsEnabled())
@@ -463,6 +468,17 @@ fun SettingsSheet(
                     style = MaterialTheme.typography.titleMedium
                 )
             }
+        }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ── Privacidad ────────────────────────────────────
+        OutlinedButton(
+            onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large
+        ) {
+            Text(s("settings_privacy_policy"))
         }
 
         Spacer(Modifier.height(16.dp))

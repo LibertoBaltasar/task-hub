@@ -50,6 +50,72 @@ class TaskRepository(
         firestoreClient.extractDocId(resourceName, operation)
 
     // ────────────────────────────────────────────────────────
+    //  Serialización compartida entre createTask/updateTask
+    // ────────────────────────────────────────────────────────
+    // Extraídos porque createTask y updateTask reimplementaban el mismo
+    // mapeo (tags/recurrenceDays/subtasks/assignmentRotation/penalty) byte a
+    // byte. Cada función sigue decidiendo POR SU CUENTA si incluye el campo
+    // (createTask lo omite cuando está vacío/null; updateTask siempre lo
+    // incluye, con NULL_VALUE explícito para borrar el valor previo vía
+    // updateMask) — solo se comparte la construcción del valor en sí, sin
+    // cambiar ese comportamiento observable.
+
+    private fun tagsField(tags: List<String>): FirestoreValue =
+        FirestoreValue(arrayValue = FirestoreArrayValue(values = tags.map { FirestoreValue(stringValue = it) }))
+
+    private fun recurrenceDaysField(recurrenceDays: List<Int>): FirestoreValue =
+        FirestoreValue(arrayValue = FirestoreArrayValue(values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }))
+
+    private fun subtasksField(subtasks: List<Subtask>): FirestoreValue = FirestoreValue(
+        arrayValue = FirestoreArrayValue(
+            values = subtasks.map { st ->
+                FirestoreValue(
+                    mapValue = FirestoreMapValue(
+                        fields = mapOf(
+                            "id" to FirestoreValue(stringValue = st.id),
+                            "text" to FirestoreValue(stringValue = st.text),
+                            "completed" to FirestoreValue(booleanValue = st.completed)
+                        )
+                    )
+                )
+            }
+        )
+    )
+
+    private fun assignmentRotationField(assignmentRotation: List<AssignmentSlot>): FirestoreValue = FirestoreValue(
+        arrayValue = FirestoreArrayValue(
+            values = assignmentRotation.map { slot ->
+                FirestoreValue(
+                    mapValue = FirestoreMapValue(
+                        fields = mapOf(
+                            "dayOfWeek" to FirestoreValue(integerValue = slot.dayOfWeek.toString()),
+                            "memberId" to FirestoreValue(stringValue = slot.memberId)
+                        )
+                    )
+                )
+            }
+        )
+    )
+
+    /** Campos de penalización cuando [mode] no es null; mapa vacío si lo es (el caller decide si añadirlos u omitirlos). */
+    private fun penaltyFields(mode: String?, value: Int, interval: String, max: Int): Map<String, FirestoreValue> =
+        if (mode == null) emptyMap() else mapOf(
+            "penaltyMode" to FirestoreValue(stringValue = mode),
+            "penaltyValue" to FirestoreValue(integerValue = value.toString()),
+            "penaltyInterval" to FirestoreValue(stringValue = interval),
+            "penaltyMax" to FirestoreValue(integerValue = max.toString())
+        )
+
+    /** Igual que [penaltyFields], pero para updates: si [mode] es null, limpia los 4 campos con NULL_VALUE en vez de omitirlos. */
+    private fun penaltyFieldsOrClear(mode: String?, value: Int, interval: String, max: Int): Map<String, FirestoreValue> =
+        if (mode != null) penaltyFields(mode, value, interval, max) else mapOf(
+            "penaltyMode" to FirestoreValue(nullValue = "NULL_VALUE"),
+            "penaltyValue" to FirestoreValue(nullValue = "NULL_VALUE"),
+            "penaltyInterval" to FirestoreValue(nullValue = "NULL_VALUE"),
+            "penaltyMax" to FirestoreValue(nullValue = "NULL_VALUE")
+        )
+
+    // ────────────────────────────────────────────────────────
     //  Tasks (subcollection under households/{id})
     // ────────────────────────────────────────────────────────
 
@@ -87,25 +153,11 @@ class TaskRepository(
         )
 
         // Tags as array
-        if (tags.isNotEmpty()) {
-            fields["tags"] = FirestoreValue(
-                arrayValue = FirestoreArrayValue(
-                    values = tags.map { FirestoreValue(stringValue = it) }
-                )
-            )
-        } else {
-            fields["tags"] = FirestoreValue(
-                arrayValue = FirestoreArrayValue(values = emptyList())
-            )
-        }
+        fields["tags"] = tagsField(tags)
 
         // Recurrence days as array
         if (recurrenceDays.isNotEmpty()) {
-            fields["recurrenceDays"] = FirestoreValue(
-                arrayValue = FirestoreArrayValue(
-                    values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }
-                )
-            )
+            fields["recurrenceDays"] = recurrenceDaysField(recurrenceDays)
         }
 
         // Recurrence day of month (solo "monthly")
@@ -114,47 +166,15 @@ class TaskRepository(
         }
 
         // Penalty configuration
-        if (penaltyMode != null) {
-            fields["penaltyMode"] = FirestoreValue(stringValue = penaltyMode)
-            fields["penaltyValue"] = FirestoreValue(integerValue = penaltyValue.toString())
-            fields["penaltyInterval"] = FirestoreValue(stringValue = penaltyInterval)
-            fields["penaltyMax"] = FirestoreValue(integerValue = penaltyMax.toString())
-        }
+        fields.putAll(penaltyFields(penaltyMode, penaltyValue, penaltyInterval, penaltyMax))
 
         // Assignment rotation as array of maps
         if (assignmentRotation.isNotEmpty()) {
-            fields["assignmentRotation"] = FirestoreValue(
-                arrayValue = FirestoreArrayValue(
-                    values = assignmentRotation.map { slot ->
-                        FirestoreValue(
-                            mapValue = FirestoreMapValue(
-                                fields = mapOf(
-                                    "dayOfWeek" to FirestoreValue(integerValue = slot.dayOfWeek.toString()),
-                                    "memberId" to FirestoreValue(stringValue = slot.memberId)
-                                )
-                            )
-                        )
-                    }
-                )
-            )
+            fields["assignmentRotation"] = assignmentRotationField(assignmentRotation)
         }
 
         // Subtasks as array of maps
-        fields["subtasks"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = subtasks.map { st ->
-                    FirestoreValue(
-                        mapValue = FirestoreMapValue(
-                            fields = mapOf(
-                                "id" to FirestoreValue(stringValue = st.id),
-                                "text" to FirestoreValue(stringValue = st.text),
-                                "completed" to FirestoreValue(booleanValue = st.completed)
-                            )
-                        )
-                    )
-                }
-            )
-        )
+        fields["subtasks"] = subtasksField(subtasks)
 
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/tasks") {
             withAuth()
@@ -509,18 +529,10 @@ class TaskRepository(
         )
 
         // Tags as array
-        fields["tags"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = tags.map { FirestoreValue(stringValue = it) }
-            )
-        )
+        fields["tags"] = tagsField(tags)
 
         // Recurrence days as array
-        fields["recurrenceDays"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = recurrenceDays.map { FirestoreValue(integerValue = it.toString()) }
-            )
-        )
+        fields["recurrenceDays"] = recurrenceDaysField(recurrenceDays)
 
         // Recurrence day of month (solo "monthly"); null borra el valor previo.
         fields["recurrenceDay"] = if (recurrenceDay != null) {
@@ -530,50 +542,13 @@ class TaskRepository(
         }
 
         // Penalty configuration
-        if (penaltyMode != null) {
-            fields["penaltyMode"] = FirestoreValue(stringValue = penaltyMode)
-            fields["penaltyValue"] = FirestoreValue(integerValue = penaltyValue.toString())
-            fields["penaltyInterval"] = FirestoreValue(stringValue = penaltyInterval)
-            fields["penaltyMax"] = FirestoreValue(integerValue = penaltyMax.toString())
-        } else {
-            fields["penaltyMode"] = FirestoreValue(nullValue = "NULL_VALUE")
-            fields["penaltyValue"] = FirestoreValue(nullValue = "NULL_VALUE")
-            fields["penaltyInterval"] = FirestoreValue(nullValue = "NULL_VALUE")
-            fields["penaltyMax"] = FirestoreValue(nullValue = "NULL_VALUE")
-        }
+        fields.putAll(penaltyFieldsOrClear(penaltyMode, penaltyValue, penaltyInterval, penaltyMax))
 
         // Assignment rotation as array of maps
-        fields["assignmentRotation"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = assignmentRotation.map { slot ->
-                    FirestoreValue(
-                        mapValue = FirestoreMapValue(
-                            fields = mapOf(
-                                "dayOfWeek" to FirestoreValue(integerValue = slot.dayOfWeek.toString()),
-                                "memberId" to FirestoreValue(stringValue = slot.memberId)
-                            )
-                        )
-                    )
-                }
-            )
-        )
+        fields["assignmentRotation"] = assignmentRotationField(assignmentRotation)
 
         // Subtasks as array of maps
-        fields["subtasks"] = FirestoreValue(
-            arrayValue = FirestoreArrayValue(
-                values = subtasks.map { st ->
-                    FirestoreValue(
-                        mapValue = FirestoreMapValue(
-                            fields = mapOf(
-                                "id" to FirestoreValue(stringValue = st.id),
-                                "text" to FirestoreValue(stringValue = st.text),
-                                "completed" to FirestoreValue(booleanValue = st.completed)
-                            )
-                        )
-                    )
-                }
-            )
-        )
+        fields["subtasks"] = subtasksField(subtasks)
 
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()

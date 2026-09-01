@@ -36,6 +36,7 @@ import org.taskhub.ui.models.TaskTemplate
 import org.taskhub.ui.models.TaskTemplates
 import org.taskhub.ui.models.TemplateCategory
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.RecurrenceNextPreview
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
@@ -482,6 +483,18 @@ data class CreateTaskScreen(
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(0.4f)
+                            )
+                        }
+                    }
+
+                    // Preview "próxima vez: X" (no aplica a "once", que usa fecha límite)
+                    if (frequency != "once") {
+                        item {
+                            RecurrenceNextPreview(
+                                frequency = frequency,
+                                recurrenceDays = recurrenceDays.toList(),
+                                recurrenceDay = recurrenceDay,
+                                lang = appSettings.currentLanguage
                             )
                         }
                     }

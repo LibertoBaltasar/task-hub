@@ -27,6 +27,7 @@ fun LazyListScope.householdMemberList(
     membersExpanded: Boolean,
     onToggleExpanded: () -> Unit,
     memberState: MemberUiState,
+    isMemberActionPending: Boolean = false,
     isAdmin: Boolean,
     myMember: MemberResponse?,
     s: (String) -> String,
@@ -134,6 +135,7 @@ fun LazyListScope.householdMemberList(
                         isAdmin = isAdmin,
                         isSelf = myMember?.id == member.id,
                         canTransfer = myMember != null,
+                        roleChangePending = isMemberActionPending,
                         s = s,
                         onAppreciateClick = { onAppreciateClick(member) },
                         onDonateClick = { onDonateClick(member) },
@@ -172,6 +174,7 @@ private fun MemberCard(
     isAdmin: Boolean,
     isSelf: Boolean,
     canTransfer: Boolean,
+    roleChangePending: Boolean = false,
     s: (String) -> String,
     onRoleChange: (String) -> Unit,
     onCreateTask: () -> Unit,
@@ -243,7 +246,10 @@ private fun MemberCard(
                     var roleMenuExpanded by remember { mutableStateOf(false) }
                     var pendingRole by remember { mutableStateOf<String?>(null) }
                     Box {
-                        OutlinedButton(onClick = { roleMenuExpanded = true }) {
+                        OutlinedButton(
+                            onClick = { roleMenuExpanded = true },
+                            enabled = !roleChangePending
+                        ) {
                             Text(if (member.role == "admin") s("member_role_admin_short") else s("member_role_child_short"))
                         }
                         DropdownMenu(
