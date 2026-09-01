@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import org.taskhub.network.FIRESTORE_GONE_MESSAGE
 import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.MemberRepository
 import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
@@ -307,12 +308,12 @@ class MemberScreenModel(
         screenModelScope.launch {
             _appreciateActionState.value = AppreciateActionState.Loading
             when (val result = repo.appreciateMember(householdId, fromMemberId, toMemberId, amount)) {
-                is FirestoreRepository.AppreciateResult.Ok -> {
+                is MemberRepository.AppreciateResult.Ok -> {
                     loadMembers(householdId)
                     _appreciateActionState.value = AppreciateActionState.Success(result.remaining)
                     buzz(HapticKind.SUCCESS)
                 }
-                is FirestoreRepository.AppreciateResult.Error -> {
+                is MemberRepository.AppreciateResult.Error -> {
                     _appreciateActionState.value = AppreciateActionState.Error(appreciateErrorKey(result.reason))
                     buzz(HapticKind.ERROR)
                 }
@@ -325,12 +326,12 @@ class MemberScreenModel(
         screenModelScope.launch {
             _donateActionState.value = DonateActionState.Loading
             when (val result = repo.donatePoints(householdId, fromMemberId, toMemberId, amount)) {
-                is FirestoreRepository.DonateResult.Ok -> {
+                is MemberRepository.DonateResult.Ok -> {
                     loadMembers(householdId)
                     _donateActionState.value = DonateActionState.Success(result.donorNewTotal)
                     buzz(HapticKind.SUCCESS)
                 }
-                is FirestoreRepository.DonateResult.Error -> {
+                is MemberRepository.DonateResult.Error -> {
                     _donateActionState.value = DonateActionState.Error(donateErrorKey(result.reason))
                     buzz(HapticKind.ERROR)
                 }
@@ -346,17 +347,17 @@ class MemberScreenModel(
         _donateActionState.value = DonateActionState.Idle
     }
 
-    private fun appreciateErrorKey(reason: FirestoreRepository.AppreciateErrorReason): String = when (reason) {
-        FirestoreRepository.AppreciateErrorReason.SELF -> "transfer_error_self"
-        FirestoreRepository.AppreciateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
-        FirestoreRepository.AppreciateErrorReason.LIMIT_EXCEEDED -> "appreciate_error_limit"
-        FirestoreRepository.AppreciateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
+    private fun appreciateErrorKey(reason: MemberRepository.AppreciateErrorReason): String = when (reason) {
+        MemberRepository.AppreciateErrorReason.SELF -> "transfer_error_self"
+        MemberRepository.AppreciateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
+        MemberRepository.AppreciateErrorReason.LIMIT_EXCEEDED -> "appreciate_error_limit"
+        MemberRepository.AppreciateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
     }
 
-    private fun donateErrorKey(reason: FirestoreRepository.DonateErrorReason): String = when (reason) {
-        FirestoreRepository.DonateErrorReason.SELF -> "transfer_error_self"
-        FirestoreRepository.DonateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
-        FirestoreRepository.DonateErrorReason.INSUFFICIENT_BALANCE -> "donate_error_insufficient_balance"
-        FirestoreRepository.DonateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
+    private fun donateErrorKey(reason: MemberRepository.DonateErrorReason): String = when (reason) {
+        MemberRepository.DonateErrorReason.SELF -> "transfer_error_self"
+        MemberRepository.DonateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
+        MemberRepository.DonateErrorReason.INSUFFICIENT_BALANCE -> "donate_error_insufficient_balance"
+        MemberRepository.DonateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
     }
 }

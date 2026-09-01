@@ -476,9 +476,13 @@ private fun TaskListContent(
     onRefresh: () -> Unit,
     onCreateFirstTask: () -> Unit
 ) {
-    val taskMap = state.tasks.associateBy { it.id }
-    val memberMap = state.members.associateBy { it.id }
-    val assignmentsByTask = state.assignments.groupBy { it.taskId }
+    // `memberMap`/`assignmentsByTask` se pasan tal cual a cada `TaskCard` de
+    // la lista — remember(...) evita reconstruir el Map/groupBy (y por tanto
+    // la identidad del objeto) en cada recomposición que no cambie los datos
+    // reales (p.ej. colapsar/expandir un grupo, o el spinner de "completando"
+    // de OTRA tarea), en vez de asignar uno nuevo cada vez.
+    val memberMap = remember(state.members) { state.members.associateBy { it.id } }
+    val assignmentsByTask = remember(state.assignments) { state.assignments.groupBy { it.taskId } }
     val reduceMotion = shouldReduceMotion()
     val lang = LocalAppSettings.current.currentLanguage
 
@@ -488,63 +492,70 @@ private fun TaskListContent(
     val todayStartEpoch = now.toLocalDateTime(tz).date
         .atStartOfDayIn(tz).toEpochMilliseconds()
 
-    // Filter tasks based on filter + tag
-    val filteredTasks = state.tasks.filter { task ->
-        // Tag filter
-        if (tagFilter != null && tagFilter !in task.tags) return@filter false
+    // Filtrado + búsqueda + cálculo de estado (isDueToday/isCompletedToday vía
+    // RecurrenceRules, 2 veces por tarea) en un único remember: antes se
+    // recalculaba de cero en CADA recomposición de esta pantalla (incluida
+    // cualquiera que no tocara estos datos, como colapsar un grupo o mostrar
+    // el spinner de completar), con coste que escala con el nº de tareas.
+    val tasksWithStatus = remember(state.tasks, assignmentsByTask, filter, tagFilter, searchQuery, currentMemberId, todayStartEpoch) {
+        // Filter tasks based on filter + tag
+        val filteredTasks = state.tasks.filter { task ->
+            // Tag filter
+            if (tagFilter != null && tagFilter !in task.tags) return@filter false
 
-        // Status filter
-        when (filter) {
-            TaskFilter.ALL -> true
-            TaskFilter.PENDING -> {
-                // Pending = due today AND not completed today
-                val due = isTaskDueToday(task, todayStartEpoch)
-                val done = isTaskCompletedToday(task, todayStartEpoch)
-                due && !done
-            }
-            TaskFilter.COMPLETED -> isTaskCompletedToday(task, todayStartEpoch)
-            TaskFilter.MINE -> {
-                val mid = currentMemberId ?: return@filter false
-                val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
-                taskAssignments.any { it.memberId == mid && it.status == "assigned" }
+            // Status filter
+            when (filter) {
+                TaskFilter.ALL -> true
+                TaskFilter.PENDING -> {
+                    // Pending = due today AND not completed today
+                    val due = isTaskDueToday(task, todayStartEpoch)
+                    val done = isTaskCompletedToday(task, todayStartEpoch)
+                    due && !done
+                }
+                TaskFilter.COMPLETED -> isTaskCompletedToday(task, todayStartEpoch)
+                TaskFilter.MINE -> {
+                    val mid = currentMemberId ?: return@filter false
+                    val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
+                    taskAssignments.any { it.memberId == mid && it.status == "assigned" }
+                }
             }
         }
-    }
 
-    // Text search filter (client-side, after status filter, before groupByStatus)
-    val searchFilteredTasks = if (searchQuery.isBlank()) {
-        filteredTasks
-    } else {
-        val q = searchQuery.trim().lowercase()
-        filteredTasks.filter { task ->
-            task.title.lowercase().contains(q) ||
-            task.description.lowercase().contains(q)
-        }
-    }
-
-    // Build TaskWithStatus list
-    val tasksWithStatus = searchFilteredTasks.map { task ->
-        val due = isTaskDueToday(task, todayStartEpoch)
-        val done = isTaskCompletedToday(task, todayStartEpoch)
-        // Recurrentes sin dueDate propio (daily/weekly/monthly): "vencida" es una
-        // ocurrencia programada de un día ya pasado que sigue pendiente
-        // (completado tardío) — ver RecurrenceRules.isOverdueOccurrence.
-        val isOverdue = if (task.dueDate > 0) {
-            task.dueDate < todayStartEpoch && task.lastCompletedDate == null
+        // Text search filter (client-side, after status filter, before groupByStatus)
+        val searchFilteredTasks = if (searchQuery.isBlank()) {
+            filteredTasks
         } else {
-            due && RecurrenceRules.isOverdueOccurrence(
-                frequency = task.frequency,
-                recurrenceDays = task.recurrenceDays,
-                recurrenceDay = task.recurrenceDay,
-                nowEpochMs = todayStartEpoch
+            val q = searchQuery.trim().lowercase()
+            filteredTasks.filter { task ->
+                task.title.lowercase().contains(q) ||
+                task.description.lowercase().contains(q)
+            }
+        }
+
+        // Build TaskWithStatus list
+        searchFilteredTasks.map { task ->
+            val due = isTaskDueToday(task, todayStartEpoch)
+            val done = isTaskCompletedToday(task, todayStartEpoch)
+            // Recurrentes sin dueDate propio (daily/weekly/monthly): "vencida" es una
+            // ocurrencia programada de un día ya pasado que sigue pendiente
+            // (completado tardío) — ver RecurrenceRules.isOverdueOccurrence.
+            val isOverdue = if (task.dueDate > 0) {
+                task.dueDate < todayStartEpoch && task.lastCompletedDate == null
+            } else {
+                due && RecurrenceRules.isOverdueOccurrence(
+                    frequency = task.frequency,
+                    recurrenceDays = task.recurrenceDays,
+                    recurrenceDay = task.recurrenceDay,
+                    nowEpochMs = todayStartEpoch
+                )
+            }
+            TaskWithStatus(
+                task = task,
+                isDueToday = due,
+                isCompletedToday = done,
+                isOverdue = isOverdue
             )
         }
-        TaskWithStatus(
-            task = task,
-            isDueToday = due,
-            isCompletedToday = done,
-            isOverdue = isOverdue
-        )
     }
 
     // Group by status

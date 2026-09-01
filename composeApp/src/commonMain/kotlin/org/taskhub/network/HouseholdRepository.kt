@@ -20,12 +20,12 @@ import org.taskhub.storage.TaskCache
  * Extraído de [FirestoreRepository] (ver docs/refactor-arquitectura-2026-08-31.md,
  * punto 6, fase 2.4). Lógica movida tal cual, sin cambios de comportamiento.
  *
- * NO incluye `deleteHousehold`/`leaveHousehold` ni `isMember`/`isCurrentUserMember`:
- * los dos primeros invalidan `currentMemberCache` (estado del dominio Member,
- * ver `resolveCurrentMember` en [FirestoreRepository]) y los dos últimos leen
- * `getMembers` — ambos dependen de piezas que se moverán junto con
- * `MemberRepository` en la fase 2.5. Se quedan en [FirestoreRepository] hasta
- * esa fase para no crear una dependencia circular — ver el resumen del encargo.
+ * NO incluye `deleteHousehold`/`leaveHousehold`: invalidan el caché de
+ * miembro actual (`MemberRepository.invalidateCurrentMember`) y leen
+ * `getMembers` a la vez que borran el hogar — orquestación Household+Member
+ * que se queda en [FirestoreRepository] (`isMember`/`isCurrentUserMember` sí
+ * se movieron a [MemberRepository] en la fase 2.5, al no tocar nada de
+ * Household).
  */
 class HouseholdRepository(
     private val baseUrl: String,
@@ -296,13 +296,13 @@ class HouseholdRepository(
 
     /** List chat messages for a household, oldest first. */
     suspend fun getMessages(householdId: String): List<MessageResponse> {
-        val response: FirestoreListResponse = client.get(
+        val documents = client.listAllDocuments(
             "$baseUrl/households/$householdId/messages"
         ) {
             tryAuthOrApiKey()
-        }.body()
+        }
 
-        return response.documents.map { doc ->
+        return documents.map { doc ->
             val f = doc.fields
             MessageResponse(
                 id = extractDocId(doc.name, "getMessages"),

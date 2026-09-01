@@ -280,6 +280,39 @@ class FirestoreClient(
 }
 
 /**
+ * Recorre una colección de Firestore paginando con `pageToken` hasta
+ * agotarla, en vez de una única petición sin `pageSize` — el REST de
+ * Firestore no garantiza devolver la colección completa en una sola
+ * respuesta, así que sin este bucle una colección que creciera por encima
+ * del tamaño de página del servidor se leería truncada, en silencio, sin
+ * ningún error visible (ver docs/review-panel-expertos-v3-2026-09-01.md,
+ * hallazgo de Escalabilidad "sin paginación en ninguna colección").
+ * `pageSize` por defecto (300) es generoso para los hogares reales de hoy —
+ * en la práctica el bucle da una sola vuelta — pero deja de truncar si un
+ * hogar crece. `configureAuth` recibe la misma lambda que ya usan los
+ * call-sites (`tryAuthOrApiKey()`/`withAuth()`), definida en el repo llamante
+ * porque son extension functions con receptor [FirestoreClient].
+ */
+internal suspend fun HttpClient.listAllDocuments(
+    url: String,
+    pageSize: Int = 300,
+    configureAuth: suspend HttpRequestBuilder.() -> Unit
+): List<FirestoreDocumentResponse> {
+    val documents = mutableListOf<FirestoreDocumentResponse>()
+    var pageToken: String? = null
+    do {
+        val response: FirestoreListResponse = get(url) {
+            configureAuth()
+            parameter("pageSize", pageSize)
+            pageToken?.let { parameter("pageToken", it) }
+        }.body()
+        documents += response.documents
+        pageToken = response.nextPageToken
+    } while (pageToken != null)
+    return documents
+}
+
+/**
  * Ejecuta [block] y devuelve [default] ante cualquier fallo NO fatal, pero
  * relanza [CancellationException] para no romper la cancelación cooperativa
  * de la corrutina. Compartida por los repos de dominio de `network/` (antes

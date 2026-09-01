@@ -27,10 +27,11 @@ import org.taskhub.storage.TaskCache
  * `calculatePenalty`, `calculateNextDueDate`, `markAssignmentCompleted`,
  * `regenerateNextAssignment`, `updateTaskHistoryMember`,
  * `findTaskHistoryRecord`) — todos otorgan o transfieren puntos
- * (`addMemberPoints`), la capa de puntos que se moverá junto con
- * `MemberRepository` en la fase 2.5. Se quedan en [FirestoreRepository] hasta
- * esa fase para no crear una dependencia circular `TaskRepository` ↔
- * `MemberRepository` (que aún no existe) — ver el resumen del encargo.
+ * (`addMemberPoints`, ahora en [MemberRepository]) a la vez que mutan la
+ * tarea/asignación, así que se quedan en [FirestoreRepository] como
+ * orquestación Task+Member — no por evitar un ciclo (ese motivo ya no aplica,
+ * `MemberRepository` existe desde la fase 2.5), sino porque no pertenecen
+ * enteros a ningún dominio.
  */
 class TaskRepository(
     private val baseUrl: String,
@@ -238,11 +239,11 @@ class TaskRepository(
      */
     suspend fun getTasks(householdId: String): List<TaskResponse> {
         return try {
-            val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/tasks") {
+            val documents = client.listAllDocuments("$baseUrl/households/$householdId/tasks") {
                 tryAuthOrApiKey()
-            }.body()
+            }
 
-            val tasks = response.documents.map { toTaskResponse(it, householdId) }
+            val tasks = documents.map { toTaskResponse(it, householdId) }
             taskCache.cacheTasks(householdId, tasks)
             tasks
         } catch (e: CancellationException) {
@@ -396,13 +397,13 @@ class TaskRepository(
 
     /** Get all assignments for a specific task. */
     suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> {
-        val response: FirestoreListResponse = client.get(
+        val documents = client.listAllDocuments(
             "$baseUrl/households/$householdId/tasks/$taskId/assignments"
         ) {
             tryAuthOrApiKey()
-        }.body()
+        }
 
-        return response.documents.map { toTaskAssignmentResponse(it, taskId) }
+        return documents.map { toTaskAssignmentResponse(it, taskId) }
     }
 
     /** Borra todas las asignaciones de una tarea (para reasignar al editar). */
