@@ -3,16 +3,15 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v5 — PENDIENTE DE DESPLIEGUE)
+    //  Task Hub — Reglas de seguridad (v5 — DESPLEGADO 2026-09-01)
     //
-    //  ⚠️ v5 editada el 2026-09-01 (encargo "privacidad/RGPD + seguridad",
+    //  v5 editada el 2026-09-01 (encargo "privacidad/RGPD + seguridad",
     //  hallazgo M2 del panel de expertos v3 — ver
-    //  docs/review-panel-expertos-v3-2026-09-01.md, Experto 9). NO
-    //  desplegada todavía por este cambio: el despliegue lo hace el
-    //  orquestador con PATCH vía scripts/deploy_firestore_rules.py (ver
-    //  CLAUDE.md), no este agente. Hasta entonces sigue activo en producción
-    //  el ruleset v4 (projects/task-hub-62f98/rulesets/014a2dcd-974a-4dd4-931a-4d8608cdb82c,
-    //  desplegado 2026-08-31).
+    //  docs/review-panel-expertos-v3-2026-09-01.md, Experto 9). Desplegada
+    //  en producción el 2026-09-01 21:49Z vía scripts/deploy_firestore_rules.py
+    //  (PATCH, no POST — ver CLAUDE.md). Ruleset
+    //  projects/task-hub-62f98/rulesets/4d5f5625-f24e-40e1-a8b3-954a33715a72
+    //  (sustituye al v4 014a2dcd-974a-4dd4-931a-4d8608cdb82c, desplegado 2026-08-31).
     //
     //  Cambio v4→v5 (M2): la rama `isOwner`/`isAdminMember` de `create` en
     //  members/{mid} no validaba los mismos límites que la rama de auto-alta
