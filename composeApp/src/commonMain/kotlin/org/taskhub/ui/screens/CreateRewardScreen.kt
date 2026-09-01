@@ -27,6 +27,8 @@ import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.RewardActionState
+import org.taskhub.ui.models.HouseholdScreenModel
+import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.theme.*
 
 data class CreateRewardScreen(val householdId: String) : Screen {
@@ -38,6 +40,14 @@ data class CreateRewardScreen(val householdId: String) : Screen {
         val actionState by memberModel.rewardActionState.collectAsState()
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
+        // Nombre del hogar activo para la topbar (consistencia con TaskListScreen/CalendarScreen)
+        val householdModel = koinScreenModel<HouseholdScreenModel>()
+        val householdUiState by householdModel.uiState.collectAsState()
+        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+        LaunchedEffect(householdId) {
+            householdModel.loadHousehold(householdId)
+        }
 
         var title by remember { mutableStateOf("") }
         var description by remember { mutableStateOf("") }
@@ -71,6 +81,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                 // Top bar
                 TaskHubTopBar(
                     title = s("create_reward_title"),
+                    subtitle = householdName,
                     onBack = { navigator.pop() }
                 )
 

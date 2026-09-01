@@ -65,6 +65,11 @@ data class TaskDetailScreen(
         val commentsState by model.commentsState.collectAsState()
         val newCommentText by model.newCommentText.collectAsState()
 
+        // Nombre del hogar activo para la topbar (consistencia con TaskListScreen/CalendarScreen)
+        val householdModel = koinScreenModel<HouseholdScreenModel>()
+        val householdUiState by householdModel.uiState.collectAsState()
+        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+
         var isLinkingCalendar by remember { mutableStateOf(false) }
         var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -84,6 +89,10 @@ data class TaskDetailScreen(
             model.resetActionState()
             model.loadTaskDetail(householdId, taskId)
             model.loadComments(householdId, taskId)
+        }
+
+        LaunchedEffect(householdId) {
+            householdModel.loadHousehold(householdId)
         }
 
         // Delete confirmation dialog
@@ -118,6 +127,7 @@ data class TaskDetailScreen(
                 // Top bar
                 TaskHubTopBar(
                     title = s("task_detail_title"),
+                    subtitle = householdName,
                     onBack = { navigator.pop() },
                     actions = {
                         IconButton(

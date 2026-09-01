@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,6 +36,7 @@ fun LazyListScope.householdMemberList(
     onAppreciateClick: (MemberResponse) -> Unit,
     onDonateClick: (MemberResponse) -> Unit,
     onRoleChange: (MemberResponse, String) -> Unit,
+    onRemoveMember: (MemberResponse) -> Unit,
     onCreateTask: (MemberResponse) -> Unit,
     onMemberClick: (MemberResponse) -> Unit,
     onInviteClick: () -> Unit
@@ -140,6 +143,7 @@ fun LazyListScope.householdMemberList(
                         onAppreciateClick = { onAppreciateClick(member) },
                         onDonateClick = { onDonateClick(member) },
                         onRoleChange = { newRole -> onRoleChange(member, newRole) },
+                        onRemoveClick = { onRemoveMember(member) },
                         onCreateTask = { onCreateTask(member) },
                         onClick = { onMemberClick(member) }
                     )
@@ -177,6 +181,7 @@ private fun MemberCard(
     roleChangePending: Boolean = false,
     s: (String) -> String,
     onRoleChange: (String) -> Unit,
+    onRemoveClick: () -> Unit,
     onCreateTask: () -> Unit,
     onClick: () -> Unit,
     onAppreciateClick: () -> Unit,
@@ -301,6 +306,33 @@ private fun MemberCard(
                                     Text(s("common_cancel"))
                                 }
                             }
+                        )
+                    }
+
+                    // Eliminar un miembro es tan destructivo como borrar/salir del
+                    // hogar — mismo componente de confirmación (DestructiveConfirmDialog).
+                    var showRemoveConfirm by remember { mutableStateOf(false) }
+                    IconButton(
+                        onClick = { showRemoveConfirm = true },
+                        enabled = !roleChangePending
+                    ) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = s("member_remove_action"),
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (showRemoveConfirm) {
+                        DestructiveConfirmDialog(
+                            title = s("member_remove_confirm_title"),
+                            text = s("member_remove_confirm_text").replace("%s", member.displayName),
+                            s = s,
+                            onDismiss = { showRemoveConfirm = false },
+                            onConfirm = {
+                                showRemoveConfirm = false
+                                onRemoveClick()
+                            },
+                            confirmLabel = s("member_remove_confirm_btn")
                         )
                     }
                 }

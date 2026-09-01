@@ -219,6 +219,10 @@ object AppStrings {
             "member_role_change_confirm_text" to "%1 pasará a tener el rol %2.",
             "member_role_change_confirm_btn" to "Cambiar rol",
             "member_create_task_short" to "+ Tarea",
+            "member_remove_action" to "Eliminar miembro",
+            "member_remove_confirm_title" to "¿Eliminar miembro?",
+            "member_remove_confirm_text" to "%s dejará de formar parte de este espacio. Esta acción no se puede deshacer.",
+            "member_remove_confirm_btn" to "Eliminar",
 
             // Sección de tareas del hogar (HouseholdTaskSection.kt)
             "household_task_section_error" to "Error al cargar tareas",
@@ -760,6 +764,10 @@ object AppStrings {
             "member_role_change_confirm_text" to "%1 will become %2.",
             "member_role_change_confirm_btn" to "Change role",
             "member_create_task_short" to "+ Task",
+            "member_remove_action" to "Remove member",
+            "member_remove_confirm_title" to "Remove member?",
+            "member_remove_confirm_text" to "%s will no longer be part of this space. This action cannot be undone.",
+            "member_remove_confirm_btn" to "Remove",
 
             // Household task section (HouseholdTaskSection.kt)
             "household_task_section_error" to "Failed to load tasks",

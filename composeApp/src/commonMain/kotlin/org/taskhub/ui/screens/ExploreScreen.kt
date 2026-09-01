@@ -19,6 +19,8 @@ import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.StatsScreenModel
+import org.taskhub.ui.models.HouseholdScreenModel
+import org.taskhub.ui.models.HouseholdUiState
 
 /**
  * Pantalla combinada de un hogar: agrupa Estadísticas, Ranking y Recompensas
@@ -39,6 +41,14 @@ data class ExploreScreen(
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
+        // Nombre del hogar activo para la topbar (consistencia con TaskListScreen/CalendarScreen)
+        val householdModel = koinScreenModel<HouseholdScreenModel>()
+        val householdUiState by householdModel.uiState.collectAsState()
+        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+        LaunchedEffect(householdId) {
+            householdModel.loadHousehold(householdId)
+        }
+
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -46,6 +56,7 @@ data class ExploreScreen(
             Column(modifier = Modifier.fillMaxSize()) {
                 TaskHubTopBar(
                     title = s("explore_title"),
+                    subtitle = householdName,
                     onBack = { navigator.pop() }
                 )
 

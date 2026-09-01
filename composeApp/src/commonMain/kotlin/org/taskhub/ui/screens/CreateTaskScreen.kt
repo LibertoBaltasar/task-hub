@@ -35,6 +35,8 @@ import org.taskhub.ui.models.TaskScreenModel
 import org.taskhub.ui.models.TaskTemplate
 import org.taskhub.ui.models.TaskTemplates
 import org.taskhub.ui.models.TemplateCategory
+import org.taskhub.ui.models.HouseholdScreenModel
+import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.RecurrenceNextPreview
 import org.taskhub.ui.components.TaskHubTopBar
@@ -63,9 +65,15 @@ data class CreateTaskScreen(
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
+        // Nombre del hogar activo para la topbar (consistencia con TaskListScreen/CalendarScreen)
+        val householdModel = koinScreenModel<HouseholdScreenModel>()
+        val householdUiState by householdModel.uiState.collectAsState()
+        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+
         LaunchedEffect(householdId) {
             taskModel.resetActionState()
             memberModel.loadMembers(householdId)
+            householdModel.loadHousehold(householdId)
         }
 
         // Form state
@@ -144,6 +152,7 @@ data class CreateTaskScreen(
                 // Top bar
                 TaskHubTopBar(
                     title = s("create_task_title"),
+                    subtitle = householdName,
                     onBack = { navigator.pop() },
                     actions = {
                         if (actionState !is TaskActionState.Loading) {

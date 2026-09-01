@@ -538,6 +538,9 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     onRoleChange = { member, newRole ->
                                         memberModel.updateMemberRole(householdId, member.id, newRole)
                                     },
+                                    onRemoveMember = { member ->
+                                        memberModel.removeMember(householdId, member.id)
+                                    },
                                     onCreateTask = { member ->
                                         navigator.push(
                                             CreateTaskScreen(
