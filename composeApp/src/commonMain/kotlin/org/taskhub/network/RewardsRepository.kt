@@ -114,20 +114,4 @@ class RewardsRepository(
             )
         }
     }
-
-    /**
-     * Ejecuta [block] y devuelve [default] ante cualquier fallo NO fatal, pero
-     * relanza [CancellationException] para no romper la cancelación cooperativa
-     * de la corrutina. Ver [FirestoreRepository.orDefault] (mismo helper,
-     * duplicado aquí para no acoplar este repo de dominio al god object).
-     */
-    private suspend inline fun <T> orDefault(default: T, block: () -> T): T {
-        return try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            default
-        }
-    }
 }

@@ -129,12 +129,14 @@ class MemberScreenModel(
                 repo.deleteMember(householdId, memberId)
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
+                buzz(HapticKind.SUCCESS)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
                     e.message ?: "Error al eliminar miembro"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -149,12 +151,14 @@ class MemberScreenModel(
                 repo.updateMemberRole(householdId, memberId, role)
                 val members = repo.getMembers(householdId)
                 _uiState.value = MemberUiState.Success(members)
+                buzz(HapticKind.SUCCESS)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
                     e.message ?: "Error al cambiar el rol"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }

@@ -362,7 +362,7 @@ private fun TaskDetailContent(
                         Text(
                             text = task.description,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
 
@@ -404,7 +404,7 @@ private fun TaskDetailContent(
                         Text(
                             text = "🔄 $daysStr",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
 
@@ -414,7 +414,7 @@ private fun TaskDetailContent(
                         Text(
                             text = s("task_detail_monthly_recurrence").replace("%d", task.recurrenceDay.toString()),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
 
@@ -461,13 +461,13 @@ private fun TaskDetailContent(
                         Text(
                             text = penaltyDesc,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         if (task.penaltyMax > 0) {
                             Text(
                                 text = s("task_detail_penalty_max_desc").replace("%d", task.penaltyMax.toString()),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }
@@ -608,7 +608,7 @@ private fun TaskDetailContent(
                             .padding(start = 4.dp),
                         style = MaterialTheme.typography.bodyLarge,
                         textDecoration = if (st.completed) TextDecoration.LineThrough else TextDecoration.None,
-                        color = if (st.completed) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        color = if (st.completed) MaterialTheme.colorScheme.onSurfaceVariant
                                 else MaterialTheme.colorScheme.onSurface
                     )
                 }

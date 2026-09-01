@@ -108,7 +108,7 @@ fun HouseholdChatSection(
                             modifier = Modifier.fillMaxWidth().height(260.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(messages) { message -> MessageBubble(message) }
+                            items(messages, key = { it.id }) { message -> MessageBubble(message) }
                         }
                     }
                 }

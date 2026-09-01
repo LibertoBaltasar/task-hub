@@ -15,6 +15,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
@@ -419,20 +421,21 @@ data class CreateTaskScreen(
                             )
                         }
                         item {
-                            Row(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 val days = listOf(
-                                    1 to s("day_letter_monday"),
-                                    2 to s("day_letter_tuesday"),
-                                    3 to s("day_letter_wednesday"),
-                                    4 to s("day_letter_thursday"),
-                                    5 to s("day_letter_friday"),
-                                    6 to s("day_letter_saturday"),
-                                    7 to s("day_letter_sunday")
+                                    1 to (s("day_letter_monday") to s("recurrence_day_monday")),
+                                    2 to (s("day_letter_tuesday") to s("recurrence_day_tuesday")),
+                                    3 to (s("day_letter_wednesday") to s("recurrence_day_wednesday")),
+                                    4 to (s("day_letter_thursday") to s("recurrence_day_thursday")),
+                                    5 to (s("day_letter_friday") to s("recurrence_day_friday")),
+                                    6 to (s("day_letter_saturday") to s("recurrence_day_saturday")),
+                                    7 to (s("day_letter_sunday") to s("recurrence_day_sunday"))
                                 )
-                                days.forEach { (day, label) ->
+                                days.forEach { (day, labels) ->
+                                    val (letter, fullName) = labels
                                     FilterChip(
                                         selected = day in recurrenceDays,
                                         onClick = {
@@ -442,7 +445,8 @@ data class CreateTaskScreen(
                                                 recurrenceDays + day
                                             }
                                         },
-                                        label = { Text(label) },
+                                        label = { Text(letter) },
+                                        modifier = Modifier.semantics { contentDescription = fullName },
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                             selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -474,6 +478,7 @@ data class CreateTaskScreen(
                                     }
                                 },
                                 label = { Text(s("create_task_day_of_month_field")) },
+                                supportingText = { Text(s("recurrence_day_of_month_hint")) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.fillMaxWidth(0.4f)
@@ -891,6 +896,7 @@ private fun QuickTemplatesSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .clickable { onToggle() }
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,

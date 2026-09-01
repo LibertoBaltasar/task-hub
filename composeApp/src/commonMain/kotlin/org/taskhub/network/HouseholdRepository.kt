@@ -205,22 +205,30 @@ class HouseholdRepository(
      */
     suspend fun reconcileHouseholds(store: HouseholdStore): List<SavedHousehold> {
         val saved = store.getSavedHouseholds()
-        return saved.filter { h ->
-            try {
-                getHousehold(h.id)
-                true
-            } catch (e: FirestoreException) {
-                if (e.statusCode == 404 || e.statusCode == 403) {
-                    store.removeHousehold(h.id)
-                    taskCache.clearHousehold(h.id)
-                    false
-                } else {
-                    true // 5xx u otro error tipado de Firestore: no es inequívoco, conservar
+        val survivors = coroutineScope {
+            saved.map { h ->
+                async {
+                    val stillExists = try {
+                        getHousehold(h.id)
+                        true
+                    } catch (e: FirestoreException) {
+                        if (e.statusCode == 404 || e.statusCode == 403) {
+                            store.removeHousehold(h.id)
+                            taskCache.clearHousehold(h.id)
+                            false
+                        } else {
+                            true // 5xx u otro error tipado de Firestore: no es inequívoco, conservar
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        true // red/timeout/etc: conservar
+                    }
+                    if (stillExists) h else null
                 }
-            } catch (_: Exception) {
-                true // red/timeout/etc: conservar
-            }
+            }.awaitAll()
         }
+        return survivors.filterNotNull()
     }
 
     /** Batch-fetch multiple households by their document IDs (en paralelo). */

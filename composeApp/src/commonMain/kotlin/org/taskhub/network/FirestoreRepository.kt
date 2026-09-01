@@ -1693,22 +1693,6 @@ class FirestoreRepository(
     //  Helpers
     // ────────────────────────────────────────────────────────
 
-    /**
-     * Ejecuta [block] y devuelve [default] ante cualquier fallo NO fatal (subcolección
-     * que aún no existe, red, etc.), pero relanza [CancellationException] para no
-     * romper la cancelación cooperativa de la corrutina (p.ej. al salir de la
-     * pantalla mientras la petición está en curso).
-     */
-    private suspend inline fun <T> orDefault(default: T, block: () -> T): T {
-        return try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            default
-        }
-    }
-
     /** Ver [FirestoreClient.extractDocId] — delegado tal cual, mismo motivo que [withAuth]. */
     private fun extractDocId(resourceName: String, operation: String): String =
         firestoreClient.extractDocId(resourceName, operation)

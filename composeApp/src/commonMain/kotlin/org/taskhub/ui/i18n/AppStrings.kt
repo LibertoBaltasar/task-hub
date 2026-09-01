@@ -148,6 +148,7 @@ object AppStrings {
             "recurrence_every_month" to "Cada mes",
             "recurrence_days_label" to "Días de repetición",
             "recurrence_day_of_month_label" to "Día del mes",
+            "recurrence_day_of_month_hint" to "Si el mes no tiene ese día, se ajusta al último día del mes",
             "recurrence_day_monday" to "Lunes",
             "recurrence_day_tuesday" to "Martes",
             "recurrence_day_wednesday" to "Miércoles",
@@ -203,6 +204,9 @@ object AppStrings {
             "member_role_child_full" to "Miembro",
             "member_role_admin_short" to "👑 Admin",
             "member_role_child_short" to "👤 Miembro",
+            "member_role_change_confirm_title" to "¿Cambiar rol?",
+            "member_role_change_confirm_text" to "%1 pasará a tener el rol %2.",
+            "member_role_change_confirm_btn" to "Cambiar rol",
             "member_create_task_short" to "+ Tarea",
 
             // Sección de tareas del hogar (HouseholdTaskSection.kt)
@@ -249,7 +253,6 @@ object AppStrings {
             "create_profile_name_label" to "Tu nombre",
             "create_profile_name_placeholder" to "Ej: María",
             "create_profile_role_label" to "Rol en el espacio:",
-            "create_profile_role_admin" to "👨‍👩‍👧 Admin",
             "create_profile_submit" to "Crear perfil",
 
             // Ranking (RankingScreen.kt)
@@ -675,6 +678,7 @@ object AppStrings {
             "recurrence_every_month" to "Every month",
             "recurrence_days_label" to "Repeat days",
             "recurrence_day_of_month_label" to "Day of month",
+            "recurrence_day_of_month_hint" to "If the month doesn't have that day, it's adjusted to the last day of the month",
             "recurrence_day_monday" to "Monday",
             "recurrence_day_tuesday" to "Tuesday",
             "recurrence_day_wednesday" to "Wednesday",
@@ -730,6 +734,9 @@ object AppStrings {
             "member_role_child_full" to "Member",
             "member_role_admin_short" to "👑 Admin",
             "member_role_child_short" to "👤 Member",
+            "member_role_change_confirm_title" to "Change role?",
+            "member_role_change_confirm_text" to "%1 will become %2.",
+            "member_role_change_confirm_btn" to "Change role",
             "member_create_task_short" to "+ Task",
 
             // Household task section (HouseholdTaskSection.kt)
@@ -776,7 +783,6 @@ object AppStrings {
             "create_profile_name_label" to "Your name",
             "create_profile_name_placeholder" to "E.g. Mary",
             "create_profile_role_label" to "Role in the space:",
-            "create_profile_role_admin" to "👨‍👩‍👧 Admin",
             "create_profile_submit" to "Create profile",
 
             // Ranking (RankingScreen.kt)

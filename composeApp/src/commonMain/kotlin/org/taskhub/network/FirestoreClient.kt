@@ -257,3 +257,19 @@ class FirestoreClient(
         const val OPTIMISTIC_WRITE_MAX_RETRIES = 3
     }
 }
+
+/**
+ * Ejecuta [block] y devuelve [default] ante cualquier fallo NO fatal, pero
+ * relanza [CancellationException] para no romper la cancelación cooperativa
+ * de la corrutina. Compartida por los repos de dominio de `network/` (antes
+ * duplicada 4 veces, una copia idéntica por archivo).
+ */
+internal suspend inline fun <T> orDefault(default: T, block: () -> T): T {
+    return try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        default
+    }
+}

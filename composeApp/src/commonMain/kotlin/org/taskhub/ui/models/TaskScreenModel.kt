@@ -615,7 +615,9 @@ class TaskScreenModel(
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
-                repo.completeAssignment(
+                val memberBefore = repo.getMembers(householdId).find { it.id == assignment.memberId }
+
+                val result = repo.completeAssignment(
                     householdId = householdId,
                     taskId = taskId,
                     task = task,
@@ -627,7 +629,26 @@ class TaskScreenModel(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) { }
+
+                // Racha + logros: mismo patrón que completeTask (ver su comentario) —
+                // antes esta función solo otorgaba puntos sin actualizar racha ni
+                // desbloquear logros, así que un miembro que solo completa tareas
+                // asignadas (recurrentes con rotación, p.ej.) nunca acumulaba racha.
+                try {
+                    if (memberBefore != null) {
+                        val pointsAwarded = result.pointsAwarded ?: 0
+                        val streakUpdated = updateMemberStreak(householdId, memberBefore)
+                        val memberForAchievements = streakUpdated.copy(
+                            totalPoints = memberBefore.totalPoints + pointsAwarded
+                        )
+                        checkAndAwardAchievements(householdId, memberForAchievements)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
+
                 _actionState.value = TaskActionState.Success
+                buzz(HapticKind.SUCCESS)
 
                 // Refresh detail
                 loadTaskDetail(householdId, taskId)
@@ -637,6 +658,7 @@ class TaskScreenModel(
                 _actionState.value = TaskActionState.Error(
                     e.message ?: "Error al completar tarea"
                 )
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -898,10 +920,21 @@ class TaskScreenModel(
             } else {
                 "Nunca"
             }
-            val escapedTitle = "\"${task.title.replace("\"", "\"\"")}\""
+            val escapedTitle = escapeCsvField(task.title)
             sb.appendLine("$escapedTitle,$freq,${task.points},$completions,$lastCompleted")
         }
         return sb.toString()
+    }
+
+    /**
+     * Escapa un campo CSV para exportar de forma segura. Antepone `'` si el
+     * valor empieza por `=`, `+`, `-`, `@`, tab o CR, para que Excel/Sheets no
+     * lo interprete como fórmula (CSV formula injection, CWE-1236) — el título
+     * de tarea es texto libre que cualquier miembro del hogar puede escribir.
+     */
+    private fun escapeCsvField(value: String): String {
+        val safeValue = if (value.isNotEmpty() && value[0] in "=+-@\t\r") "'$value" else value
+        return "\"${safeValue.replace("\"", "\"\"")}\""
     }
 
     // ── Helpers ─────────────────────────────────────────────

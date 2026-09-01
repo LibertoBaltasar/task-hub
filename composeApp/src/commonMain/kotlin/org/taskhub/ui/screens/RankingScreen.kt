@@ -41,9 +41,11 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
     }
 
     // Sort by totalPoints descending (getMembers ya filtra miembros que abandonaron)
-    val members = (uiState as? MemberUiState.Success)?.members
-        ?.sortedByDescending { it.totalPoints }
-        ?: emptyList()
+    val members = remember(uiState) {
+        (uiState as? MemberUiState.Success)?.members
+            ?.sortedByDescending { it.totalPoints }
+            ?: emptyList()
+    }
     val isLoading = uiState is MemberUiState.Loading || uiState is MemberUiState.Idle
     val errorMessage = (uiState as? MemberUiState.Error)?.message
 

@@ -236,7 +236,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                 Text(
                                     text = description,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
                             Surface(

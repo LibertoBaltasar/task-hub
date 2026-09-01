@@ -429,7 +429,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = s("household_invite_code"),
                                                 style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -437,7 +437,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = household.inviteCode,
                                                 style = MaterialTheme.typography.headlineMedium,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 fontWeight = FontWeight.Bold,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
@@ -448,7 +448,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             Text(
                                                 text = s("household_share_code"),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )

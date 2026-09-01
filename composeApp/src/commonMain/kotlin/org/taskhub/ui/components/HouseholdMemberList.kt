@@ -241,6 +241,7 @@ private fun MemberCard(
                 // a abrir este menú para revertirlo — bloqueo permanente evitable.
                 if (isAdmin && !isSelf) {
                     var roleMenuExpanded by remember { mutableStateOf(false) }
+                    var pendingRole by remember { mutableStateOf<String?>(null) }
                     Box {
                         OutlinedButton(onClick = { roleMenuExpanded = true }) {
                             Text(if (member.role == "admin") s("member_role_admin_short") else s("member_role_child_short"))
@@ -253,17 +254,48 @@ private fun MemberCard(
                                 text = { Text(s("member_role_admin_short")) },
                                 onClick = {
                                     roleMenuExpanded = false
-                                    if (member.role != "admin") onRoleChange("admin")
+                                    if (member.role != "admin") pendingRole = "admin"
                                 }
                             )
                             DropdownMenuItem(
                                 text = { Text(s("member_role_child_short")) },
                                 onClick = {
                                     roleMenuExpanded = false
-                                    if (member.role != "child") onRoleChange("child")
+                                    if (member.role != "child") pendingRole = "child"
                                 }
                             )
                         }
+                    }
+                    // Cambiar el rol de otro miembro es una acción de alto impacto
+                    // (da/quita control total del hogar) — pide confirmación, igual
+                    // que borrar/salir del hogar (DestructiveConfirmDialog).
+                    val newRole = pendingRole
+                    if (newRole != null) {
+                        val newRoleLabel = if (newRole == "admin") s("member_role_admin_short") else s("member_role_child_short")
+                        AlertDialog(
+                            onDismissRequest = { pendingRole = null },
+                            title = { Text(s("member_role_change_confirm_title")) },
+                            text = {
+                                Text(
+                                    s("member_role_change_confirm_text")
+                                        .replace("%1", member.displayName)
+                                        .replace("%2", newRoleLabel)
+                                )
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    pendingRole = null
+                                    onRoleChange(newRole)
+                                }) {
+                                    Text(s("member_role_change_confirm_btn"))
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { pendingRole = null }) {
+                                    Text(s("common_cancel"))
+                                }
+                            }
+                        )
                     }
                 }
 

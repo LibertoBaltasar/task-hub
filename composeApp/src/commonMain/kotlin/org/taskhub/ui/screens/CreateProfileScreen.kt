@@ -156,7 +156,7 @@ data class CreateProfileScreen(val householdId: String) : Screen {
                     FilterChip(
                         selected = role == "admin",
                         onClick = { role = "admin" },
-                        label = { Text(s("create_profile_role_admin")) },
+                        label = { Text(s("member_role_admin_short")) },
                         modifier = Modifier.weight(1f)
                     )
                     FilterChip(

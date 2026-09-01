@@ -173,7 +173,7 @@ class WelcomeScreen : Screen {
                         // Sin acceso multiplataforma trivial al versionName de Gradle desde
                         // commonMain: recuerda actualizar este literal en cada
                         // "chore: bump versión X.Y.Z" (ver CLAUDE.md).
-                        text = "v0.7.23",
+                        text = "v0.7.25",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

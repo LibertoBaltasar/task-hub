@@ -792,7 +792,7 @@ private fun TaskCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textDecoration = if (isDone) TextDecoration.LineThrough else TextDecoration.None,
-                    color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant
                         else MaterialTheme.colorScheme.onSurface
                 )
 
@@ -1098,6 +1098,7 @@ private fun GroupHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 48.dp)
                 .clickable(onClick = onToggle)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically

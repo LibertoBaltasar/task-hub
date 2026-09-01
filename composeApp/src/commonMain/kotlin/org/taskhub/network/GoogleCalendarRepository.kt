@@ -23,9 +23,7 @@ import kotlinx.serialization.json.Json
  * Google Calendar API v3 docs:
  *   https://developers.google.com/calendar/api/v3/reference/events/insert
  */
-class GoogleCalendarRepository(
-    private val apiKey: String = DEFAULT_API_KEY
-) {
+class GoogleCalendarRepository {
     private val calendarBaseUrl = "https://www.googleapis.com/calendar/v3"
 
     private val client = HttpClient {
@@ -180,10 +178,6 @@ class GoogleCalendarRepository(
         val month = local.monthNumber.toString().padStart(2, '0')
         val day = local.dayOfMonth.toString().padStart(2, '0')
         return "${local.year}-$month-$day"
-    }
-
-    companion object {
-        private const val DEFAULT_API_KEY = "AIzaSyCqD2r21Y8AXEYR2Dw3v3QpN5hA6CULNcs"
     }
 }
 
