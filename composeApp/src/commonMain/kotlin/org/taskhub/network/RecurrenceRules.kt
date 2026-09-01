@@ -41,11 +41,22 @@ object RecurrenceRules {
      *
      * - daily: siempre toca, salvo que ya se completara hoy.
      * - weekly: toca si hoy coincide con [recurrenceDays] (vacío = cualquier día)
-     *   y no se completó hoy.
-     * - monthly: si [recurrenceDay] no es null, toca solo ese día del mes
-     *   (ajustado con [clampDayOfMonth]) y no completado hoy; si es null,
+     *   y no se completó hoy. Si ya se completó alguna vez antes (hay
+     *   [lastCompletedDate]) y desde entonces pasó un día programado sin
+     *   completar, sigue tocando en modo "atrasada" hasta que se complete
+     *   (completado tardío) — así una ocurrencia no marcada a tiempo no
+     *   desaparece de la lista al día siguiente.
+     * - monthly: si [recurrenceDay] no es null, toca ese día del mes
+     *   (ajustado con [clampDayOfMonth]); igual que weekly, si ya hubo un
+     *   completado previo y desde entonces pasó el día objetivo sin marcar,
+     *   sigue tocando en modo atrasado. Si [recurrenceDay] es null,
      *   comportamiento legado: toca una vez al mes, cualquier día.
      * - once: toca si nunca se completó.
+     *
+     * Nota: la ventana de "completado tardío" solo se abre si la tarea ya
+     * se había completado alguna vez ([lastCompletedDate] no nulo) — así una
+     * tarea recién creada, cuyo primer día programado aún no llegó, no
+     * aparece falsamente como "atrasada" el mismo día que se crea.
      */
     fun isDueToday(
         frequency: String,
@@ -56,33 +67,91 @@ object RecurrenceRules {
         tz: TimeZone = TimeZone.currentSystemDefault()
     ): Boolean {
         val today = Instant.fromEpochMilliseconds(nowEpochMs).toLocalDateTime(tz).date
-
-        fun completedToday(): Boolean {
-            val lcd = lastCompletedDate ?: return false
-            val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-            return lcdDate == today
+        val lastCompletedLocalDate = lastCompletedDate?.let {
+            Instant.fromEpochMilliseconds(it).toLocalDateTime(tz).date
         }
+
+        fun completedToday(): Boolean = lastCompletedLocalDate == today
 
         return when (frequency) {
             "daily" -> !completedToday()
             "weekly" -> {
-                val todayDow = today.dayOfWeek.ordinal + 1 // 1=Lunes
-                if (recurrenceDays.isNotEmpty() && todayDow !in recurrenceDays) return false
-                !completedToday()
+                if (recurrenceDays.isEmpty()) return !completedToday()
+                if (lastCompletedLocalDate == null) {
+                    val todayDow = today.dayOfWeek.ordinal + 1 // 1=Lunes
+                    todayDow in recurrenceDays
+                } else {
+                    val mostRecentTarget = mostRecentWeeklyOccurrence(today, recurrenceDays)
+                    lastCompletedLocalDate < mostRecentTarget
+                }
             }
             "monthly" -> {
                 if (recurrenceDay != null) {
-                    val targetDay = clampDayOfMonth(recurrenceDay, today.year, today.monthNumber)
-                    if (today.dayOfMonth != targetDay) return false
-                    !completedToday()
+                    val thisMonthTarget = LocalDate(
+                        today.year, today.monthNumber,
+                        clampDayOfMonth(recurrenceDay, today.year, today.monthNumber)
+                    )
+                    if (lastCompletedLocalDate == null) {
+                        today == thisMonthTarget
+                    } else {
+                        val mostRecentTarget = if (today >= thisMonthTarget) {
+                            thisMonthTarget
+                        } else {
+                            val prevMonth = today.minus(1, DateTimeUnit.MONTH)
+                            LocalDate(
+                                prevMonth.year, prevMonth.monthNumber,
+                                clampDayOfMonth(recurrenceDay, prevMonth.year, prevMonth.monthNumber)
+                            )
+                        }
+                        lastCompletedLocalDate < mostRecentTarget
+                    }
                 } else {
                     // Legado: sin día fijado, toca una vez al mes (cualquier día).
-                    val lcd = lastCompletedDate ?: return true
-                    val lcdDate = Instant.fromEpochMilliseconds(lcd).toLocalDateTime(tz).date
-                    lcdDate.month != today.month || lcdDate.year != today.year
+                    if (lastCompletedLocalDate == null) return true
+                    lastCompletedLocalDate.month != today.month || lastCompletedLocalDate.year != today.year
                 }
             }
             "once" -> lastCompletedDate == null
+            else -> false
+        }
+    }
+
+    /** Día programado (de [recurrenceDays]) más reciente en `<= today` (a lo sumo 7 días atrás). */
+    private fun mostRecentWeeklyOccurrence(today: LocalDate, recurrenceDays: List<Int>): LocalDate {
+        var candidate = today
+        repeat(7) {
+            val dow = candidate.dayOfWeek.ordinal + 1
+            if (dow in recurrenceDays) return candidate
+            candidate = candidate.minus(1, DateTimeUnit.DAY)
+        }
+        return today // no debería ocurrir con recurrenceDays válidos (1..7)
+    }
+
+    /**
+     * ¿La ocurrencia pendiente de hoy corresponde a un día programado ya
+     * pasado (completado tardío)? Solo tiene sentido si [isDueToday] ya dio
+     * `true` — sirve para que la UI distinga "toca hoy" de "se pasó el día y
+     * sigue pendiente", sin reimplementar el cálculo de fecha programada.
+     */
+    fun isOverdueOccurrence(
+        frequency: String,
+        recurrenceDays: List<Int>,
+        recurrenceDay: Int?,
+        nowEpochMs: Long,
+        tz: TimeZone = TimeZone.currentSystemDefault()
+    ): Boolean {
+        val today = Instant.fromEpochMilliseconds(nowEpochMs).toLocalDateTime(tz).date
+        return when (frequency) {
+            "weekly" -> {
+                if (recurrenceDays.isEmpty()) return false
+                val todayDow = today.dayOfWeek.ordinal + 1
+                todayDow !in recurrenceDays
+            }
+            "monthly" -> {
+                if (recurrenceDay == null) return false
+                val targetDay = clampDayOfMonth(recurrenceDay, today.year, today.monthNumber)
+                today.dayOfMonth != targetDay
+            }
             else -> false
         }
     }

@@ -214,6 +214,102 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueToday("monthly", emptyList(), null, completedEarlierThisMonth, now, tz))
     }
 
+    // ── isDueToday: weekly — completado tardío (catch-up) ─────────
+
+    @Test
+    fun isDueToday_weekly_missedScheduledDay_withPriorCompletion_isDueLate() {
+        // Lunes(1) programado; hoy viernes 2024-03-15, la última vez se
+        // completó hace 2 semanas (2024-02-26, otro lunes) — el lunes de
+        // esta semana (2024-03-11) se pasó sin marcar: debe seguir pendiente
+        // (completado tardío), no desaparecer de la lista.
+        val now = epochOf(2024, 3, 15)
+        val lastCompletedTwoWeeksAgo = epochOf(2024, 2, 26)
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1), null, lastCompletedTwoWeeksAgo, now, tz))
+    }
+
+    @Test
+    fun isDueToday_weekly_completedOnThisWeeksScheduledDay_isNotDue() {
+        // Ya se completó el lunes de esta semana (2024-03-11): no debe
+        // volver a pedir completar hasta el próximo lunes.
+        val now = epochOf(2024, 3, 15)
+        val completedThisMonday = epochOf(2024, 3, 11)
+        assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1), null, completedThisMonday, now, tz))
+    }
+
+    @Test
+    fun isDueToday_weekly_neverCompletedAndDayAlreadyPassed_staysNotDueUntilNextCycle() {
+        // Nunca se completó: la ventana de "completado tardío" no se abre
+        // (no hay ocurrencia previa real que se haya "perdido"), se mantiene
+        // el comportamiento exacto de antes.
+        val now = epochOf(2024, 3, 15) // viernes; lunes ya pasó
+        assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1), null, null, now, tz))
+    }
+
+    // ── isDueToday: monthly con día fijo — completado tardío ───────
+
+    @Test
+    fun isDueToday_monthlyWithDay_missedScheduledDay_withPriorCompletion_isDueLate() {
+        // Día 15 programado; se completó el mes anterior (2024-02-15) pero
+        // no este mes, y ya estamos a día 20 (pasado el 15): sigue pendiente.
+        val now = epochOf(2024, 3, 20)
+        val completedLastMonth = epochOf(2024, 2, 15)
+        assertTrue(RecurrenceRules.isDueToday("monthly", emptyList(), 15, completedLastMonth, now, tz))
+    }
+
+    @Test
+    fun isDueToday_monthlyWithDay_completedThisMonthsScheduledDay_isNotDue() {
+        val now = epochOf(2024, 3, 20)
+        val completedThisMonth = epochOf(2024, 3, 15)
+        assertFalse(RecurrenceRules.isDueToday("monthly", emptyList(), 15, completedThisMonth, now, tz))
+    }
+
+    @Test
+    fun isDueToday_monthlyWithDay_beforeThisMonthsTarget_alreadyCaughtUpLastCycle_isNotDue() {
+        // Antes del día 15 de este mes; el ciclo anterior (2024-02-15) ya se
+        // completó a tiempo, así que todavía no toca nada.
+        val now = epochOf(2024, 3, 10)
+        val completedLastMonth = epochOf(2024, 2, 15)
+        assertFalse(RecurrenceRules.isDueToday("monthly", emptyList(), 15, completedLastMonth, now, tz))
+    }
+
+    // ── isOverdueOccurrence ─────────────────────────────────────────
+
+    @Test
+    fun isOverdueOccurrence_weekly_todayNotScheduledDay_isOverdue() {
+        val now = epochOf(2024, 3, 15) // viernes; solo lunes(1) programado
+        assertTrue(RecurrenceRules.isOverdueOccurrence("weekly", listOf(1), null, now, tz))
+    }
+
+    @Test
+    fun isOverdueOccurrence_weekly_todayIsScheduledDay_isNotOverdue() {
+        val now = epochOf(2024, 3, 15) // viernes(5) programado
+        assertFalse(RecurrenceRules.isOverdueOccurrence("weekly", listOf(5), null, now, tz))
+    }
+
+    @Test
+    fun isOverdueOccurrence_weekly_emptyDays_isNeverOverdue() {
+        val now = epochOf(2024, 3, 15)
+        assertFalse(RecurrenceRules.isOverdueOccurrence("weekly", emptyList(), null, now, tz))
+    }
+
+    @Test
+    fun isOverdueOccurrence_monthlyWithDay_notTargetDay_isOverdue() {
+        val now = epochOf(2024, 3, 20)
+        assertTrue(RecurrenceRules.isOverdueOccurrence("monthly", emptyList(), 15, now, tz))
+    }
+
+    @Test
+    fun isOverdueOccurrence_monthlyWithDay_isTargetDay_isNotOverdue() {
+        val now = epochOf(2024, 3, 15)
+        assertFalse(RecurrenceRules.isOverdueOccurrence("monthly", emptyList(), 15, now, tz))
+    }
+
+    @Test
+    fun isOverdueOccurrence_monthlyLegacyNoDay_isNeverOverdue() {
+        val now = epochOf(2024, 3, 20)
+        assertFalse(RecurrenceRules.isOverdueOccurrence("monthly", emptyList(), null, now, tz))
+    }
+
     // ── isDueToday: once ─────────────────────────────────────────
 
     @Test

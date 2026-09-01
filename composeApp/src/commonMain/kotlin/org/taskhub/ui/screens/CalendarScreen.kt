@@ -892,7 +892,9 @@ private fun isTaskCompletedOnDay(task: TaskResponse, date: LocalDate, tz: TimeZo
 /**
  * Check if a task is overdue relative to a specific date.
  * Overdue = task.dueDate has passed and task didn't get completed on/before the due date.
- * Also applies to recurring tasks that have been skipped past their window.
+ * Only applies to "once" tasks with an explicit dueDate — recurring tasks
+ * (daily/weekly/monthly) have no dueDate and are shown as due (not overdue)
+ * on each day cell where they're pending, see isTaskDueOnDay.
  */
 private fun isTaskOverdueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): Boolean {
     // For "once" tasks with a dueDate
