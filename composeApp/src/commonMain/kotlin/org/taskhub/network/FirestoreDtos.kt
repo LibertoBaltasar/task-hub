@@ -53,8 +53,15 @@ data class FirestoreDocumentResponse(
 
 @Serializable
 data class FirestoreListResponse(
-    val documents: List<FirestoreDocumentResponse> = emptyList()
+    val documents: List<FirestoreDocumentResponse> = emptyList(),
+    // Presente si la colección tiene más documentos de los que caben en una
+    // página — ver [FirestoreRepository.listDocumentIds] (borrado en cascada).
+    val nextPageToken: String? = null
 )
+
+/** Body de `POST accounts:delete` (Identity Toolkit) — ver [FirestoreClient.deleteFirebaseAccount]. */
+@Serializable
+data class DeleteAccountRequest(val idToken: String)
 
 // ── Error envelope ──────────────────────────────────────────
 // Firestore REST errors come back as {"error": {"code": 403, "message": "...", "status": "PERMISSION_DENIED"}}

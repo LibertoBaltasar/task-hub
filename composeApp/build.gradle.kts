@@ -102,6 +102,17 @@ kotlin {
 
             // In-App Updates — actualización forzada (modo IMMEDIATE)
             implementation("com.google.android.play:app-update:2.1.0")
+
+            // EncryptedSharedPreferences (Jetpack Security) — cifra los refresh
+            // tokens (ver storage/SecureStore.android.kt, hallazgo B1 del panel
+            // de seguridad v3).
+            implementation("androidx.security:security-crypto:1.1.0")
+
+            // Dependencia explícita del núcleo de multiplatform-settings: aunque
+            // multiplatform-settings-no-arg ya lo trae transitivamente, se declara
+            // aquí para que `SharedPreferencesSettings` esté garantizado en el
+            // classpath de compilación (usado por SecureStore.android.kt).
+            implementation("com.russhwolf:multiplatform-settings:1.2.0")
         }
 
         iosMain.dependencies {

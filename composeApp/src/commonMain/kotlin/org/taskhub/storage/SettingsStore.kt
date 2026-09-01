@@ -7,8 +7,17 @@ import kotlinx.serialization.json.Json
 
 /**
  * Persists user settings: notifications, language, and theme preference.
+ *
+ * [secureStore] guarda SOLO los refresh tokens (Google + anónimo) cifrados
+ * — ver [SecureStore] y el hallazgo de seguridad B1. Migración aditiva: si
+ * un token todavía vive en texto plano en [settings] (versión anterior a
+ * este cambio), se traslada automáticamente al leerlo por primera vez, sin
+ * cerrar la sesión de usuarios ya autenticados.
  */
-class SettingsStore(private val settings: Settings) {
+class SettingsStore(
+    private val settings: Settings,
+    private val secureStore: SecureStore = createSecureStore()
+) {
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -112,21 +121,27 @@ class SettingsStore(private val settings: Settings) {
         }
     }
 
-    /** Refresh token de Firebase del login Google (para restaurar la sesión). */
+    /**
+     * Refresh token de Firebase del login Google (para restaurar la sesión).
+     * Cifrado en [secureStore] — ver hallazgo B1. Migra automáticamente un
+     * valor legado guardado en texto plano antes de este cambio.
+     */
     fun getGoogleRefreshToken(): String? =
-        settings.getStringOrNull(KEY_GOOGLE_REFRESH_TOKEN)
+        secureStore.getString(KEY_GOOGLE_REFRESH_TOKEN) ?: migrateLegacyToken(KEY_GOOGLE_REFRESH_TOKEN)
 
     fun setGoogleRefreshToken(token: String?) {
         if (token != null) {
-            settings.putString(KEY_GOOGLE_REFRESH_TOKEN, token)
+            secureStore.putString(KEY_GOOGLE_REFRESH_TOKEN, token)
         } else {
-            settings.remove(KEY_GOOGLE_REFRESH_TOKEN)
+            secureStore.remove(KEY_GOOGLE_REFRESH_TOKEN)
         }
+        settings.remove(KEY_GOOGLE_REFRESH_TOKEN) // por si quedaba el valor legado sin cifrar
     }
 
     fun clearGoogleAuth() {
         settings.remove(KEY_GOOGLE_UID)
         settings.remove(KEY_GOOGLE_EMAIL)
+        secureStore.remove(KEY_GOOGLE_REFRESH_TOKEN)
         settings.remove(KEY_GOOGLE_REFRESH_TOKEN)
     }
 
@@ -144,20 +159,35 @@ class SettingsStore(private val settings: Settings) {
     // reinstalaciones, guardamos el refresh token del usuario anónimo. Con él
     // se renueva el idToken sin crear una identidad nueva (mismo UID).
 
+    /** Cifrado en [secureStore] — ver [getGoogleRefreshToken]. */
     fun getAnonymousRefreshToken(): String? =
-        settings.getStringOrNull(KEY_ANON_REFRESH_TOKEN)
+        secureStore.getString(KEY_ANON_REFRESH_TOKEN) ?: migrateLegacyToken(KEY_ANON_REFRESH_TOKEN)
 
     fun getAnonymousUid(): String? =
         settings.getStringOrNull(KEY_ANON_UID)
 
     fun saveAnonymousAuth(refreshToken: String, uid: String) {
-        settings.putString(KEY_ANON_REFRESH_TOKEN, refreshToken)
+        secureStore.putString(KEY_ANON_REFRESH_TOKEN, refreshToken)
+        settings.remove(KEY_ANON_REFRESH_TOKEN) // por si quedaba el valor legado sin cifrar
         settings.putString(KEY_ANON_UID, uid)
     }
 
     fun clearAnonymousAuth() {
+        secureStore.remove(KEY_ANON_REFRESH_TOKEN)
         settings.remove(KEY_ANON_REFRESH_TOKEN)
         settings.remove(KEY_ANON_UID)
+    }
+
+    /**
+     * Migra un refresh token guardado en texto plano (versión anterior al
+     * cifrado de [secureStore]) al almacén cifrado, y borra el original. Solo
+     * se ejecuta una vez por token: tras la primera lectura ya vive cifrado.
+     */
+    private fun migrateLegacyToken(key: String): String? {
+        val legacy = settings.getStringOrNull(key) ?: return null
+        secureStore.putString(key, legacy)
+        settings.remove(key)
+        return legacy
     }
 
     // ── Google Calendar sync (calendarId por hogar) ──────

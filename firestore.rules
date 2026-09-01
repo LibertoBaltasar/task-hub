@@ -3,11 +3,28 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v4 — DESPLEGADO 2026-08-31)
+    //  Task Hub — Reglas de seguridad (v5 — PENDIENTE DE DESPLIEGUE)
     //
-    //  ✅ Desplegado el 2026-08-31 vía scripts/deploy_firestore_rules.py
-    //  (PATCH, no POST — ver CLAUDE.md). Ruleset
-    //  projects/task-hub-62f98/rulesets/014a2dcd-974a-4dd4-931a-4d8608cdb82c.
+    //  ⚠️ v5 editada el 2026-09-01 (encargo "privacidad/RGPD + seguridad",
+    //  hallazgo M2 del panel de expertos v3 — ver
+    //  docs/review-panel-expertos-v3-2026-09-01.md, Experto 9). NO
+    //  desplegada todavía por este cambio: el despliegue lo hace el
+    //  orquestador con PATCH vía scripts/deploy_firestore_rules.py (ver
+    //  CLAUDE.md), no este agente. Hasta entonces sigue activo en producción
+    //  el ruleset v4 (projects/task-hub-62f98/rulesets/014a2dcd-974a-4dd4-931a-4d8608cdb82c,
+    //  desplegado 2026-08-31).
+    //
+    //  Cambio v4→v5 (M2): la rama `isOwner`/`isAdminMember` de `create` en
+    //  members/{mid} no validaba los mismos límites que la rama de auto-alta
+    //  por invitación — un owner/admin con cliente modificado podía crear un
+    //  miembro con `totalPoints`/racha arbitrarios, o con `userId` de OTRA
+    //  persona (suplantación). Ahora exige contadores en 0 y que, si se
+    //  vincula una cuenta (`userId` no nulo), sea la del propio creador —
+    //  cubre los dos usos reales de esta rama (CreateProfileScreen: el
+    //  owner crea su propio primer perfil; alta de perfiles "hijo/a" sin
+    //  cuenta, con `userId == null`). El rol sigue libre en esta rama a
+    //  propósito (owner/admin deben poder fijar/ascender roles).
+    //
     //  Historial: v4 se editó como parte del encargo "modelo de roles
     //  seguro" de 2026-08-30 (cierra los 2 bloqueantes de la auditoría
     //  anterior, ver docs/audit-2026-08-30.md) y se completó con el ajuste
@@ -184,8 +201,24 @@ service cloud.firestore {
       allow read: if isMember(hid) || isOwner(hid);
 
       allow create: if signedIn() && (
-          isOwner(hid)
-          || isAdminMember(hid)
+          // owner/admin (p.ej. CreateProfileScreen: el owner crea su propio
+          // primer perfil; alta de perfiles "hijo/a" sin cuenta): el rol
+          // sigue libre (deben poder fijar/ascender roles), pero el
+          // documento nuevo tampoco puede traer ya saldo/racha inventados
+          // ni un `userId` que suplante a otra persona — si se vincula una
+          // cuenta, tiene que ser la del propio creador (único caso real
+          // hoy; los perfiles "hijo/a" usan userId == null). Ver M2 del
+          // panel de seguridad v3 (docs/review-panel-expertos-v3-2026-09-01.md).
+          (
+            (isOwner(hid) || isAdminMember(hid))
+            && request.resource.data.totalPoints == 0
+            && request.resource.data.currentStreak == 0
+            && request.resource.data.bestStreak == 0
+            && (
+              request.resource.data.get('userId', null) == null
+              || request.resource.data.userId == request.auth.uid
+            )
+          )
           // auto-alta: el UID que se crea aporta el código de invitación
           // válido; se fuerza `userId == request.auth.uid` (nadie puede
           // auto-registrarse suplantando el userId de otro usuario) y

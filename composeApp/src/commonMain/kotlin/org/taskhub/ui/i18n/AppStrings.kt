@@ -39,6 +39,15 @@ object AppStrings {
             "settings_account_sign_in_google" to "Iniciar sesión con Google",
             "settings_account_edit_profile" to "✏️ Editar perfil",
 
+            // Eliminar cuenta (RGPD)
+            "settings_delete_account_button" to "🗑️ Eliminar cuenta",
+            "settings_delete_account_desc" to "Borra tu cuenta y todos tus datos de forma permanente.",
+            "settings_delete_account_confirm_title" to "¿Eliminar tu cuenta?",
+            "settings_delete_account_confirm_text" to "Se borrará tu espacio Personal, tu perfil y tu membresía en cualquier otro hogar. Esta acción no se puede deshacer.",
+            "settings_delete_account_confirm_button" to "Eliminar cuenta",
+            "settings_delete_account_deleting" to "Eliminando cuenta…",
+            "settings_delete_account_error" to "No se pudo eliminar la cuenta. Comprueba tu conexión e inténtalo de nuevo.",
+
             // Tema del widget
             "settings_widget_theme_title" to "Tema del widget",
             "widget_theme_light" to "Claro",
@@ -570,6 +579,15 @@ object AppStrings {
             "settings_account_no_session" to "No session: your data is only saved on this device.",
             "settings_account_sign_in_google" to "Sign in with Google",
             "settings_account_edit_profile" to "✏️ Edit profile",
+
+            // Delete account (GDPR)
+            "settings_delete_account_button" to "🗑️ Delete account",
+            "settings_delete_account_desc" to "Permanently deletes your account and all your data.",
+            "settings_delete_account_confirm_title" to "Delete your account?",
+            "settings_delete_account_confirm_text" to "This will delete your Personal space, your profile, and your membership in any other household. This action can't be undone.",
+            "settings_delete_account_confirm_button" to "Delete account",
+            "settings_delete_account_deleting" to "Deleting account…",
+            "settings_delete_account_error" to "Couldn't delete the account. Check your connection and try again.",
 
             // Widget theme
             "settings_widget_theme_title" to "Widget theme",

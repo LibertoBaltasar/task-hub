@@ -1,5 +1,6 @@
 package org.taskhub.ui.models
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -98,6 +99,80 @@ class GoogleAuthManager(
     fun signOut() {
         settingsStore.clearGoogleAuth()
         _state.value = GoogleAuthState.Anonymous
+    }
+
+    /**
+     * Elimina la cuenta del usuario actual (Google o anónima) y TODOS sus
+     * datos — ver hallazgo de privacidad "sin flujo de eliminar cuenta"
+     * (docs/review-panel-expertos-v3-2026-09-01.md, Experto 10 #3).
+     *
+     * Orden (best-effort por hogar, para no abortar a medias si uno falla):
+     *  1. Su espacio Personal (isPersonal=true) → borrado completo en cascada
+     *     ([FirestoreRepository.deleteHousehold]), es solo suyo.
+     *  2. Cualquier otro hogar donde sea miembro → se le da de baja igual que
+     *     si lo abandonara ([FirestoreRepository.leaveHousehold]): borra SU
+     *     propio miembro (y el hogar entero si quedaba vacío), pero conserva
+     *     el contenido compartido de otros miembros — borrar por completo un
+     *     hogar familiar entero porque el dueño elimina su cuenta destruiría
+     *     datos que no son (solo) suyos.
+     *  3. Su perfil global (`users/{uid}`).
+     *  4. La cuenta de Firebase Auth en sí — el paso irreversible final; si
+     *     este falla SÍ se reporta como error (la cuenta sigue activa).
+     * Termina limpiando todo el estado local (tokens, hogares guardados).
+     */
+    suspend fun deleteAccount(): Result<Unit> {
+        val myId = currentUserId()
+        val households = householdStore.getSavedHouseholds()
+        for (h in households) {
+            try {
+                if (h.isPersonal) {
+                    repo.deleteHousehold(h.id)
+                } else {
+                    repo.leaveHousehold(h.id, myId)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Best-effort: un hogar offline/con error no debe impedir
+                // borrar el resto ni la cuenta.
+            }
+        }
+        if (myId != null) {
+            try {
+                repo.deleteUserProfile(myId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // No crítico: el perfil global huérfano no es un dato con
+                // identidad reclamable sin la cuenta que acabamos de borrar.
+            }
+        }
+        return try {
+            repo.deleteFirebaseAccount()
+            householdStore.clearAll()
+            settingsStore.clearGoogleAuth()
+            settingsStore.clearAnonymousAuth()
+            _state.value = GoogleAuthState.Anonymous
+            // Recrea el espacio Personal para la (nueva) identidad anónima —
+            // mismo bootstrap que hace App.kt en cada arranque en frío. Sin
+            // esto, HomeScreen se quedaría sin ningún hogar que mostrar hasta
+            // que el usuario reiniciara la app entera.
+            try {
+                val personal = repo.getOrCreatePersonalHousehold()
+                householdStore.replacePersonalHousehold(personal.id)
+                repo.ensurePersonalMember(personal.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Offline/transitorio: App.kt lo reintentará en el próximo
+                // arranque real de la app.
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 
     /**

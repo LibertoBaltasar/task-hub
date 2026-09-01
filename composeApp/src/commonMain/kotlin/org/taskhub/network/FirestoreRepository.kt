@@ -332,14 +332,87 @@ class FirestoreRepository(
     /** Batch-fetch multiple households by their document IDs (en paralelo). */
     suspend fun getHouseholds(ids: List<String>): List<HouseholdResponse> = householdRepository.getHouseholds(ids)
 
-    /** Delete a household document. Does NOT cascade-delete subcollections (members, tasks)
-     *  — those become orphaned but harmless. Requires auth (write). */
+    /**
+     * Borra un hogar y TODOS sus datos asociados (borrado real, no soft-delete
+     * — ver hallazgo de privacidad "el borrado no borra datos reales",
+     * docs/review-panel-expertos-v3-2026-09-01.md Experto 10 #4). Recorre y
+     * borra, hojas primero, las subcolecciones: tasks/{tid}/assignments,
+     * tasks/{tid}/comments, tasks; members/{mid}/achievements, members;
+     * taskHistory; notifications; rewardRedemptions; rewards; messages — y
+     * finalmente el propio documento households/{householdId}.
+     *
+     * Best-effort por documento: un fallo puntual (404 ya borrado, timeout
+     * transitorio) no aborta el resto — se prioriza dejar el hogar lo más
+     * limpio posible en vez de abortar a medias y dejarlo en un estado peor
+     * (mitad borrado, sin reintento posible desde la UI). Requiere auth (write).
+     */
     suspend fun deleteHousehold(householdId: String) {
-        client.delete("$baseUrl/households/$householdId") {
+        val householdUrl = "$baseUrl/households/$householdId"
+
+        val taskIds = listDocumentIds("$householdUrl/tasks")
+        taskIds.forEach { tid ->
+            deleteAllDocuments("$householdUrl/tasks/$tid/assignments")
+            deleteAllDocuments("$householdUrl/tasks/$tid/comments")
+        }
+        deleteAllDocuments("$householdUrl/tasks", knownIds = taskIds)
+
+        val memberIds = listDocumentIds("$householdUrl/members")
+        memberIds.forEach { mid ->
+            deleteAllDocuments("$householdUrl/members/$mid/achievements")
+        }
+        deleteAllDocuments("$householdUrl/members", knownIds = memberIds)
+
+        deleteAllDocuments("$householdUrl/taskHistory")
+        deleteAllDocuments("$householdUrl/notifications")
+        deleteAllDocuments("$householdUrl/rewardRedemptions")
+        deleteAllDocuments("$householdUrl/rewards")
+        deleteAllDocuments("$householdUrl/messages")
+
+        client.delete(householdUrl) {
             withAuth()
         }
         taskCache.clearHousehold(householdId)
         currentMemberCache.remove(householdId)
+    }
+
+    /**
+     * Lista los IDs de todos los documentos de una colección, paginando con
+     * `pageToken` si hace falta (households reales son pequeños, pero el
+     * borrado en cascada no puede permitirse dejar documentos huérfanos por
+     * asumir que caben en una sola página).
+     */
+    private suspend fun listDocumentIds(collectionUrl: String): List<String> {
+        val ids = mutableListOf<String>()
+        var pageToken: String? = null
+        do {
+            val response: FirestoreListResponse = client.get(collectionUrl) {
+                withAuth()
+                parameter("pageSize", 300)
+                pageToken?.let { parameter("pageToken", it) }
+            }.body()
+            ids += response.documents.map { extractDocId(it.name, "deleteHousehold") }
+            pageToken = response.nextPageToken
+        } while (pageToken != null)
+        return ids
+    }
+
+    /**
+     * Borra todos los documentos de una colección PLANA (sin subcolecciones
+     * propias sin borrar ya). Cada borrado individual es best-effort: un
+     * fallo (404, timeout) se ignora y se continúa con el resto — ver
+     * [deleteHousehold].
+     */
+    private suspend fun deleteAllDocuments(collectionUrl: String, knownIds: List<String>? = null) {
+        val ids = knownIds ?: listDocumentIds(collectionUrl)
+        ids.forEach { id ->
+            try {
+                client.delete("$collectionUrl/$id") { withAuth() }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // No crítico: se prioriza borrar el resto de la subcolección.
+            }
+        }
     }
 
     /**
@@ -617,17 +690,32 @@ class FirestoreRepository(
     suspend fun ensurePersonalMember(householdId: String): String =
         resolveCurrentMember(householdId)
 
-    /** Remove (leave) a member — soft-delete by setting leftAt. Requires auth (write). */
+    /**
+     * Elimina (da de baja) a un miembro: soft-delete vía `leftAt` + anonimiza
+     * sus datos personales (nombre, avatar) — ver hallazgo de privacidad "el
+     * borrado no borra datos reales" (docs/review-panel-expertos-v3-2026-09-01.md,
+     * Experto 10 #4). No es un borrado real del documento (a diferencia de
+     * [deleteHousehold]): `taskHistory`/`members/{mid}/achievements`
+     * referencian este `memberId`, y borrar el documento dejaría esas
+     * referencias huérfanas y rompería StatsScreen. `totalPoints`/`role`/
+     * rachas se conservan (siguen siendo parte del histórico de puntos del
+     * hogar); solo se anonimizan los campos que identifican a la persona.
+     * Requires auth (write).
+     */
     suspend fun deleteMember(householdId: String, memberId: String): Boolean {
         val now = Clock.System.now().toEpochMilliseconds()
 
         val fields = mapOf(
-            "leftAt" to FirestoreValue(integerValue = now.toString())
+            "leftAt" to FirestoreValue(integerValue = now.toString()),
+            // Placeholder fijo (no localizado): igual que el "Yo" por defecto
+            // de resolveCurrentMemberUncached, es un valor de datos, no de UI.
+            "displayName" to FirestoreValue(stringValue = "Miembro eliminado"),
+            "avatarUrl" to FirestoreValue(nullValue = "NULL_VALUE")
         )
 
         client.patch("$baseUrl/households/$householdId/members/$memberId") {
             withAuth()
-            updateMaskFieldPaths("leftAt")
+            updateMaskFieldPaths("leftAt", "displayName", "avatarUrl")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -709,6 +797,25 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }
     }
+
+    /**
+     * Borra el perfil global de un usuario (`users/{userId}`) — parte del
+     * flujo "eliminar cuenta" (ver [GoogleAuthManager.deleteAccount]). No
+     * borra su membresía en ningún hogar: eso lo hace por separado
+     * [deleteHousehold] (espacio Personal) / [leaveHousehold] (hogares
+     * compartidos) antes de llamar a esta función.
+     */
+    suspend fun deleteUserProfile(userId: String) {
+        client.delete("$baseUrl/users/$userId") { withAuth() }
+    }
+
+    /**
+     * Borra la cuenta de Firebase Auth actual (Google o anónima). Ver
+     * [FirestoreClient.deleteFirebaseAccount] — debe ser SIEMPRE el último
+     * paso del flujo "eliminar cuenta": una vez borrada, el idToken deja de
+     * servir para más escrituras.
+     */
+    suspend fun deleteFirebaseAccount() = firestoreClient.deleteFirebaseAccount()
 
     /** Update member streak fields. Requires auth (write). */
     suspend fun updateMemberStreak(

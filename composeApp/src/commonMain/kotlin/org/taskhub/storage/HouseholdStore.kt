@@ -108,6 +108,18 @@ class HouseholdStore(private val settings: Settings) {
         savePersonalHousehold(id)
     }
 
+    /**
+     * Borra todo el estado local de hogares (lista guardada + espacio
+     * Personal). Usado por el flujo "eliminar cuenta"
+     * ([org.taskhub.ui.models.GoogleAuthManager.deleteAccount]): tras borrar
+     * los hogares en Firestore, no debe quedar ningún rastro local que
+     * intente reconciliarlos en el próximo arranque.
+     */
+    fun clearAll() {
+        settings.remove(KEY_SAVED_HOUSEHOLDS)
+        settings.remove(KEY_PERSONAL_HOUSEHOLD_ID)
+    }
+
     companion object {
         private const val KEY_SAVED_HOUSEHOLDS = "taskhub_saved_households"
         private const val KEY_PERSONAL_HOUSEHOLD_ID = "taskhub_personal_household_id"

@@ -12,6 +12,7 @@ import org.taskhub.platform.createAdController
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
+import org.taskhub.storage.createSecureStore
 import org.taskhub.ui.models.CalendarSyncManager
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.HouseholdScreenModel
@@ -32,8 +33,11 @@ val appModule: Module = module {
     // Local task/offline cache (transparent, using SharedPreferences/NSUserDefaults)
     single { TaskCache(settings = get()) }
 
+    // Almacén cifrado (EncryptedSharedPreferences/Keychain) para refresh tokens
+    single { createSecureStore() }
+
     // User settings (theme, language, notifications)
-    single { SettingsStore(settings = get()) }
+    single { SettingsStore(settings = get(), secureStore = get()) }
 
     // Network — talks directly to Firestore REST API
     single { FirestoreRepository(taskCache = get(), settingsStore = get()) }

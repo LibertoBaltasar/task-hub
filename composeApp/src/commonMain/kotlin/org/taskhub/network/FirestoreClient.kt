@@ -252,6 +252,27 @@ class FirestoreClient(
     fun extractDocId(resourceName: String, operation: String): String =
         FirestoreParsers.extractDocId(resourceName, operation)
 
+    /**
+     * Borra la cuenta de Firebase Auth actual (Google o anónima) vía el REST
+     * de Identity Toolkit. Paso final e irreversible del flujo "eliminar
+     * cuenta" (ver [org.taskhub.ui.models.GoogleAuthManager.deleteAccount]):
+     * debe llamarse SOLO después de borrar los datos del usuario en
+     * Firestore, porque una vez borrada la cuenta el idToken deja de ser
+     * válido para cualquier escritura posterior.
+     *
+     * Endpoint: POST https://identitytoolkit.googleapis.com/v1/accounts:delete?key=API_KEY
+     * Body: {"idToken": "..."}
+     */
+    suspend fun deleteFirebaseAccount() {
+        ensureAuth()
+        val token = bearerToken
+            ?: throw IllegalStateException("No hay sesión activa para eliminar la cuenta")
+        client.post("https://identitytoolkit.googleapis.com/v1/accounts:delete?key=$apiKey") {
+            contentType(ContentType.Application.Json)
+            setBody(DeleteAccountRequest(token))
+        }
+    }
+
     companion object {
         /** Reintentos ante conflicto de concurrencia optimista (ver `addMemberPoints`/`addMemberAchievement`). */
         const val OPTIMISTIC_WRITE_MAX_RETRIES = 3
