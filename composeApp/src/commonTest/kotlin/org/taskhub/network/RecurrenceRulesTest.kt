@@ -5,6 +5,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
+import org.taskhub.network.models.AssignmentSlot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -385,5 +386,69 @@ class RecurrenceRulesTest {
     fun isDueOn_monthlyWithDay_matchesTargetDayInAFutureMonth() {
         val targetDate = dateOf(epochOf(2024, 6, 15))
         assertTrue(RecurrenceRules.isDueOn(targetDate, "monthly", emptyList(), 15, null, tz))
+    }
+
+    // ── endOfDueDay ──────────────────────────────────────────────
+
+    @Test
+    fun endOfDueDay_isMidnightOfTheFollowingDay() {
+        val dueDayStart = LocalDateTime(2024, 3, 18, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
+        val end = RecurrenceRules.endOfDueDay(dueDayStart, tz)
+        assertEquals(LocalDate(2024, 3, 19), dateOf(end))
+    }
+
+    @Test
+    fun endOfDueDay_completionLaterTheSameScheduledDay_isBeforeEnd() {
+        // Regresión del bug: comparar `now <= dueDate` contra la medianoche de
+        // INICIO del día programado marcaría como "tarde" cualquier compleción
+        // real (que siempre ocurre después de las 00:00 de ese día).
+        val dueDayStart = LocalDateTime(2024, 3, 18, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
+        val completedSameDayEvening = epochOf(2024, 3, 18, hour = 20)
+        val end = RecurrenceRules.endOfDueDay(dueDayStart, tz)
+        assertTrue(completedSameDayEvening <= end)
+    }
+
+    @Test
+    fun endOfDueDay_completionNextDay_isAfterEnd() {
+        val dueDayStart = LocalDateTime(2024, 3, 18, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
+        val completedNextDay = epochOf(2024, 3, 19, hour = 1)
+        val end = RecurrenceRules.endOfDueDay(dueDayStart, tz)
+        assertTrue(completedNextDay > end)
+    }
+
+    // ── resolveRotationAssignee ────────────────────────────────────
+
+    @Test
+    fun resolveRotationAssignee_emptyRotation_returnsFallback() {
+        val nextDue = epochOf(2024, 3, 18) // lunes
+        assertEquals(
+            "member-A",
+            RecurrenceRules.resolveRotationAssignee(emptyList(), nextDue, "member-A", tz)
+        )
+    }
+
+    @Test
+    fun resolveRotationAssignee_matchingSlotForDayOfWeek_returnsThatMember() {
+        // 2024-03-18 es lunes (dow=1)
+        val nextDue = epochOf(2024, 3, 18)
+        val rotation = listOf(
+            AssignmentSlot(dayOfWeek = 1, memberId = "member-monday"),
+            AssignmentSlot(dayOfWeek = 3, memberId = "member-wednesday")
+        )
+        assertEquals(
+            "member-monday",
+            RecurrenceRules.resolveRotationAssignee(rotation, nextDue, "member-A", tz)
+        )
+    }
+
+    @Test
+    fun resolveRotationAssignee_noSlotForDayOfWeek_returnsFallback() {
+        // 2024-03-15 es viernes (dow=5); rotación solo cubre lunes(1)
+        val nextDue = epochOf(2024, 3, 15)
+        val rotation = listOf(AssignmentSlot(dayOfWeek = 1, memberId = "member-monday"))
+        assertEquals(
+            "member-A",
+            RecurrenceRules.resolveRotationAssignee(rotation, nextDue, "member-A", tz)
+        )
     }
 }

@@ -1032,9 +1032,24 @@ class FirestoreRepository(
     class TaskCompletionConflictException(message: String) : Exception(message)
 
     /**
+     * Otro dispositivo modificó la asignación entre que [completeAssignment]
+     * la leyó y trató de marcarla como completada. Mismo motivo y política
+     * que [TaskCompletionConflictException] (no reintentar automáticamente:
+     * completar no es idempotente) — antes `completeAssignment` no tenía
+     * ninguna protección aquí, así que dos dispositivos completando la misma
+     * asignación casi a la vez duplicaban puntos/historial y podían crear DOS
+     * asignaciones distintas para la siguiente ocurrencia (cadena bifurcada).
+     */
+    class AssignmentCompletionConflictException(message: String) : Exception(message)
+
+    /**
      * Mark a task as completed today. Sets lastCompletedDate, awards points
-     * (con penalización por retraso si `task.dueDate`/`penaltyMode` aplican —
-     * ver [resolveCompletionOutcome]), and records history.
+     * (con penalización por retraso si `task.nextDueAt`/`dueDate`/`penaltyMode`
+     * aplican — ver [resolveCompletionOutcome]), records history, sincroniza la
+     * asignación de este ciclo (si existía) como completada y regenera la de
+     * la siguiente ocurrencia respetando `assignmentRotation` (ver
+     * [regenerateNextAssignment] — unificado con [completeAssignment], antes
+     * solo ese flujo regeneraba, y siempre ignorando la rotación).
      *
      * Concurrencia optimista sobre el documento de la tarea (`currentDocument.
      * updateTime` como precondition del primer PATCH, sin reintento — ver
@@ -1043,8 +1058,8 @@ class FirestoreRepository(
      * dupliquen puntos/historial.
      *
      * NO es atómica de extremo a extremo más allá de ese primer PATCH (las
-     * escrituras 2/3 siguen siendo HTTP secuenciales): un fallo de red a
-     * mitad de secuencia deja estado parcial, mitigado por la guarda de
+     * escrituras siguientes siguen siendo HTTP secuenciales): un fallo de red
+     * a mitad de secuencia deja estado parcial, mitigado por la guarda de
      * reentrancia de `TaskScreenModel` pero no eliminado. Evaluado y
      * descartado usar el endpoint `:commit` con `fieldTransforms` para
      * hacerlo transaccional — ver `docs/atomicidad-commit-pendiente.md` para
@@ -1058,21 +1073,34 @@ class FirestoreRepository(
         task: TaskResponse
     ): TaskCompletionResult {
         val now = Clock.System.now().toEpochMilliseconds()
-        val outcome = resolveCompletionOutcome(task, task.dueDate, now)
+        // nextDueAt (si existe) es la medianoche del día programado, no una
+        // fecha límite con hora real (ver KDoc de RecurrenceRules.endOfDueDay)
+        // — sin este ajuste, completar el mismo día programado (lo normal)
+        // se marcaría siempre como "tarde".
+        val effectiveDueDate = if (task.frequency == "once") {
+            task.dueDate
+        } else {
+            task.nextDueAt?.let { RecurrenceRules.endOfDueDay(it) } ?: task.dueDate
+        }
+        val outcome = resolveCompletionOutcome(task, effectiveDueDate, now)
+        val nextDueDate = calculateNextDueDate(task, now)
 
-        // 1. Update lastCompletedDate + completedBy on the task.
-        //    completedBy registra QUIÉN marcó hecho (quien recibe los puntos),
-        //    al margen de quién esté asignado.
+        // 1. Update lastCompletedDate + completedBy (+ nextDueAt si es
+        //    recurrente) on the task. completedBy registra QUIÉN marcó hecho
+        //    (quien recibe los puntos), al margen de quién esté asignado.
         val docUrl = "$baseUrl/households/$householdId/tasks/$taskId"
         val current: FirestoreDocumentResponse = client.get(docUrl) { withAuth() }.body()
-        val fields = mapOf(
+        val fields = mutableMapOf(
             "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
             "completedBy" to FirestoreValue(stringValue = memberId)
         )
+        if (task.frequency != "once") {
+            fields["nextDueAt"] = nextDueAtValue(nextDueDate)
+        }
         try {
             client.patch(docUrl) {
                 withAuth()
-                updateMaskFieldPaths("lastCompletedDate", "completedBy")
+                updateMaskFieldPaths(fields.keys)
                 current.updateTime?.let { parameter("currentDocument.updateTime", it) }
                 contentType(ContentType.Application.Json)
                 setBody(FirestoreDocument(fields))
@@ -1099,6 +1127,36 @@ class FirestoreRepository(
             completedAt = now,
             onTime = outcome.onTime
         )
+
+        // 4. Sincronizar la asignación de este ciclo (si la había) como
+        //    completada — antes de regenerar, para no dejar ambigüedad entre
+        //    "la que se acaba de completar" y "la de la siguiente ocurrencia"
+        //    cuando las dos coexisten con status="assigned" (ver KDoc de
+        //    [regenerateNextAssignment]). No otorga puntos (ya se otorgaron
+        //    arriba).
+        val assignments = try {
+            getAssignments(householdId, taskId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val existingAssignment = assignments.find { it.memberId == memberId && it.status == "assigned" }
+        if (existingAssignment != null) {
+            try {
+                markAssignmentCompleted(householdId, taskId, existingAssignment.id, now, outcome.pointsAwarded, outcome.onTime)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) { }
+        }
+
+        // 5. Regenerar la asignación de la siguiente ocurrencia (recurrentes).
+        if (task.frequency != "once") {
+            regenerateNextAssignment(
+                householdId, taskId, task, memberId,
+                existingAssignment?.mandatory ?: false, nextDueDate, assignments
+            )
+        }
 
         return TaskCompletionResult(now, outcome.pointsAwarded, outcome.onTime)
     }
@@ -1298,14 +1356,22 @@ class FirestoreRepository(
     suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> =
         taskRepository.getAllAssignments(householdId)
 
-    /** Marca el documento de una asignación como completada (sin tocar puntos del miembro). */
+    /**
+     * Marca el documento de una asignación como completada (sin tocar puntos
+     * del miembro). Si [expectedUpdateTime] no es null, se usa como
+     * `currentDocument.updateTime` (precondition de concurrencia optimista) —
+     * usado por [completeAssignment]; los demás callers (sync interno de
+     * [completeTask]) no lo necesitan porque ya ganaron la carrera al superar
+     * la precondition del documento de la tarea.
+     */
     private suspend fun markAssignmentCompleted(
         householdId: String,
         taskId: String,
         assignmentId: String,
         completedAt: Long,
         pointsAwarded: Int,
-        onTime: Boolean
+        onTime: Boolean,
+        expectedUpdateTime: String? = null
     ) {
         val fields = mapOf<String, FirestoreValue>(
             "status" to FirestoreValue(stringValue = "completed"),
@@ -1318,35 +1384,25 @@ class FirestoreRepository(
         ) {
             withAuth()
             updateMaskFieldPaths("status", "completedAt", "pointsAwarded", "onTime")
+            expectedUpdateTime?.let { parameter("currentDocument.updateTime", it) }
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
     }
 
     /**
-     * Tras completar una tarea vía [completeTask] (lista principal), sincroniza la
-     * asignación pendiente del miembro (si existe) como completada — sin esto,
-     * quedaba en `status="assigned"` para siempre y el botón "Marcar hecho" del
-     * detalle (basado en assignments, ver [completeAssignment]) seguía activo,
-     * permitiendo volver a "completarla" y duplicar los puntos ya otorgados por
-     * [completeTask]. No otorga puntos (ya se otorgaron en [completeTask]).
-     */
-    suspend fun syncAssignmentOnTaskCompleted(
-        householdId: String,
-        taskId: String,
-        memberId: String,
-        points: Int,
-        onTime: Boolean,
-        completedAt: Long
-    ) {
-        val assignment = getAssignments(householdId, taskId)
-            .find { it.memberId == memberId && it.status == "assigned" } ?: return
-        markAssignmentCompleted(householdId, taskId, assignment.id, completedAt, points, onTime)
-    }
-
-    /**
      * Complete a task assignment. Calculates penalty if overdue, handles recurrence.
      * Returns the updated assignment.
+     *
+     * Concurrencia optimista sobre el documento de la ASIGNACIÓN
+     * (`currentDocument.updateTime`, mismo patrón que [completeTask] tiene
+     * sobre el documento de la tarea desde una ronda anterior) — antes esta
+     * función no tenía ninguna protección: dos dispositivos completando la
+     * misma asignación casi a la vez duplicaban puntos/historial y podían
+     * generar DOS asignaciones distintas para la siguiente ocurrencia (cadena
+     * bifurcada). Ver [AssignmentCompletionConflictException] para la política
+     * de conflicto (idéntica a la de [completeTask]: el perdedor no reintenta
+     * solo, debe recargar y volver a intentarlo).
      */
     suspend fun completeAssignment(
         householdId: String,
@@ -1356,18 +1412,43 @@ class FirestoreRepository(
         assignment: TaskAssignmentResponse
     ): TaskAssignmentResponse {
         val now = Clock.System.now().toEpochMilliseconds()
-        val outcome = resolveCompletionOutcome(task, assignment.dueDate, now)
+        // assignment.dueDate para tareas recurrentes es medianoche del día
+        // programado (viene de nextOccurrence vía regenerateNextAssignment),
+        // no una hora límite real — mismo ajuste que en completeTask (ver
+        // RecurrenceRules.endOfDueDay). Las "once" sí tienen una hora real
+        // elegida por el usuario, se usan tal cual.
+        val effectiveDueDate = when {
+            task.frequency == "once" -> assignment.dueDate
+            assignment.dueDate == 0L -> 0L
+            else -> RecurrenceRules.endOfDueDay(assignment.dueDate)
+        }
+        val outcome = resolveCompletionOutcome(task, effectiveDueDate, now)
         val onTime = outcome.onTime
         val pointsAwarded = outcome.pointsAwarded
 
-        // Update assignment
-        markAssignmentCompleted(householdId, taskId, assignmentId, now, pointsAwarded, onTime)
+        // Update assignment — con precondition de concurrencia optimista.
+        val assignmentUrl = "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
+        val currentAssignmentDoc: FirestoreDocumentResponse = client.get(assignmentUrl) { withAuth() }.body()
+        try {
+            markAssignmentCompleted(
+                householdId, taskId, assignmentId, now, pointsAwarded, onTime,
+                expectedUpdateTime = currentAssignmentDoc.updateTime
+            )
+        } catch (e: FirestoreException) {
+            if (e.code == "FAILED_PRECONDITION" || e.code == "ABORTED") {
+                throw AssignmentCompletionConflictException(
+                    "Esta asignación se completó en otro dispositivo justo antes. Vuelve a intentarlo."
+                )
+            }
+            throw e
+        }
 
         // Award points + persist history + sincronizar completedBy/lastCompletedDate
-        // en la propia tarea, igual que [completeTask] — antes esta función solo
-        // marcaba la asignación como completada sin que los puntos llegaran al saldo
-        // real del miembro (bug crítico: la UI mostraba "+N pts" que nunca se sumaban
-        // a totalPoints ni podían canjearse por recompensas).
+        // (+ nextDueAt si es recurrente) en la propia tarea, igual que
+        // [completeTask] — antes esta función solo marcaba la asignación como
+        // completada sin que los puntos llegaran al saldo real del miembro
+        // (bug crítico: la UI mostraba "+N pts" que nunca se sumaban a
+        // totalPoints ni podían canjearse por recompensas).
         addMemberPoints(householdId, assignment.memberId, pointsAwarded)
         saveTaskHistory(
             householdId = householdId,
@@ -1377,35 +1458,30 @@ class FirestoreRepository(
             completedAt = now,
             onTime = onTime
         )
-        val taskFields = mapOf(
+        val nextDueDate = calculateNextDueDate(task, now)
+        val taskFields = mutableMapOf(
             "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
             "completedBy" to FirestoreValue(stringValue = assignment.memberId)
         )
+        if (task.frequency != "once") {
+            taskFields["nextDueAt"] = nextDueAtValue(nextDueDate)
+        }
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            updateMaskFieldPaths("lastCompletedDate", "completedBy")
+            updateMaskFieldPaths(taskFields.keys)
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(taskFields))
         }
         taskCache.clearTasks(householdId)
 
-        // Handle recurrence: create next assignment for recurring tasks.
-        // No exigir recurrenceDays.isNotEmpty(): esa lista solo se rellena para
-        // "weekly" — "daily" y "monthly" no la usan y con esa guarda nunca
-        // generaban la siguiente asignación. calculateNextDueDate ya sabe
-        // calcular (o devolver null) según la frecuencia.
+        // Handle recurrence: create next assignment respetando assignmentRotation
+        // (ver [regenerateNextAssignment] — unificado con [completeTask]; antes
+        // esta función siempre reasignaba al mismo miembro que acababa de
+        // completarla, ignorando la rotación por completo).
         if (task.frequency != "once") {
-            val nextDueDate = calculateNextDueDate(task, now)
-            if (nextDueDate != null) {
-                // Create next assignment for the same members
-                assignTask(
-                    householdId = householdId,
-                    taskId = taskId,
-                    memberIds = listOf(assignment.memberId),
-                    mandatory = assignment.mandatory,
-                    dueDate = nextDueDate
-                )
-            }
+            regenerateNextAssignment(
+                householdId, taskId, task, assignment.memberId, assignment.mandatory, nextDueDate
+            )
         }
 
         return assignment.copy(
@@ -1413,6 +1489,58 @@ class FirestoreRepository(
             completedAt = now,
             pointsAwarded = pointsAwarded,
             onTime = onTime
+        )
+    }
+
+    /**
+     * Crea (o renueva) la asignación de la SIGUIENTE ocurrencia de una tarea
+     * recurrente, respetando `assignmentRotation` si está configurada (si no,
+     * mantiene al miembro que acaba de completarla — comportamiento legado,
+     * ver [RecurrenceRules.resolveRotationAssignee]).
+     *
+     * Único punto compartido por [completeTask] y [completeAssignment] — antes
+     * solo `completeAssignment` regeneraba la siguiente asignación (dejando
+     * "huérfana" la UI de asignaciones y sin sincronizar Google Calendar a
+     * partir del segundo ciclo cuando se completaba desde la lista principal),
+     * y lo hacía siempre al mismo miembro, ignorando la rotación.
+     *
+     * No hace nada si [nextDueDate] es null (tarea "once", sin siguiente
+     * ocurrencia). Deduplica contra una asignación "assigned" ya existente
+     * para el mismo miembro+fecha límite (p.ej. si ya se pasó [existingAssignments]
+     * con una regeneración previa) para no crear duplicados por reintentos o
+     * carreras que ya cerró la concurrencia optimista de arriba.
+     */
+    private suspend fun regenerateNextAssignment(
+        householdId: String,
+        taskId: String,
+        task: TaskResponse,
+        completedMemberId: String,
+        mandatory: Boolean,
+        nextDueDate: Long?,
+        existingAssignments: List<TaskAssignmentResponse>? = null
+    ) {
+        if (nextDueDate == null) return
+        val nextMemberId = RecurrenceRules.resolveRotationAssignee(
+            task.assignmentRotation, nextDueDate, completedMemberId
+        )
+        val assignments = existingAssignments ?: try {
+            getAssignments(householdId, taskId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val alreadyExists = assignments.any {
+            it.memberId == nextMemberId && it.dueDate == nextDueDate && it.status == "assigned"
+        }
+        if (alreadyExists) return
+        assignTask(
+            householdId = householdId,
+            taskId = taskId,
+            memberIds = listOf(nextMemberId),
+            mandatory = mandatory,
+            dueDate = nextDueDate,
+            taskTitle = task.title
         )
     }
 
@@ -1438,16 +1566,23 @@ class FirestoreRepository(
      * Calcula si se completó a tiempo + los puntos a otorgar (con penalización
      * por retraso si toca), a partir de una fecha límite concreta.
      *
-     * Compartido por [completeTask] (sin asignación — usa `task.dueDate`, solo
-     * relevante para tareas "once") y [completeAssignment] (con asignación —
-     * usa `assignment.dueDate`, que puede diferir de `task.dueDate` en tareas
-     * recurrentes). Antes solo `completeAssignment` calculaba penalización;
-     * `completeTask` otorgaba siempre los puntos íntegros con `onTime=true`
-     * fijo, ignorando `task.dueDate`/`penaltyMode` — bug que permitía evitar
-     * la penalización completando desde la lista principal en vez del detalle.
+     * Compartido por [completeTask] (sin asignación — usa `task.dueDate` para
+     * "once", o `task.nextDueAt` ajustado con [RecurrenceRules.endOfDueDay]
+     * para recurrentes) y [completeAssignment] (con asignación — usa
+     * `assignment.dueDate`, con el mismo ajuste si la tarea es recurrente).
+     * Antes solo `completeAssignment` calculaba penalización; `completeTask`
+     * otorgaba siempre los puntos íntegros con `onTime=true` fijo, ignorando
+     * `task.dueDate`/`penaltyMode` — bug que permitía evitar la penalización
+     * completando desde la lista principal en vez del detalle. Y antes de
+     * `nextDueAt`, `task.dueDate` valía SIEMPRE 0 para tareas recurrentes
+     * (daily/weekly/monthly), así que la penalización nunca se aplicaba ahí
+     * tampoco vía `completeAssignment` salvo que la asignación tuviera una
+     * `dueDate` explícita.
      *
      * `dueDate == 0` significa "sin fecha límite" (ver `TaskResponse.dueDate`)
-     * y nunca penaliza.
+     * y nunca penaliza — incluye tareas recurrentes antiguas sin `nextDueAt`
+     * todavía (migración aditiva: fallback al comportamiento previo, sin
+     * penalización, hasta que la próxima compleción puebla el campo).
      */
     private fun resolveCompletionOutcome(task: TaskResponse, dueDate: Long, now: Long): CompletionOutcome {
         val onTime = dueDate == 0L || now <= dueDate
@@ -1518,6 +1653,10 @@ class FirestoreRepository(
         )
     }
 
+    /** [FirestoreValue] para el campo `nextDueAt`: entero si no es null, `NULL_VALUE` si lo es. */
+    private fun nextDueAtValue(nextDueDate: Long?): FirestoreValue =
+        if (nextDueDate != null) FirestoreValue(integerValue = nextDueDate.toString()) else FirestoreValue(nullValue = "NULL_VALUE")
+
     // ────────────────────────────────────────────────────────
     //  Task helpers
     // ────────────────────────────────────────────────────────
@@ -1538,10 +1677,12 @@ class FirestoreRepository(
         penaltyInterval: String,
         penaltyMax: Int,
         assignmentRotation: List<org.taskhub.network.models.AssignmentSlot> = emptyList(),
-        dueDate: Long = 0
+        dueDate: Long = 0,
+        lastCompletedDate: Long? = null
     ) = taskRepository.updateTask(
         householdId, taskId, title, description, points, frequency, recurrenceDays, recurrenceDay,
-        tags, subtasks, penaltyMode, penaltyValue, penaltyInterval, penaltyMax, assignmentRotation, dueDate
+        tags, subtasks, penaltyMode, penaltyValue, penaltyInterval, penaltyMax, assignmentRotation, dueDate,
+        lastCompletedDate
     )
 
     /**

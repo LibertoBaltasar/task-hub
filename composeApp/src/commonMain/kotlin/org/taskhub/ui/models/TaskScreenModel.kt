@@ -447,17 +447,13 @@ class TaskScreenModel(
                     pointsAwarded = result.pointsAwarded
                 )
 
-                // Si había una asignación pendiente para este miembro, sincronizarla
-                // como completada (ver KDoc de syncAssignmentOnTaskCompleted) — evita
-                // que el detalle siga ofreciendo "Marcar hecho" sobre una tarea ya
-                // completada por la lista, lo que duplicaría los puntos ya otorgados.
-                try {
-                    repo.syncAssignmentOnTaskCompleted(
-                        householdId, taskId, memberId, result.pointsAwarded, result.onTime, completedAt
-                    )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) { }
+                // Nota: sincronizar la asignación pendiente de este miembro como
+                // completada, y regenerar la de la siguiente ocurrencia respetando
+                // assignmentRotation, ya lo hace `repo.completeTask` internamente
+                // (ver su KDoc) — antes era una llamada aparte aquí
+                // (`syncAssignmentOnTaskCompleted`) que solo sincronizaba sin
+                // regenerar, dejando huérfana la asignación a partir del segundo
+                // ciclo de una tarea recurrente asignada.
 
                 // Cancel any scheduled reminder for this task.
                 // La tarea ya está completada y los puntos ya se otorgaron en el
@@ -750,7 +746,8 @@ class TaskScreenModel(
         assignmentRotation: List<AssignmentSlot> = emptyList(),
         memberIds: List<String> = emptyList(),
         mandatory: Boolean = false,
-        dueDate: Long = 0
+        dueDate: Long = 0,
+        lastCompletedDate: Long? = null
     ) {
         if (_actionState.value == TaskActionState.Loading) return
         screenModelScope.launch {
@@ -772,7 +769,8 @@ class TaskScreenModel(
                     penaltyInterval = penaltyInterval,
                     penaltyMax = penaltyMax,
                     assignmentRotation = assignmentRotation,
-                    dueDate = dueDate
+                    dueDate = dueDate,
+                    lastCompletedDate = lastCompletedDate
                 )
 
                 // Sincronizar asignaciones: crear las nuevas antes de borrar las

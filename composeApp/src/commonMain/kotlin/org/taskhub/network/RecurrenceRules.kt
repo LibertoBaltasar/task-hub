@@ -9,6 +9,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
+import org.taskhub.network.models.AssignmentSlot
 
 /**
  * Reglas puras de recurrencia de tareas (daily/weekly/monthly). Sin I/O —
@@ -255,5 +256,52 @@ object RecurrenceRules {
 
         return LocalDateTime(targetDate.year, targetDate.monthNumber, targetDate.dayOfMonth, 0, 0, 0)
             .toInstant(tz).toEpochMilliseconds()
+    }
+
+    /**
+     * Convierte la "medianoche del día programado" que devuelve [nextOccurrence]
+     * (y que se persiste tal cual en `nextDueAt`/`assignment.dueDate` para
+     * mostrar/sincronizar Calendar) en la fecha límite REAL a efectos de
+     * penalizar retrasos: medianoche del día SIGUIENTE (fin del día
+     * programado).
+     *
+     * Sin este ajuste, comparar `now <= dueDate` directamente contra la
+     * medianoche de inicio del día programado marcaría como "tarde" a
+     * CUALQUIER compleción real (que siempre ocurre en algún momento DURANTE
+     * ese día, nunca exactamente a las 00:00) — habría sido imposible
+     * completar una tarea recurrente con penalización sin que se penalizara
+     * cada vez.
+     */
+    fun endOfDueDay(dueDayStartMs: Long, tz: TimeZone = TimeZone.currentSystemDefault()): Long {
+        val date = Instant.fromEpochMilliseconds(dueDayStartMs).toLocalDateTime(tz).date
+        val nextDay = date.plus(1, DateTimeUnit.DAY)
+        return LocalDateTime(nextDay.year, nextDay.monthNumber, nextDay.dayOfMonth, 0, 0, 0)
+            .toInstant(tz).toEpochMilliseconds()
+    }
+
+    /**
+     * Miembro que debe ocupar la siguiente asignación de una tarea recurrente,
+     * respetando `assignmentRotation` (quién le toca cada día de la semana).
+     *
+     * Único punto de decisión de rotación, compartido por `completeTask` y
+     * `completeAssignment` en `FirestoreRepository` (antes cada uno lo hacía
+     * a su manera — `completeTask` no regeneraba nada y `completeAssignment`
+     * siempre reasignaba al mismo miembro que acababa de completarla,
+     * ignorando esta lista por completo).
+     *
+     * Si [assignmentRotation] está vacía (sin rotación configurada) o no hay
+     * ningún slot para el día de la semana de [nextDueMs], devuelve
+     * [fallbackMemberId] — comportamiento legado: la siguiente ocurrencia se
+     * asigna a quien acaba de completar la anterior.
+     */
+    fun resolveRotationAssignee(
+        assignmentRotation: List<AssignmentSlot>,
+        nextDueMs: Long,
+        fallbackMemberId: String,
+        tz: TimeZone = TimeZone.currentSystemDefault()
+    ): String {
+        if (assignmentRotation.isEmpty()) return fallbackMemberId
+        val dow = Instant.fromEpochMilliseconds(nextDueMs).toLocalDateTime(tz).date.dayOfWeek.ordinal + 1
+        return assignmentRotation.find { it.dayOfWeek == dow }?.memberId ?: fallbackMemberId
     }
 }

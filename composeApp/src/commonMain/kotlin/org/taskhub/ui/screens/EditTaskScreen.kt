@@ -215,7 +215,8 @@ data class EditTaskScreen(
                                         assignmentRotation = rotation,
                                         memberIds = selectedMembers.toList(),
                                         mandatory = mandatory,
-                                        dueDate = dueDate
+                                        dueDate = dueDate,
+                                        lastCompletedDate = task.lastCompletedDate
                                     )
                                 },
                                 enabled = actionState !is TaskActionState.Loading &&
@@ -429,7 +430,17 @@ data class EditTaskScreen(
                             freqs.forEach { (key, label) ->
                                 FilterChip(
                                     selected = frequency == key,
-                                    onClick = { frequency = key },
+                                    onClick = {
+                                        frequency = key
+                                        // "Semanal sin ningún día marcado" equivalía
+                                        // silenciosamente a "todos los días"
+                                        // (RecurrenceRules.isDueToday) sin ningún aviso.
+                                        // Se premarcan los 7 días para que ese estado
+                                        // ambiguo no sea el que queda por defecto.
+                                        if (key == "weekly" && recurrenceDays.isEmpty()) {
+                                            recurrenceDays = (1..7).toSet()
+                                        }
+                                    },
                                     label = { Text(label) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,

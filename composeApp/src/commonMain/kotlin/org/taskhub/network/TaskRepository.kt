@@ -25,7 +25,7 @@ import org.taskhub.storage.TaskCache
  * NO incluye `completeTask`/`completeAssignment`/`reassignTaskCompletion` ni
  * sus helpers privados tan acoplados (`resolveCompletionOutcome`,
  * `calculatePenalty`, `calculateNextDueDate`, `markAssignmentCompleted`,
- * `syncAssignmentOnTaskCompleted`, `updateTaskHistoryMember`,
+ * `regenerateNextAssignment`, `updateTaskHistoryMember`,
  * `findTaskHistoryRecord`) — todos otorgan o transfieren puntos
  * (`addMemberPoints`), la capa de puntos que se moverá junto con
  * `MemberRepository` en la fase 2.5. Se quedan en [FirestoreRepository] hasta
@@ -115,6 +115,30 @@ class TaskRepository(
             "penaltyMax" to FirestoreValue(nullValue = "NULL_VALUE")
         )
 
+    /**
+     * Calcula `nextDueAt` (fecha límite de la ocurrencia pendiente) anclada en
+     * [anchorMs] — la creación de la tarea o su última compleción. null para
+     * "once" (usa `dueDate`). Ver KDoc de [org.taskhub.network.models.TaskResponse.nextDueAt].
+     */
+    private fun computeNextDueAt(
+        frequency: String,
+        recurrenceDay: Int?,
+        recurrenceDays: List<Int>,
+        anchorMs: Long
+    ): Long? {
+        if (frequency !in setOf("daily", "weekly", "monthly")) return null
+        return RecurrenceRules.nextOccurrence(
+            nowEpochMs = anchorMs,
+            frequency = frequency,
+            day = recurrenceDay,
+            weeklyDays = recurrenceDays
+        )
+    }
+
+    /** [FirestoreValue] para `nextDueAt`: entero si no es null, `NULL_VALUE` si lo es (limpia el campo previo). */
+    private fun nextDueAtField(nextDueAt: Long?): FirestoreValue =
+        if (nextDueAt != null) FirestoreValue(integerValue = nextDueAt.toString()) else FirestoreValue(nullValue = "NULL_VALUE")
+
     // ────────────────────────────────────────────────────────
     //  Tasks (subcollection under households/{id})
     // ────────────────────────────────────────────────────────
@@ -176,6 +200,12 @@ class TaskRepository(
         // Subtasks as array of maps
         fields["subtasks"] = subtasksField(subtasks)
 
+        // Fecha límite de la primera ocurrencia pendiente (recurrentes only).
+        val nextDueAt = computeNextDueAt(frequency, recurrenceDay, recurrenceDays, now)
+        if (nextDueAt != null) {
+            fields["nextDueAt"] = nextDueAtField(nextDueAt)
+        }
+
         val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/tasks") {
             withAuth()
             contentType(ContentType.Application.Json)
@@ -194,6 +224,7 @@ class TaskRepository(
             penaltyInterval = penaltyInterval, penaltyMax = penaltyMax,
             dueDate = dueDate, lastCompletedDate = null,
             assignmentRotation = assignmentRotation,
+            nextDueAt = nextDueAt,
             createdAt = now, updatedAt = now
         )
     }
@@ -515,7 +546,16 @@ class TaskRepository(
         penaltyInterval: String,
         penaltyMax: Int,
         assignmentRotation: List<AssignmentSlot> = emptyList(),
-        dueDate: Long = 0
+        dueDate: Long = 0,
+        /**
+         * `lastCompletedDate` de la tarea ANTES de este edit — ancla el
+         * recálculo de `nextDueAt` en la última ocurrencia real completada en
+         * vez de en el momento del edit, para no adelantar/atrasar la fecha
+         * límite pendiente solo por editar un campo no relacionado con la
+         * recurrencia (p.ej. el título). null si nunca se completó (tarea
+         * nueva o recién creada) — se ancla en `now`, igual que [createTask].
+         */
+        lastCompletedDate: Long? = null
     ) {
         val now = Clock.System.now().toEpochMilliseconds()
 
@@ -549,6 +589,13 @@ class TaskRepository(
 
         // Subtasks as array of maps
         fields["subtasks"] = subtasksField(subtasks)
+
+        // Fecha límite de la ocurrencia pendiente, recalculada por si cambió
+        // la frecuencia/recurrenceDays/recurrenceDay; NULL_VALUE si ya no es
+        // recurrente (limpia un nextDueAt previo).
+        fields["nextDueAt"] = nextDueAtField(
+            computeNextDueAt(frequency, recurrenceDay, recurrenceDays, lastCompletedDate ?: now)
+        )
 
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
@@ -641,6 +688,7 @@ class TaskRepository(
                     val mid = sf["memberId"]?.stringValue ?: return@mapNotNull null
                     AssignmentSlot(dayOfWeek = dow, memberId = mid)
                 } ?: emptyList(),
+            nextDueAt = f["nextDueAt"]?.integerValue?.toLongOrNull(),
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
             updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
         )

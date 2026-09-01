@@ -173,6 +173,19 @@ data class TaskResponse(
     val completedBy: String? = null,
     /** Rotación diaria de asignados: quién le toca cada día de la semana. */
     val assignmentRotation: List<AssignmentSlot> = emptyList(),
+    /**
+     * Fecha límite de la ocurrencia recurrente PENDIENTE (epoch millis), solo
+     * para "daily"/"weekly"/"monthly". Se calcula con
+     * [org.taskhub.network.RecurrenceRules.nextOccurrence] al crear la tarea y
+     * se recalcula en el mismo PATCH que [lastCompletedDate] cada vez que se
+     * completa — da a `resolveCompletionOutcome` una fecha límite real para
+     * penalizar retrasos en recurrentes (antes imposible: [dueDate] vale 0
+     * para estas frecuencias). null para tareas "once" (usan [dueDate]) y
+     * para tareas recurrentes creadas antes de este campo — en ese caso se
+     * cae al comportamiento previo (sin penalización) hasta la próxima
+     * compleción, que ya lo puebla.
+     */
+    val nextDueAt: Long? = null,
     val createdAt: Long = 0,
     val updatedAt: Long = 0
 )
