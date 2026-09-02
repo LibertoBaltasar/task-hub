@@ -33,6 +33,10 @@ actual suspend fun getGoogleCalendarAccessToken(): String? {
     return null
 }
 
+actual suspend fun revokeGoogleCalendarAccess() {
+    // iOS: Google Sign-In not supported — no-op
+}
+
 /**
  * Genera un entero uniforme en [0, bound) usando el CSPRNG del sistema
  * (Security.framework), con rejection sampling (mismo algoritmo que

@@ -17,10 +17,10 @@ import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardActionState
 import org.taskhub.ui.models.HouseholdScreenModel
-import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.theme.*
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.i18n.AppStrings
 
 data class MemberRewardScreen(
@@ -40,10 +40,8 @@ data class MemberRewardScreen(
 
         var showConfirmDialog by remember { mutableStateOf(false) }
 
-        // Nombre del hogar activo para la topbar (consistencia con TaskListScreen/CalendarScreen)
         val householdModel = koinScreenModel<HouseholdScreenModel>()
-        val householdUiState by householdModel.uiState.collectAsState()
-        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+        val householdName = rememberHouseholdName(householdId, householdModel)
 
         // Sin esto, memberState se queda para siempre en MemberUiState.Idle
         // (Voyager crea una instancia nueva de MemberScreenModel por pantalla):
@@ -51,7 +49,6 @@ data class MemberRewardScreen(
         // aparecía como "Puntos insuficientes" aunque el usuario tuviera saldo.
         LaunchedEffect(householdId) {
             memberModel.loadMembers(householdId)
-            householdModel.loadHousehold(householdId)
         }
 
         // Find member and their points

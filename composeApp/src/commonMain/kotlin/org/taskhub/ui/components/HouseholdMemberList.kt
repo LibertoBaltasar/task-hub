@@ -283,29 +283,19 @@ private fun MemberCard(
                     val newRole = pendingRole
                     if (newRole != null) {
                         val newRoleLabel = if (newRole == "admin") s("member_role_admin_short") else s("member_role_child_short")
-                        AlertDialog(
-                            onDismissRequest = { pendingRole = null },
-                            title = { Text(s("member_role_change_confirm_title")) },
-                            text = {
-                                Text(
-                                    s("member_role_change_confirm_text")
-                                        .replace("%1", member.displayName)
-                                        .replace("%2", newRoleLabel)
-                                )
+                        DestructiveConfirmDialog(
+                            title = s("member_role_change_confirm_title"),
+                            text = s("member_role_change_confirm_text")
+                                .replace("%1", member.displayName)
+                                .replace("%2", newRoleLabel),
+                            s = s,
+                            onDismiss = { pendingRole = null },
+                            onConfirm = {
+                                pendingRole = null
+                                onRoleChange(newRole)
                             },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    pendingRole = null
-                                    onRoleChange(newRole)
-                                }) {
-                                    Text(s("member_role_change_confirm_btn"))
-                                }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { pendingRole = null }) {
-                                    Text(s("common_cancel"))
-                                }
-                            }
+                            confirmLabel = s("member_role_change_confirm_btn"),
+                            destructive = false
                         )
                     }
 

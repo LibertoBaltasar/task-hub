@@ -304,4 +304,14 @@ object RecurrenceRules {
         val dow = Instant.fromEpochMilliseconds(nextDueMs).toLocalDateTime(tz).date.dayOfWeek.ordinal + 1
         return assignmentRotation.find { it.dayOfWeek == dow }?.memberId ?: fallbackMemberId
     }
+
+    /**
+     * Purga las referencias a [memberId] de una `assignmentRotation` — se usa
+     * al eliminar un miembro (soft-delete, ver `MemberRepository.deleteMember`)
+     * para que la siguiente regeneración ([resolveRotationAssignee]) nunca
+     * caiga de vuelta en un slot que apunta a alguien ya invisible en
+     * `getMembers` (panel v4, Experto 2 hallazgo #2 ALTO).
+     */
+    fun purgeMemberFromRotation(rotation: List<AssignmentSlot>, memberId: String): List<AssignmentSlot> =
+        rotation.filterNot { it.memberId == memberId }
 }

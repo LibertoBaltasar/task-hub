@@ -13,11 +13,18 @@ import kotlinx.serialization.json.Json
  * un token todavía vive en texto plano en [settings] (versión anterior a
  * este cambio), se traslada automáticamente al leerlo por primera vez, sin
  * cerrar la sesión de usuarios ya autenticados.
+ *
+ * [secureStore] es perezoso (`by secureStoreProvider`): construirlo toca
+ * Keystore/Keychain, trabajo que no hace falta para leer preferencias como
+ * el idioma — antes se construía síncronamente en la primera composición de
+ * `App()` (antes del splash) solo por ser un parámetro de constructor con
+ * valor por defecto (panel v4, Experto 11 #6).
  */
 class SettingsStore(
     private val settings: Settings,
-    private val secureStore: SecureStore = createSecureStore()
+    secureStoreProvider: Lazy<SecureStore> = lazy { createSecureStore() }
 ) {
+    private val secureStore: SecureStore by secureStoreProvider
 
     private val json = Json { ignoreUnknownKeys = true }
 

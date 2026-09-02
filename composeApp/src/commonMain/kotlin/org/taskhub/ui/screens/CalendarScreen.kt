@@ -35,6 +35,7 @@ import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
@@ -104,15 +105,8 @@ data class CalendarScreen(
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
         val lang = appSettings.currentLanguage
 
-        // Nombre del hogar activo para la topbar (ver panel de expertos v2,
-        // Estética #4): con varios hogares, esta pantalla no dejaba claro
-        // en cuál se estaba trabajando.
         val householdModel = koinScreenModel<HouseholdScreenModel>()
-        val householdUiState by householdModel.uiState.collectAsState()
-        LaunchedEffect(householdId) {
-            householdModel.loadHousehold(householdId)
-        }
-        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+        val householdName = rememberHouseholdName(householdId, householdModel)
 
         LaunchedEffect(householdId) {
             model.setCurrentMemberId(memberId)

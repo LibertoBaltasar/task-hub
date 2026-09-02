@@ -14,6 +14,7 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.platform.GoogleSignInResultHolder
 import org.taskhub.platform.getGoogleCalendarAccessToken
 import org.taskhub.platform.launchGoogleSignIn
+import org.taskhub.platform.revokeGoogleCalendarAccess
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 
@@ -27,6 +28,16 @@ sealed class GoogleAuthState {
     data object Anonymous : GoogleAuthState()
     data class Error(val message: String) : GoogleAuthState()
 }
+
+/**
+ * Señala que [GoogleAuthManager.deleteAccount] no pudo completar el
+ * cascade-delete de TODOS los hogares del usuario (algún `leaveHousehold`/
+ * `deleteHousehold` falló) — por eso la cuenta de Firebase Auth (paso
+ * irreversible) NO se ha borrado, para que el usuario conserve la sesión con
+ * la que reintentarlo (panel v4, Experto 12 hallazgo #2).
+ */
+class AccountDeletionCascadeException :
+    Exception("No se pudieron borrar/abandonar todos los hogares del usuario; la cuenta no se ha eliminado.")
 
 /**
  * Orquesta el login con Google (y el fallback anónimo).
@@ -106,7 +117,7 @@ class GoogleAuthManager(
      * datos — ver hallazgo de privacidad "sin flujo de eliminar cuenta"
      * (docs/review-panel-expertos-v3-2026-09-01.md, Experto 10 #3).
      *
-     * Orden (best-effort por hogar, para no abortar a medias si uno falla):
+     * Orden:
      *  1. Su espacio Personal (isPersonal=true) → borrado completo en cascada
      *     ([FirestoreRepository.deleteHousehold]), es solo suyo.
      *  2. Cualquier otro hogar donde sea miembro → se le da de baja igual que
@@ -115,14 +126,26 @@ class GoogleAuthManager(
      *     el contenido compartido de otros miembros — borrar por completo un
      *     hogar familiar entero porque el dueño elimina su cuenta destruiría
      *     datos que no son (solo) suyos.
-     *  3. Su perfil global (`users/{uid}`).
-     *  4. La cuenta de Firebase Auth en sí — el paso irreversible final; si
+     *
+     *     Si CUALQUIER hogar de este bucle falla (offline, cascade parcial —
+     *     ver [org.taskhub.network.HouseholdCascadeIncompleteException] —
+     *     etc.), el fallo se ACUMULA y el resto de pasos (perfil global,
+     *     borrado de la cuenta Auth) NO se ejecutan: se devuelve
+     *     [AccountDeletionCascadeException] para que el usuario conserve la
+     *     sesión con la que reintentarlo, en vez de perder la cuenta Auth
+     *     (paso irreversible) con hogares a medio borrar sin ninguna forma
+     *     de completarlo (panel v4, Experto 12 hallazgo #2).
+     *  3. Su perfil global (`users/{uid}`) — best-effort, no bloquea el resto.
+     *  4. Revoca el consentimiento OAuth de Google Calendar (best-effort, ver
+     *     [revokeGoogleCalendarAccess]) — panel v4, Experto 10 hallazgo #5.
+     *  5. La cuenta de Firebase Auth en sí — el paso irreversible final; si
      *     este falla SÍ se reporta como error (la cuenta sigue activa).
      * Termina limpiando todo el estado local (tokens, hogares guardados).
      */
     suspend fun deleteAccount(): Result<Unit> {
         val myId = currentUserId()
         val households = householdStore.getSavedHouseholds()
+        var hadCascadeFailure = false
         for (h in households) {
             try {
                 if (h.isPersonal) {
@@ -133,9 +156,11 @@ class GoogleAuthManager(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // Best-effort: un hogar offline/con error no debe impedir
-                // borrar el resto ni la cuenta.
+                hadCascadeFailure = true
             }
+        }
+        if (hadCascadeFailure) {
+            return Result.failure(AccountDeletionCascadeException())
         }
         if (myId != null) {
             try {
@@ -149,7 +174,17 @@ class GoogleAuthManager(
         }
         return try {
             repo.deleteFirebaseAccount()
+            if (settingsStore.hasGoogleLinked()) {
+                try {
+                    revokeGoogleCalendarAccess()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // No crítico: el access token en sí caduca solo en ~1h.
+                }
+            }
             householdStore.clearAll()
+            settingsStore.unlinkGoogleCalendar()
             settingsStore.clearGoogleAuth()
             settingsStore.clearAnonymousAuth()
             _state.value = GoogleAuthState.Anonymous
@@ -173,6 +208,32 @@ class GoogleAuthManager(
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Fuerza una reautenticación reciente con Google justo antes de eliminar
+     * la cuenta (acción irreversible) — sin esto, una sesión de Firebase ya
+     * iniciada (posiblemente horas o días atrás) bastaba para borrar la
+     * cuenta desde un dispositivo desatendido/robado (panel v4, Experto 9).
+     * Solo aplica a cuentas vinculadas a Google: una cuenta anónima no tiene
+     * ningún proveedor de identidad externo contra el que reautenticar (el
+     * único "factor" es tener el dispositivo desbloqueado, ya verificado
+     * antes de llegar a Ajustes), así que no hay nada más que hacer y
+     * devuelve true directamente.
+     *
+     * Reutiliza [signIn] (mismo patrón que [linkCalendar]) para no duplicar
+     * el manejo de [GoogleSignInResultHolder]/reentrancia: si el usuario
+     * cancela el selector de cuenta, el estado vuelve a [GoogleAuthState.Anonymous]
+     * (comportamiento ya existente y aceptado en [linkCalendar] ante una
+     * cancelación) y esta función devuelve false.
+     */
+    suspend fun reauthenticateForDeletion(): Boolean {
+        if (_state.value !is GoogleAuthState.SignedIn) return true
+        signIn()
+        val result = state.first {
+            it is GoogleAuthState.SignedIn || it is GoogleAuthState.Anonymous || it is GoogleAuthState.Error
+        }
+        return result is GoogleAuthState.SignedIn
     }
 
     /**

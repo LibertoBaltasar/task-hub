@@ -3,7 +3,23 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v5 — DESPLEGADO 2026-09-01)
+    //  Task Hub — Reglas de seguridad (v6 — PENDIENTE DE DESPLIEGUE)
+    //
+    //  v6 editada 2026-09-02 (encargo "PROPUESTAS panel v4 —
+    //  privacidad/seguridad", punto 7: Experto 9 hallazgo #2). NO
+    //  desplegada todavía — el despliegue lo hace el coordinador Hermes vía
+    //  scripts/deploy_firestore_rules.py.
+    //
+    //  Cambio v5→v6: la rama de `create` en members/{mid} (tanto
+    //  owner/admin como auto-alta por invitación) no validaba
+    //  `appreciationGiven`/`appreciationWeekStart`/`leftAt` — un cliente
+    //  modificado podía crear ya un miembro con presupuesto de agradecimiento
+    //  o antigüedad de semana arbitrarios (saltándose el tope semanal de
+    //  [PointsRules.currentAppreciationBudget]), o con `leftAt` != 0 desde el
+    //  alta. El cliente real ([MemberRepository.createMember]) siempre manda
+    //  appreciationGiven=0/appreciationWeekStart=0 y nunca manda `leftAt` —
+    //  ahora la regla lo exige (con default 0 vía get() para el campo que el
+    //  cliente no envía).
     //
     //  v5 editada el 2026-09-01 (encargo "privacidad/RGPD + seguridad",
     //  hallazgo M2 del panel de expertos v3 — ver
@@ -213,6 +229,15 @@ service cloud.firestore {
             && request.resource.data.totalPoints == 0
             && request.resource.data.currentStreak == 0
             && request.resource.data.bestStreak == 0
+            // Mismo tope que la rama de auto-alta de abajo: sin esto, un
+            // owner/admin con cliente modificado podía crear ya un miembro
+            // con presupuesto de agradecimiento semanal consumido/manipulado
+            // o marcado como "abandonado" desde el alta (panel v4, Experto 9
+            // hallazgo #2). get(..., 0): el cliente real nunca manda `leftAt`
+            // al crear.
+            && request.resource.data.get('appreciationGiven', 0) == 0
+            && request.resource.data.get('appreciationWeekStart', 0) == 0
+            && request.resource.data.get('leftAt', 0) == 0
             && (
               request.resource.data.get('userId', null) == null
               || request.resource.data.userId == request.auth.uid
@@ -233,7 +258,10 @@ service cloud.firestore {
               && request.resource.data.role == "child"
               && request.resource.data.totalPoints == 0
               && request.resource.data.currentStreak == 0
-              && request.resource.data.bestStreak == 0)
+              && request.resource.data.bestStreak == 0
+              && request.resource.data.get('appreciationGiven', 0) == 0
+              && request.resource.data.get('appreciationWeekStart', 0) == 0
+              && request.resource.data.get('leftAt', 0) == 0)
         );
 
       // El dueño del documento (mismo UID) puede actualizar su propio perfil

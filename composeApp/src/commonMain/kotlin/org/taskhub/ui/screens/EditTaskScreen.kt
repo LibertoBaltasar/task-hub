@@ -32,10 +32,10 @@ import org.taskhub.ui.models.TaskScreenModel
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.HouseholdScreenModel
-import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.RecurrenceNextPreview
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 
@@ -59,10 +59,8 @@ data class EditTaskScreen(
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
-        // Nombre del hogar activo para la topbar (consistencia con TaskListScreen/CalendarScreen)
         val householdModel = koinScreenModel<HouseholdScreenModel>()
-        val householdUiState by householdModel.uiState.collectAsState()
-        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+        val householdName = rememberHouseholdName(householdId, householdModel)
 
         LaunchedEffect(Unit) {
             taskModel.resetActionState()
@@ -70,7 +68,6 @@ data class EditTaskScreen(
 
         LaunchedEffect(householdId) {
             memberModel.loadMembers(householdId)
-            householdModel.loadHousehold(householdId)
         }
 
         // Form state — pre-populated from existing task

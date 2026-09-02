@@ -52,6 +52,7 @@ import org.taskhub.ui.components.EmptyTasksIllustration
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
+import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
@@ -76,15 +77,8 @@ data class TaskListScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
-        // Nombre del hogar activo para la topbar (ver panel de expertos v2,
-        // Estética #4): con varios hogares, esta pantalla no dejaba claro
-        // en cuál se estaba trabajando.
         val householdModel = koinScreenModel<HouseholdScreenModel>()
-        val householdUiState by householdModel.uiState.collectAsState()
-        LaunchedEffect(householdId) {
-            householdModel.loadHousehold(householdId)
-        }
-        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+        val householdName = rememberHouseholdName(householdId, householdModel)
         val listState by model.listState.collectAsState()
         val actionState by model.actionState.collectAsState()
         val filter by model.filter.collectAsState()

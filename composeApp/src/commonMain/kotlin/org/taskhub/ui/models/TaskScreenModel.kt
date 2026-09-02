@@ -468,12 +468,22 @@ class TaskScreenModel(
                     throw e
                 } catch (_: Exception) { }
 
-                // Tarea hecha → borrar el evento de Calendar vinculado, si lo hay
+                // Tarea hecha → borrar el evento de Calendar vinculado, si lo
+                // hay, y sincronizar ya la asignación de la siguiente
+                // ocurrencia (recurrentes) que `repo.completeTask` acaba de
+                // regenerar — antes había que esperar a reabrir
+                // HouseholdScreen/PersonalSpaceScreen (`CalendarSyncManager.
+                // reconcile()`) para que apareciera en Calendar (panel v4,
+                // Experto 2 hallazgo #3 PROPUESTA aceptada).
                 try {
-                    val myAssignment = repo.getAssignments(householdId, taskId)
-                        .find { it.memberId == memberId }
+                    val currentAssignments = repo.getAssignments(householdId, taskId)
+                    val myAssignment = currentAssignments.find { it.memberId == memberId }
                     if (myAssignment != null) {
                         calendarSync.onTaskCompleted(householdId, myAssignment)
+                    }
+                    val regenerated = currentAssignments.filter { it.status == "assigned" }
+                    if (regenerated.isNotEmpty()) {
+                        syncCalendarOnAssigned(householdId, regenerated)
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -635,8 +645,16 @@ class TaskScreenModel(
                     assignmentId = assignmentId,
                     assignment = assignment
                 )
+                // Borrar el evento de Calendar vinculado y sincronizar ya la
+                // asignación de la siguiente ocurrencia regenerada — mismo
+                // motivo que en completeTask (panel v4, Experto 2 hallazgo
+                // #3 PROPUESTA aceptada).
                 try {
                     calendarSync.onTaskCompleted(householdId, assignment)
+                    val regenerated = repo.getAssignments(householdId, taskId).filter { it.status == "assigned" }
+                    if (regenerated.isNotEmpty()) {
+                        syncCalendarOnAssigned(householdId, regenerated)
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) { }
@@ -780,7 +798,7 @@ class TaskScreenModel(
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
-                repo.updateTask(
+                val nextDueAt = repo.updateTask(
                     householdId = householdId,
                     taskId = taskId,
                     title = title,
@@ -811,12 +829,22 @@ class TaskScreenModel(
                 } else {
                     repo.getMembers(householdId).map { it.id }
                 }
+                // Sin fecha límite manual (`dueDate == 0`) en una tarea
+                // recurrente: usar el `nextDueAt` que `repo.updateTask` acaba
+                // de recalcular y persistir en la tarea, en vez de 0. Antes se
+                // pasaba `dueDate` (0) tal cual a `replaceAssignments`, así
+                // que la asignación de ese ciclo se quedaba sin fecha límite
+                // propia y `completeAssignment` nunca podía penalizar el
+                // retraso de ese ciclo (`assignment.dueDate == 0L -> 0L` en su
+                // cálculo de `effectiveDueDate`) — panel v4, Experto 8
+                // hallazgo #4 MEDIO.
+                val assignmentDueDate = if (dueDate > 0) dueDate else (nextDueAt ?: dueDate)
                 val created = repo.replaceAssignments(
                     householdId = householdId,
                     taskId = taskId,
                     memberIds = membersToAssign,
                     mandatory = mandatory,
-                    dueDate = dueDate,
+                    dueDate = assignmentDueDate,
                     taskTitle = title
                 )
                 if (created.isNotEmpty()) {

@@ -10,7 +10,9 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.taskhub.platform.GoogleSignInResultHolder
+import kotlin.coroutines.resume
 
 /**
  * Google Sign-In helper for linking a Google account and obtaining
@@ -76,6 +78,27 @@ object GoogleSignInHelper {
                 return@addOnCompleteListener
             }
             launcher.launch(client.signInIntent)
+        }
+    }
+
+    /**
+     * Revoca el consentimiento OAuth (idToken + scope de Calendar) concedido
+     * a la app para la cuenta actualmente vinculada — usado al eliminar la
+     * cuenta (ver [org.taskhub.platform.revokeGoogleCalendarAccess]).
+     * Best-effort: no lanza si falla (offline, sin cuenta vinculada, etc.);
+     * el resultado de `revokeAccess()` no se comprueba porque no hay nada
+     * accionable que hacer con un fallo aquí (la cuenta ya se está borrando).
+     */
+    suspend fun revokeAccess(context: Context) {
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(WEB_CLIENT_ID)
+            .requestScopes(Scope("https://www.googleapis.com/auth/calendar"))
+            .build()
+        val client = GoogleSignIn.getClient(context, gso)
+        suspendCancellableCoroutine<Unit> { cont ->
+            client.revokeAccess().addOnCompleteListener {
+                if (cont.isActive) cont.resume(Unit)
+            }
         }
     }
 

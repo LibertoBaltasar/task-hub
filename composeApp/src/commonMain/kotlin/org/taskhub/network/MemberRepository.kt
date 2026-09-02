@@ -299,6 +299,12 @@ class MemberRepository(
      * rachas se conservan (siguen siendo parte del histórico de puntos del
      * hogar); solo se anonimizan los campos que identifican a la persona.
      * Requires auth (write).
+     *
+     * NO purga las referencias a este miembro en `assignmentRotation`/
+     * asignaciones "assigned" de las tareas del hogar — eso lo hace
+     * `FirestoreRepository.deleteMember` (el facade que envuelve esta
+     * función) después del soft-delete, ver su KDoc (panel v4, Experto 2
+     * hallazgo #2 ALTO).
      */
     suspend fun deleteMember(householdId: String, memberId: String): Boolean {
         val now = Clock.System.now().toEpochMilliseconds()

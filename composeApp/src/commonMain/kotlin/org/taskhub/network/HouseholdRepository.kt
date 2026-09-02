@@ -37,6 +37,8 @@ class HouseholdRepository(
 
     private suspend fun HttpRequestBuilder.withAuth() = with(firestoreClient) { withAuth() }
     private suspend fun HttpRequestBuilder.tryAuthOrApiKey() = with(firestoreClient) { tryAuthOrApiKey() }
+    private fun HttpRequestBuilder.updateMaskFieldPaths(vararg fields: String) =
+        with(firestoreClient) { updateMaskFieldPaths(*fields) }
     private fun extractDocId(resourceName: String, operation: String): String =
         firestoreClient.extractDocId(resourceName, operation)
     private suspend fun ensureAuth() = firestoreClient.ensureAuth()
@@ -249,6 +251,31 @@ class HouseholdRepository(
         }
     }
 
+    /**
+     * Transfiere la propiedad del hogar (`ownerId`) a otro usuario. Requiere
+     * que quien llama SIGA siendo el owner vigente en el momento de la
+     * petición — `firestore.rules` gatea `update` de `households/{hid}` con
+     * `isOwner(hid)`, comparado contra el `ownerId` que el documento tiene
+     * EN ESE INSTANTE, así que solo el propio owner puede transferir su rol
+     * (nadie más, ni siquiera un admin, puede hacerlo por él).
+     *
+     * Usado desde [FirestoreRepository.leaveHousehold] cuando el owner
+     * abandona el hogar o se borra la cuenta y quedan otros miembros: sin
+     * transferir, el hogar se queda sin nadie que pase `isOwner(hid)` para
+     * siempre en cuanto el UID del owner deja de poder autenticarse (panel
+     * v4, Experto 2 hallazgo #6 ALTO).
+     */
+    suspend fun updateHouseholdOwner(householdId: String, newOwnerId: String) {
+        val fields = mapOf("ownerId" to FirestoreValue(stringValue = newOwnerId))
+        client.patch("$baseUrl/households/$householdId") {
+            withAuth()
+            updateMaskFieldPaths("ownerId")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+        taskCache.clearHouseholdDoc(householdId)
+    }
+
     /** Find a household by invite code. Uses the invites/{code} map (no list). */
     suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
         // 1) Resolver código → householdId vía invites/{code}.
@@ -312,6 +339,42 @@ class HouseholdRepository(
                 createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
             )
         }.sortedBy { it.createdAt }
+    }
+
+    /**
+     * Reescribe `authorName` a [anonymizedName] en los mensajes de chat
+     * enviados por cualquiera de [memberIds] — usado por
+     * [FirestoreRepository.leaveHousehold] cuando un miembro se va (o se
+     * borra su cuenta) pero el hogar sigue existiendo para el resto: el
+     * mensaje en sí se conserva (contexto de la conversación), pero el
+     * nombre real de quien lo escribió deja de quedar expuesto para siempre
+     * (panel v4, Experto 10 hallazgo #4). Best-effort: un fallo puntual (o
+     * no poder ni listar los mensajes) no debe abortar el resto del
+     * abandono del hogar.
+     */
+    suspend fun anonymizeMemberMessages(householdId: String, memberIds: Set<String>, anonymizedName: String) {
+        if (memberIds.isEmpty()) return
+        val messages = try {
+            getMessages(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        messages.filter { it.memberId in memberIds }.forEach { message ->
+            try {
+                client.patch("$baseUrl/households/$householdId/messages/${message.id}") {
+                    withAuth()
+                    updateMaskFieldPaths("authorName")
+                    contentType(ContentType.Application.Json)
+                    setBody(FirestoreDocument(mapOf("authorName" to FirestoreValue(stringValue = anonymizedName))))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // No crítico: se prioriza anonimizar el resto de mensajes.
+            }
+        }
     }
 
     private fun toHouseholdResponse(

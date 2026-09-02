@@ -25,6 +25,15 @@ expect fun launchGoogleSignIn()
 expect suspend fun getGoogleCalendarAccessToken(): String?
 
 /**
+ * Revoca el consentimiento OAuth (idToken + scope de Calendar) concedido a
+ * la app para la cuenta de Google vinculada actualmente — usado al eliminar
+ * la cuenta (panel v4, Experto 10 hallazgo #5), para que la app deje de
+ * tener acceso al Calendar del usuario tras el borrado. Best-effort: no
+ * lanza si falla (offline, sin cuenta vinculada, etc.).
+ */
+expect suspend fun revokeGoogleCalendarAccess()
+
+/**
  * Índice aleatorio criptográficamente seguro en [0, bound). Usar en vez de
  * kotlin.random.Random para valores con implicaciones de seguridad (p.ej.
  * códigos de invitación a hogar), ya que Random no es un CSPRNG y sus

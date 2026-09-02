@@ -43,6 +43,7 @@ import org.taskhub.storage.SavedHousehold
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
 import org.taskhub.platform.secureRandomInt
+import org.taskhub.ui.i18n.AppStrings
 
 /**
  * Talks directly to Firestore REST API — no Ktor server needed.
@@ -331,11 +332,22 @@ class FirestoreRepository(
      *
      * Best-effort por documento: un fallo puntual (404 ya borrado, timeout
      * transitorio) no aborta el resto — se prioriza dejar el hogar lo más
-     * limpio posible en vez de abortar a medias y dejarlo en un estado peor
-     * (mitad borrado, sin reintento posible desde la UI). Requiere auth (write).
+     * limpio posible en vez de abortar a medias. Pero si CUALQUIER documento
+     * no se pudo borrar, el documento `households/{id}` en sí NO se borra —
+     * lanza [HouseholdCascadeIncompleteException] en vez de dejar el hogar
+     * "borrado" con datos huérfanos sin ninguna forma de completar el
+     * cascade-delete después (panel v4, Experto 8 hallazgo #2). Requiere
+     * auth (write).
+     *
+     * Las subcolecciones se borran en PARALELO (`coroutineScope`/`async`/
+     * `awaitAll`), no una a una — mismo patrón que
+     * [HouseholdRepository.reconcileHouseholds]. Para un hogar con
+     * `taskHistory` real, el borrado secuencial eran miles de round-trips en
+     * serie con la UI bloqueada (panel v4, Experto 7 #2 + Experto 11 #4).
      */
     suspend fun deleteHousehold(householdId: String) {
         val householdUrl = "$baseUrl/households/$householdId"
+        var hadFailures = false
 
         // Borra el código de invitación ANTES que el propio hogar (ver abajo):
         // invites/{código} es una colección de nivel superior sin relación
@@ -355,23 +367,41 @@ class FirestoreRepository(
         }
 
         val taskIds = listDocumentIds("$householdUrl/tasks")
-        taskIds.forEach { tid ->
-            deleteAllDocuments("$householdUrl/tasks/$tid/assignments")
-            deleteAllDocuments("$householdUrl/tasks/$tid/comments")
-        }
-        deleteAllDocuments("$householdUrl/tasks", knownIds = taskIds)
-
         val memberIds = listDocumentIds("$householdUrl/members")
-        memberIds.forEach { mid ->
-            deleteAllDocuments("$householdUrl/members/$mid/achievements")
-        }
-        deleteAllDocuments("$householdUrl/members", knownIds = memberIds)
 
-        deleteAllDocuments("$householdUrl/taskHistory")
-        deleteAllDocuments("$householdUrl/notifications")
-        deleteAllDocuments("$householdUrl/rewardRedemptions")
-        deleteAllDocuments("$householdUrl/rewards")
-        deleteAllDocuments("$householdUrl/messages")
+        val subcollectionResults = coroutineScope {
+            val taskJobs = taskIds.map { tid ->
+                async {
+                    val okAssignments = deleteAllDocuments("$householdUrl/tasks/$tid/assignments")
+                    val okComments = deleteAllDocuments("$householdUrl/tasks/$tid/comments")
+                    okAssignments && okComments
+                }
+            }
+            val memberJobs = memberIds.map { mid ->
+                async { deleteAllDocuments("$householdUrl/members/$mid/achievements") }
+            }
+            val flatJobs = listOf(
+                async { deleteAllDocuments("$householdUrl/taskHistory") },
+                async { deleteAllDocuments("$householdUrl/notifications") },
+                async { deleteAllDocuments("$householdUrl/rewardRedemptions") },
+                async { deleteAllDocuments("$householdUrl/rewards") },
+                async { deleteAllDocuments("$householdUrl/messages") }
+            )
+            (taskJobs + memberJobs + flatJobs).awaitAll()
+        }
+        if (subcollectionResults.any { !it }) hadFailures = true
+
+        val parentCollectionResults = coroutineScope {
+            listOf(
+                async { deleteAllDocuments("$householdUrl/tasks", knownIds = taskIds) },
+                async { deleteAllDocuments("$householdUrl/members", knownIds = memberIds) }
+            ).awaitAll()
+        }
+        if (parentCollectionResults.any { !it }) hadFailures = true
+
+        if (hadFailures) {
+            throw HouseholdCascadeIncompleteException(householdId)
+        }
 
         client.delete(householdUrl) {
             withAuth()
@@ -392,27 +422,41 @@ class FirestoreRepository(
 
     /**
      * Borra todos los documentos de una colección PLANA (sin subcolecciones
-     * propias sin borrar ya). Cada borrado individual es best-effort: un
-     * fallo (404, timeout) se ignora y se continúa con el resto — ver
-     * [deleteHousehold].
+     * propias sin borrar ya), en PARALELO (`coroutineScope`/`async`/
+     * `awaitAll`) en vez de uno a uno. Cada borrado individual es
+     * best-effort: un fallo (404, timeout) no aborta el resto de la
+     * subcolección — pero SÍ se reporta en el valor de retorno para que
+     * [deleteHousehold] sepa que el cascade quedó incompleto. Devuelve true
+     * solo si TODOS los documentos se borraron.
      */
-    private suspend fun deleteAllDocuments(collectionUrl: String, knownIds: List<String>? = null) {
+    private suspend fun deleteAllDocuments(collectionUrl: String, knownIds: List<String>? = null): Boolean {
         val ids = knownIds ?: listDocumentIds(collectionUrl)
-        ids.forEach { id ->
-            try {
-                client.delete("$collectionUrl/$id") { withAuth() }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // No crítico: se prioriza borrar el resto de la subcolección.
-            }
+        if (ids.isEmpty()) return true
+        return coroutineScope {
+            ids.map { id ->
+                async {
+                    try {
+                        client.delete("$collectionUrl/$id") { withAuth() }
+                        true
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+            }.awaitAll().all { it }
         }
     }
 
     /**
      * Desvincula al usuario actual de un hogar: borra (DELETE real) los miembros
      * cuyo [currentUserId] coincide y, si no queda ningún miembro, elimina el
-     * hogar completo de la base de datos.
+     * hogar completo de la base de datos. Si quien se va es el owner del hogar
+     * y quedan otros miembros, transfiere el rol owner al miembro con cuenta
+     * vinculada más antiguo restante (ver [HouseholdRules.resolveOwnerSuccessor])
+     * para que el hogar no quede huérfano de owner (panel v4, Experto 2
+     * hallazgo #6 ALTO). Usada tanto por "abandonar hogar" como por
+     * `GoogleAuthManager.deleteAccount` (un hogar compartido por cada uno).
      *
      * Devuelve true si el hogar se eliminó por completo (no quedaban miembros).
      * Si [currentUserId] es null (usuario anónimo sin auth aún), no borra miembros
@@ -455,6 +499,50 @@ class FirestoreRepository(
             return true
         }
 
+        // El hogar seguirá teniendo otros miembros: si quien se va es el
+        // owner, transferir el rol al miembro con cuenta vinculada más
+        // antiguo restante ANTES de borrar nuestro propio documento — en
+        // cuanto el UID del owner deje de poder autenticarse (p.ej. tras
+        // borrar la cuenta, ver GoogleAuthManager.deleteAccount, que reutiliza
+        // esta función), nadie más vuelve a pasar `isOwner(hid)` en
+        // `firestore.rules` nunca — el hogar queda sin nadie que pueda
+        // gestionar roles/contenido sensible (panel v4, Experto 2 hallazgo
+        // #6 ALTO). Debe ocurrir mientras seguimos siendo owner (antes de
+        // borrar nuestro documento): `firestore.rules` exige `isOwner(hid)`
+        // (comparado contra el `ownerId` vigente) tanto para reasignar el rol
+        // de otro miembro como para el propio PATCH de `ownerId`.
+        val household = try {
+            getHousehold(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        if (household != null && household.ownerId in identities) {
+            val remaining = members.filterNot { it in toDelete }
+            val successor = HouseholdRules.resolveOwnerSuccessor(remaining)
+            if (successor?.userId != null) {
+                try {
+                    if (successor.role != "admin") {
+                        memberRepository.updateMemberRole(householdId, successor.id, "admin")
+                    }
+                    householdRepository.updateHouseholdOwner(householdId, successor.userId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // No crítico: mejor completar el abandono/borrado de
+                    // cuenta del usuario actual que bloquearlo por un fallo
+                    // al transferir la propiedad (best-effort, igual que el
+                    // resto de este flujo).
+                }
+            }
+            // Si ningún miembro restante tiene cuenta vinculada (solo quedan
+            // perfiles "hijo/a" sin cuenta), no hay a quién transferir — el
+            // hogar queda sin owner operable hasta que alguno de ellos se
+            // vincule a una cuenta; limitación conocida, ver KDoc de
+            // [HouseholdRules.resolveOwnerSuccessor].
+        }
+
         // El hogar seguirá teniendo otros miembros: borrado real solo de los
         // documentos que nos pertenecen.
         toDelete.forEach { member ->
@@ -469,6 +557,17 @@ class FirestoreRepository(
             }
         }
         if (toDelete.isNotEmpty()) {
+            // Reescribe el authorName de los mensajes de chat de quien se va
+            // — a diferencia de deleteHousehold (borra TODO el contenido),
+            // aquí el hogar sigue existiendo para el resto de miembros, así
+            // que el nombre real de quien se fue quedaba visible para
+            // siempre en el historial de chat (panel v4, Experto 10 #4).
+            // Best-effort: ver KDoc de [HouseholdRepository.anonymizeMemberMessages].
+            householdRepository.anonymizeMemberMessages(
+                householdId,
+                toDelete.map { it.id }.toSet(),
+                AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+            )
             taskCache.clearMembers(householdId)
             memberRepository.invalidateCurrentMember(householdId)
         }
@@ -507,8 +606,67 @@ class FirestoreRepository(
 
     suspend fun ensurePersonalMember(householdId: String): String = memberRepository.ensurePersonalMember(householdId)
 
-    suspend fun deleteMember(householdId: String, memberId: String): Boolean =
-        memberRepository.deleteMember(householdId, memberId)
+    /**
+     * Da de baja a un miembro (ver [MemberRepository.deleteMember] para el
+     * soft-delete en sí) y purga sus referencias en las tareas del hogar:
+     * quita sus slots de `assignmentRotation` y borra sus asignaciones
+     * "assigned" pendientes, para que la siguiente regeneración
+     * ([regenerateNextAssignment]) no le cree una asignación real a alguien
+     * ya invisible en [getMembers] (panel v4, Experto 2 hallazgo #2 ALTO).
+     * La purga es best-effort: un fallo aquí no debe deshacer el soft-delete
+     * ya confirmado, que es el efecto principal e irreversible de esta acción.
+     */
+    suspend fun deleteMember(householdId: String, memberId: String): Boolean {
+        val result = memberRepository.deleteMember(householdId, memberId)
+        try {
+            purgeMemberFromTasks(householdId, memberId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No crítico: ver KDoc de deleteMember.
+        }
+        return result
+    }
+
+    /**
+     * Recorre todas las tareas del hogar purgando [memberId] de
+     * `assignmentRotation` (ver [RecurrenceRules.purgeMemberFromRotation]) y
+     * borrando sus asignaciones "assigned" pendientes — ver KDoc de
+     * [deleteMember]. Best-effort por tarea: un fallo puntual no aborta el
+     * resto.
+     */
+    private suspend fun purgeMemberFromTasks(householdId: String, memberId: String) {
+        val tasks = try {
+            getTasks(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        for (task in tasks) {
+            if (task.assignmentRotation.any { it.memberId == memberId }) {
+                try {
+                    taskRepository.updateAssignmentRotation(
+                        householdId, task.id,
+                        RecurrenceRules.purgeMemberFromRotation(task.assignmentRotation, memberId)
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
+            }
+            val assignments = try {
+                getAssignments(householdId, task.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val toDelete = assignments.filter { it.memberId == memberId && it.status == "assigned" }
+            if (toDelete.isNotEmpty()) {
+                taskRepository.deleteAssignmentDocs(householdId, task.id, toDelete)
+            }
+        }
+    }
 
     suspend fun updateMemberRole(householdId: String, memberId: String, role: String) =
         memberRepository.updateMemberRole(householdId, memberId, role)
@@ -745,12 +903,18 @@ class FirestoreRepository(
             onTime = outcome.onTime
         )
 
-        // 4. Sincronizar la asignación de este ciclo (si la había) como
-        //    completada — antes de regenerar, para no dejar ambigüedad entre
-        //    "la que se acaba de completar" y "la de la siguiente ocurrencia"
-        //    cuando las dos coexisten con status="assigned" (ver KDoc de
-        //    [regenerateNextAssignment]). No otorga puntos (ya se otorgaron
-        //    arriba).
+        // 4. Sincronizar TODAS las asignaciones "assigned" de este ciclo como
+        //    completadas — antes de regenerar. "Cualquier miembro puede
+        //    completar cualquier tarea": si Alice completa una tarea también
+        //    asignada a Bob, completar la tarea descarga el ciclo para AMBOS
+        //    (no solo la de quien pulsó "completar"), o la asignación de Bob
+        //    se quedaría "assigned" para siempre — huérfana, y la siguiente
+        //    regeneración usaría a Alice como fallback de rotación en vez de
+        //    a quien realmente le tocaba (panel v4, Experto 8 hallazgo #3
+        //    ALTO). Los puntos ya se otorgaron arriba SOLO a quien completó
+        //    (`memberId`): las asignaciones de otros miembros se marcan
+        //    completadas con `pointsAwarded=0` para no inflar sus
+        //    estadísticas (StatsScreen) con puntos que nunca recibieron.
         val assignments = try {
             getAssignments(householdId, taskId)
         } catch (e: CancellationException) {
@@ -758,10 +922,16 @@ class FirestoreRepository(
         } catch (_: Exception) {
             emptyList()
         }
-        val existingAssignment = assignments.find { it.memberId == memberId && it.status == "assigned" }
-        if (existingAssignment != null) {
+        val assignedThisCycle = assignments.filter { it.status == "assigned" }
+        val existingAssignment = assignedThisCycle.find { it.memberId == memberId }
+        for (a in assignedThisCycle) {
             try {
-                markAssignmentCompleted(householdId, taskId, existingAssignment.id, now, outcome.pointsAwarded, outcome.onTime)
+                val isCompleter = a.memberId == memberId
+                markAssignmentCompleted(
+                    householdId, taskId, a.id, now,
+                    pointsAwarded = if (isCompleter) outcome.pointsAwarded else 0,
+                    onTime = outcome.onTime
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) { }
@@ -1326,7 +1496,7 @@ class FirestoreRepository(
         assignmentRotation: List<org.taskhub.network.models.AssignmentSlot> = emptyList(),
         dueDate: Long = 0,
         lastCompletedDate: Long? = null
-    ) = taskRepository.updateTask(
+    ): Long? = taskRepository.updateTask(
         householdId, taskId, title, description, points, frequency, recurrenceDays, recurrenceDay,
         tags, subtasks, penaltyMode, penaltyValue, penaltyInterval, penaltyMax, assignmentRotation, dueDate,
         lastCompletedDate

@@ -34,6 +34,7 @@ import org.taskhub.ui.components.DestructiveConfirmDialog
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.i18n.AppStrings
@@ -65,10 +66,8 @@ data class TaskDetailScreen(
         val commentsState by model.commentsState.collectAsState()
         val newCommentText by model.newCommentText.collectAsState()
 
-        // Nombre del hogar activo para la topbar (consistencia con TaskListScreen/CalendarScreen)
         val householdModel = koinScreenModel<HouseholdScreenModel>()
-        val householdUiState by householdModel.uiState.collectAsState()
-        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+        val householdName = rememberHouseholdName(householdId, householdModel)
 
         var isLinkingCalendar by remember { mutableStateOf(false) }
         var showDeleteDialog by remember { mutableStateOf(false) }
@@ -89,10 +88,6 @@ data class TaskDetailScreen(
             model.resetActionState()
             model.loadTaskDetail(householdId, taskId)
             model.loadComments(householdId, taskId)
-        }
-
-        LaunchedEffect(householdId) {
-            householdModel.loadHousehold(householdId)
         }
 
         // Delete confirmation dialog

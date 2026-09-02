@@ -54,6 +54,11 @@ actual suspend fun getGoogleCalendarAccessToken(): String? {
     return GoogleCalendarAuthHelper.getAccessToken(context)
 }
 
+actual suspend fun revokeGoogleCalendarAccess() {
+    val context = AndroidContextHolder.context ?: return
+    GoogleSignInHelper.revokeAccess(context)
+}
+
 private val secureRandom = SecureRandom()
 
 actual fun secureRandomInt(bound: Int): Int = secureRandom.nextInt(bound)

@@ -451,4 +451,28 @@ class RecurrenceRulesTest {
             RecurrenceRules.resolveRotationAssignee(rotation, nextDue, "member-A", tz)
         )
     }
+
+    // ── purgeMemberFromRotation ───────────────────────────────────
+
+    @Test
+    fun purgeMemberFromRotation_removesOnlyMatchingSlots() {
+        val rotation = listOf(
+            AssignmentSlot(dayOfWeek = 1, memberId = "member-A"),
+            AssignmentSlot(dayOfWeek = 3, memberId = "member-B"),
+            AssignmentSlot(dayOfWeek = 5, memberId = "member-A")
+        )
+        val purged = RecurrenceRules.purgeMemberFromRotation(rotation, "member-A")
+        assertEquals(listOf(AssignmentSlot(dayOfWeek = 3, memberId = "member-B")), purged)
+    }
+
+    @Test
+    fun purgeMemberFromRotation_memberNotInRotation_returnsUnchanged() {
+        val rotation = listOf(AssignmentSlot(dayOfWeek = 1, memberId = "member-B"))
+        assertEquals(rotation, RecurrenceRules.purgeMemberFromRotation(rotation, "member-A"))
+    }
+
+    @Test
+    fun purgeMemberFromRotation_emptyRotation_returnsEmpty() {
+        assertTrue(RecurrenceRules.purgeMemberFromRotation(emptyList(), "member-A").isEmpty())
+    }
 }

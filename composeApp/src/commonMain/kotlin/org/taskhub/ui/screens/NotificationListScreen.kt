@@ -23,8 +23,8 @@ import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.models.NotificationUiState
+import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.models.HouseholdScreenModel
-import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.theme.*
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -44,17 +44,11 @@ data class NotificationListScreen(
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
-        // Nombre del hogar activo para la topbar (consistencia con TaskListScreen/CalendarScreen)
         val householdModel = koinScreenModel<HouseholdScreenModel>()
-        val householdUiState by householdModel.uiState.collectAsState()
-        val householdName = (householdUiState as? HouseholdUiState.Success)?.household?.name
+        val householdName = rememberHouseholdName(householdId, householdModel)
 
         LaunchedEffect(householdId, memberId) {
             model.loadNotifications(householdId, memberId)
-        }
-
-        LaunchedEffect(householdId) {
-            householdModel.loadHousehold(householdId)
         }
 
         Surface(

@@ -29,6 +29,10 @@ actual suspend fun getGoogleCalendarAccessToken(): String? {
     return null
 }
 
+actual suspend fun revokeGoogleCalendarAccess() {
+    // JVM: Google Sign-In not supported — no-op
+}
+
 private val secureRandom = SecureRandom()
 
 actual fun secureRandomInt(bound: Int): Int = secureRandom.nextInt(bound)

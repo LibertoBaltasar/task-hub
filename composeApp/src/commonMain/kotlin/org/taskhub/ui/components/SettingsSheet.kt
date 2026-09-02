@@ -6,15 +6,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -25,7 +21,6 @@ import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
-import org.taskhub.ui.screens.HomeScreen
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.platform.saveWidgetThemeToCache
 
@@ -63,15 +58,10 @@ fun SettingsSheet(
     val authState by authManager.state.collectAsState()
     val uriHandler = LocalUriHandler.current
     val navigator = LocalNavigator.currentOrThrow
-    val deleteAccountScope = rememberCoroutineScope()
 
     var notificationsEnabled by remember {
         mutableStateOf(settingsStore.isNotificationsEnabled())
     }
-
-    var showDeleteAccountConfirm by remember { mutableStateOf(false) }
-    var isDeletingAccount by remember { mutableStateOf(false) }
-    var deleteAccountError by remember { mutableStateOf<String?>(null) }
 
     var widgetTheme by remember {
         mutableStateOf(settingsStore.getWidgetTheme())
@@ -502,52 +492,12 @@ fun SettingsSheet(
             Spacer(Modifier.height(16.dp))
 
             // ── Eliminar cuenta (RGPD) ────────────────────────
-            Text(
-                text = s("settings_delete_account_desc"),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            DeleteAccountSection(
+                s = s,
+                authManager = authManager,
+                navigator = navigator,
+                onDismiss = callbacks.onDismiss
             )
-            Spacer(Modifier.height(8.dp))
-            if (deleteAccountError != null) {
-                Text(
-                    text = deleteAccountError.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    // Sin esto, TalkBack solo se entera del fallo del borrado
-                    // de cuenta (acción irreversible) si el usuario explora
-                    // manualmente hasta aquí — panel v4, Accesibilidad #1.
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-            OutlinedButton(
-                onClick = {
-                    deleteAccountError = null
-                    showDeleteAccountConfirm = true
-                },
-                enabled = !isDeletingAccount,
-                modifier = Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.large,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-            ) {
-                if (isDeletingAccount) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = MaterialTheme.colorScheme.error,
-                        strokeWidth = 2.dp
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(s("settings_delete_account_deleting"))
-                } else {
-                    // Icono real en vez del emoji que llevaba el texto de
-                    // AppStrings — coherente con el patrón ya usado para
-                    // borrar en HouseholdMemberList/HouseholdScreen (panel
-                    // v4, Estética hallazgo #2).
-                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(s("settings_delete_account_button"))
-                }
-            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -562,31 +512,6 @@ fun SettingsSheet(
         }
 
         Spacer(Modifier.height(8.dp))
-    }
-
-    if (showDeleteAccountConfirm) {
-        DestructiveConfirmDialog(
-            title = s("settings_delete_account_confirm_title"),
-            text = s("settings_delete_account_confirm_text"),
-            s = s,
-            onDismiss = { showDeleteAccountConfirm = false },
-            onConfirm = {
-                showDeleteAccountConfirm = false
-                isDeletingAccount = true
-                deleteAccountError = null
-                deleteAccountScope.launch {
-                    val result = authManager.deleteAccount()
-                    isDeletingAccount = false
-                    result.onSuccess {
-                        callbacks.onDismiss()
-                        navigator.replaceAll(HomeScreen())
-                    }.onFailure {
-                        deleteAccountError = s("settings_delete_account_error")
-                    }
-                }
-            },
-            confirmLabel = s("settings_delete_account_confirm_button")
-        )
     }
 }
 

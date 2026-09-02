@@ -324,15 +324,18 @@ class TaskRepository(
         }
     }
 
-    /** Get all task history records for a household. */
+    /**
+     * Get all task history records for a household. Paginada
+     * ([listAllDocuments]): es la colección que más crece sin techo natural
+     * (un registro por compleción, para siempre) — mismo patrón ya aplicado
+     * a `getTasks`/`getAssignments`/`messages` (panel v4, Experto 7 #1).
+     */
     suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = orDefault(emptyList()) {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/taskHistory"
-        ) {
+        val documents = client.listAllDocuments("$baseUrl/households/$householdId/taskHistory") {
             tryAuthOrApiKey()
-        }.body()
+        }
 
-        response.documents.map { doc ->
+        documents.map { doc ->
             val f = doc.fields
             TaskHistoryResponse(
                 id = extractDocId(doc.name, "getTaskHistory"),
@@ -418,7 +421,13 @@ class TaskRepository(
         deleteAssignmentDocs(householdId, taskId, assignments)
     }
 
-    private suspend fun deleteAssignmentDocs(
+    /**
+     * Borra un conjunto concreto de documentos de asignación (no la colección
+     * entera) — usado por [replaceAssignments] y, desde `FirestoreRepository`,
+     * para purgar las asignaciones "assigned" de un miembro eliminado (ver
+     * `RecurrenceRules.purgeMemberFromRotation`). Cada borrado es best-effort.
+     */
+    suspend fun deleteAssignmentDocs(
         householdId: String,
         taskId: String,
         assignments: List<TaskAssignmentResponse>
@@ -501,6 +510,28 @@ class TaskRepository(
     }
 
     /**
+     * Actualiza solo el campo `assignmentRotation` de una tarea, sin tocar el
+     * resto de campos (a diferencia de [updateTask], que reescribe la tarea
+     * entera) — usado para purgar las referencias a un miembro eliminado
+     * (ver `RecurrenceRules.purgeMemberFromRotation`) sin recalcular
+     * `nextDueAt` ni pisar ningún otro campo editado independientemente.
+     */
+    suspend fun updateAssignmentRotation(
+        householdId: String,
+        taskId: String,
+        assignmentRotation: List<AssignmentSlot>
+    ) {
+        val fields = mapOf("assignmentRotation" to assignmentRotationField(assignmentRotation))
+        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
+            withAuth()
+            updateMaskFieldPaths("assignmentRotation")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }
+        taskCache.clearTasks(householdId)
+    }
+
+    /**
      * Vincula/desvincula el evento de Google Calendar de una asignación.
      * `googleEventId = null` limpia el campo (p. ej. tras borrar el evento).
      */
@@ -557,7 +588,7 @@ class TaskRepository(
          * nueva o recién creada) — se ancla en `now`, igual que [createTask].
          */
         lastCompletedDate: Long? = null
-    ) {
+    ): Long? {
         val now = Clock.System.now().toEpochMilliseconds()
 
         val fields = mutableMapOf<String, FirestoreValue>(
@@ -594,9 +625,8 @@ class TaskRepository(
         // Fecha límite de la ocurrencia pendiente, recalculada por si cambió
         // la frecuencia/recurrenceDays/recurrenceDay; NULL_VALUE si ya no es
         // recurrente (limpia un nextDueAt previo).
-        fields["nextDueAt"] = nextDueAtField(
-            computeNextDueAt(frequency, recurrenceDay, recurrenceDays, lastCompletedDate ?: now)
-        )
+        val nextDueAt = computeNextDueAt(frequency, recurrenceDay, recurrenceDays, lastCompletedDate ?: now)
+        fields["nextDueAt"] = nextDueAtField(nextDueAt)
 
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
@@ -605,6 +635,12 @@ class TaskRepository(
             setBody(FirestoreDocument(fields))
         }
         taskCache.clearTasks(householdId)
+        // Se devuelve para que el caller (FirestoreRepository.updateTask →
+        // TaskScreenModel.updateTask) pueda usarlo como dueDate de las
+        // asignaciones al editar una tarea recurrente sin fecha límite manual
+        // — ver [assignmentRotationField]/KDoc de TaskScreenModel.updateTask
+        // (panel v4, Experto 8 hallazgo #4 MEDIO).
+        return nextDueAt
     }
 
     /**

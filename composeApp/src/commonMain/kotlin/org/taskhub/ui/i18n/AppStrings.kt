@@ -50,6 +50,16 @@ object AppStrings {
             "settings_delete_account_confirm_button" to "Eliminar cuenta",
             "settings_delete_account_deleting" to "Eliminando cuenta…",
             "settings_delete_account_error" to "No se pudo eliminar la cuenta. Comprueba tu conexión e inténtalo de nuevo.",
+            // Segundo paso (definitivo) de la doble confirmación — mismo
+            // patrón que borrar hogar (household_delete_confirm_2*).
+            "settings_delete_account_confirm2_title" to "¿Seguro del todo?",
+            "settings_delete_account_confirm2_text" to "Esta es tu última oportunidad para cancelar. Al confirmar, tu cuenta y todos tus datos se borrarán de forma permanente e irreversible.",
+            "settings_delete_account_confirm2_button" to "Sí, eliminar cuenta",
+            "settings_delete_account_reauth_error" to "No se pudo confirmar tu identidad con Google. Inténtalo de nuevo.",
+            "settings_delete_account_cascade_error" to "No se pudieron borrar todos tus datos. Tu cuenta no se ha eliminado; inténtalo de nuevo más tarde.",
+            // Nombre mostrado en el chat en lugar del real de un miembro que
+            // abandonó el hogar o eliminó su cuenta.
+            "member_deleted_name" to "Miembro eliminado",
 
             // Tema del widget
             "settings_widget_theme_title" to "Tema del widget",
@@ -604,6 +614,12 @@ object AppStrings {
             "settings_delete_account_confirm_button" to "Delete account",
             "settings_delete_account_deleting" to "Deleting account…",
             "settings_delete_account_error" to "Couldn't delete the account. Check your connection and try again.",
+            "settings_delete_account_confirm2_title" to "Are you absolutely sure?",
+            "settings_delete_account_confirm2_text" to "This is your last chance to cancel. Confirming will permanently and irreversibly delete your account and all your data.",
+            "settings_delete_account_confirm2_button" to "Yes, delete account",
+            "settings_delete_account_reauth_error" to "Couldn't confirm your identity with Google. Please try again.",
+            "settings_delete_account_cascade_error" to "We couldn't delete all your data. Your account was not deleted; please try again later.",
+            "member_deleted_name" to "Deleted member",
 
             // Widget theme
             "settings_widget_theme_title" to "Widget theme",

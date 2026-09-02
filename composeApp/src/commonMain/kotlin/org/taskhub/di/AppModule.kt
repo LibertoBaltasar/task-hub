@@ -10,6 +10,7 @@ import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.createNotificationScheduler
 import org.taskhub.platform.createAdController
 import org.taskhub.storage.HouseholdStore
+import org.taskhub.storage.SecureStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
 import org.taskhub.storage.createSecureStore
@@ -36,8 +37,11 @@ val appModule: Module = module {
     // Almacén cifrado (EncryptedSharedPreferences/Keychain) para refresh tokens
     single { createSecureStore() }
 
-    // User settings (theme, language, notifications)
-    single { SettingsStore(settings = get(), secureStore = get()) }
+    // User settings (theme, language, notifications). El SecureStore se
+    // resuelve perezosamente (lazy { get() }): no se construye hasta el
+    // primer acceso real a un refresh token, no en cuanto se inyecta
+    // SettingsStore (panel v4, Experto 11 #6).
+    single { SettingsStore(settings = get(), secureStoreProvider = lazy { get<SecureStore>() }) }
 
     // Network — talks directly to Firestore REST API
     single { FirestoreRepository(taskCache = get(), settingsStore = get()) }
