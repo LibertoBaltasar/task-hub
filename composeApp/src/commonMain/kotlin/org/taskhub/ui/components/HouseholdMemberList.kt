@@ -138,7 +138,7 @@ fun LazyListScope.householdMemberList(
                         isAdmin = isAdmin,
                         isSelf = myMember?.id == member.id,
                         canTransfer = myMember != null,
-                        roleChangePending = isMemberActionPending,
+                        actionPending = isMemberActionPending,
                         s = s,
                         onAppreciateClick = { onAppreciateClick(member) },
                         onDonateClick = { onDonateClick(member) },
@@ -178,7 +178,7 @@ private fun MemberCard(
     isAdmin: Boolean,
     isSelf: Boolean,
     canTransfer: Boolean,
-    roleChangePending: Boolean = false,
+    actionPending: Boolean = false,
     s: (String) -> String,
     onRoleChange: (String) -> Unit,
     onRemoveClick: () -> Unit,
@@ -253,7 +253,7 @@ private fun MemberCard(
                     Box {
                         OutlinedButton(
                             onClick = { roleMenuExpanded = true },
-                            enabled = !roleChangePending
+                            enabled = !actionPending
                         ) {
                             Text(if (member.role == "admin") s("member_role_admin_short") else s("member_role_child_short"))
                         }
@@ -314,7 +314,7 @@ private fun MemberCard(
                     var showRemoveConfirm by remember { mutableStateOf(false) }
                     IconButton(
                         onClick = { showRemoveConfirm = true },
-                        enabled = !roleChangePending
+                        enabled = !actionPending
                     ) {
                         Icon(
                             Icons.Default.Delete,

@@ -324,8 +324,10 @@ class FirestoreRepository(
      * docs/review-panel-expertos-v3-2026-09-01.md Experto 10 #4). Recorre y
      * borra, hojas primero, las subcolecciones: tasks/{tid}/assignments,
      * tasks/{tid}/comments, tasks; members/{mid}/achievements, members;
-     * taskHistory; notifications; rewardRedemptions; rewards; messages — y
-     * finalmente el propio documento households/{householdId}.
+     * taskHistory; notifications; rewardRedemptions; rewards; messages;
+     * invites/{código} (colección de nivel superior, ver
+     * [HouseholdRepository.createHousehold]) — y finalmente el propio
+     * documento households/{householdId}.
      *
      * Best-effort por documento: un fallo puntual (404 ya borrado, timeout
      * transitorio) no aborta el resto — se prioriza dejar el hogar lo más
@@ -334,6 +336,23 @@ class FirestoreRepository(
      */
     suspend fun deleteHousehold(householdId: String) {
         val householdUrl = "$baseUrl/households/$householdId"
+
+        // Borra el código de invitación ANTES que el propio hogar (ver abajo):
+        // invites/{código} es una colección de nivel superior sin relación
+        // padre-hijo con households/{id}, así que Firestore no la borra sola.
+        // Sin este paso, un hogar borrado seguía siendo "unible" por código
+        // (apuntando a un householdId ya inexistente) — hallazgo de privacidad
+        // panel v4, Experto 10 #3 ALTO. Best-effort: si el hogar no tiene
+        // inviteCode (dato ya corrupto) o falla la lectura, se continúa igual
+        // con el resto del cascade-delete.
+        try {
+            val household = getHousehold(householdId)
+            client.delete("$baseUrl/invites/${household.inviteCode}") { withAuth() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No crítico: ver KDoc de deleteHousehold (best-effort por documento).
+        }
 
         val taskIds = listDocumentIds("$householdUrl/tasks")
         taskIds.forEach { tid ->
@@ -411,9 +430,34 @@ class FirestoreRepository(
         } catch (_: Exception) {
             emptyList()
         }
-        // Borrado real de los miembros que nos pertenecen.
-        val deleted = members.filter { it.userId != null && it.userId in identities }
-        deleted.forEach { member ->
+        val toDelete = members.filter { it.userId != null && it.userId in identities }
+
+        // Si TODOS los miembros restantes del hogar son nuestros (vamos a
+        // quedarnos con el hogar vacío), borramos el hogar ENTERO ya —
+        // mientras todavía tenemos isMember(hid)/isOwner(hid) — en vez de
+        // borrar primero nuestro propio documento de miembro y comprobar
+        // después si quedó vacío. Con el orden anterior, en cuanto se borraba
+        // el último documento de miembro perdíamos isMember() y el siguiente
+        // intento de deleteHousehold fallaba con 403 a mitad del cascade,
+        // dejando el hogar huérfano e imborrable para siempre (ver panel v4,
+        // Experto 10 hallazgo #2 ALTO — deleteHousehold ya borra también
+        // nuestro(s) propio(s) documento(s) de miembro dentro de su cascade,
+        // así que no hace falta borrarlos aparte en este camino).
+        if (members.isNotEmpty() && toDelete.size == members.size) {
+            try {
+                deleteHousehold(householdId)
+            } catch (e: FirestoreException) {
+                // Dos miembros abandonando casi a la vez pueden intentar borrar
+                // el mismo hogar; si ya no existe (404), el objetivo -que el
+                // hogar no exista- ya se cumplió, así que no es un fallo real.
+                if (e.statusCode != 404) throw e
+            }
+            return true
+        }
+
+        // El hogar seguirá teniendo otros miembros: borrado real solo de los
+        // documentos que nos pertenecen.
+        toDelete.forEach { member ->
             try {
                 client.delete("$baseUrl/households/$householdId/members/${member.id}") {
                     withAuth()
@@ -424,28 +468,9 @@ class FirestoreRepository(
                 // No crítico: si el doc ya no existe, seguimos.
             }
         }
-        if (deleted.isNotEmpty()) {
+        if (toDelete.isNotEmpty()) {
             taskCache.clearMembers(householdId)
             memberRepository.invalidateCurrentMember(householdId)
-        }
-
-        val remaining = try {
-            getMembers(householdId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-        if (remaining.isEmpty()) {
-            try {
-                deleteHousehold(householdId)
-            } catch (e: FirestoreException) {
-                // Dos miembros abandonando casi a la vez pueden intentar borrar
-                // el mismo hogar; si ya no existe (404), el objetivo -que el
-                // hogar no exista- ya se cumplió, así que no es un fallo real.
-                if (e.statusCode != 404) throw e
-            }
-            return true
         }
         return false
     }
@@ -664,6 +689,24 @@ class FirestoreRepository(
         //    (quien recibe los puntos), al margen de quién esté asignado.
         val docUrl = "$baseUrl/households/$householdId/tasks/$taskId"
         val current: FirestoreDocumentResponse = client.get(docUrl) { withAuth() }.body()
+        // La precondition `currentDocument.updateTime` de más abajo usa el
+        // updateTime de ESTA MISMA lectura fresca, así que por sí sola SIEMPRE
+        // se cumple (es tautológica: nada puede haber cambiado el documento
+        // entre esta línea y el PATCH de milisegundos después) — no protege
+        // contra el caso real más común: el dispositivo B tenía la tarea
+        // cargada en memoria desde antes y el dispositivo A ya la completó
+        // hace unos minutos. Por eso comparamos aquí el `lastCompletedDate`
+        // recién leído contra el que tenía el CALLER (parámetro [task], la
+        // copia que el ScreenModel cargó al abrir la pantalla): si difieren,
+        // alguien más ya completó (o modificó) esta tarea desde entonces y
+        // otorgar puntos ahora los duplicaría — panel v4, Experto 12
+        // hallazgo #1 CRÍTICO.
+        val freshLastCompleted = current.fields["lastCompletedDate"]?.integerValue?.toLongOrNull()
+        if (freshLastCompleted != task.lastCompletedDate) {
+            throw TaskCompletionConflictException(
+                "La tarea se modificó en otro dispositivo justo antes de completarla. Vuelve a intentarlo."
+            )
+        }
         val fields = mutableMapOf(
             "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
             "completedBy" to FirestoreValue(stringValue = memberId)
@@ -725,11 +768,22 @@ class FirestoreRepository(
         }
 
         // 5. Regenerar la asignación de la siguiente ocurrencia (recurrentes).
+        //    Best-effort, igual que el paso 4: para este punto los puntos ya
+        //    se otorgaron y el historial ya se guardó (pasos 2-3), así que un
+        //    fallo de red aquí NO debe propagarse como TaskActionState.Error
+        //    — eso llevaría al usuario a reintentar completeTask desde cero,
+        //    volviendo a otorgar los puntos una segunda vez (panel v4, QA
+        //    hallazgo #1 CRÍTICO: "reintentar tras un fallo en regenerar
+        //    duplica los puntos").
         if (task.frequency != "once") {
-            regenerateNextAssignment(
-                householdId, taskId, task, memberId,
-                existingAssignment?.mandatory ?: false, nextDueDate, assignments
-            )
+            try {
+                regenerateNextAssignment(
+                    householdId, taskId, task, memberId,
+                    existingAssignment?.mandatory ?: false, nextDueDate, assignments
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) { }
         }
 
         return TaskCompletionResult(now, outcome.pointsAwarded, outcome.onTime)
@@ -1003,6 +1057,17 @@ class FirestoreRepository(
         // Update assignment — con precondition de concurrencia optimista.
         val assignmentUrl = "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
         val currentAssignmentDoc: FirestoreDocumentResponse = client.get(assignmentUrl) { withAuth() }.body()
+        // Mismo motivo que en [completeTask]: la precondition `currentDocument.
+        // updateTime` de más abajo usa el updateTime de ESTA MISMA lectura
+        // fresca, así que por sí sola no detecta que OTRO dispositivo ya
+        // completó esta asignación hace un rato (no en el instante exacto de
+        // esta función) — panel v4, Experto 12 hallazgo #1 CRÍTICO.
+        val freshStatus = currentAssignmentDoc.fields["status"]?.stringValue
+        if (freshStatus != assignment.status) {
+            throw AssignmentCompletionConflictException(
+                "Esta asignación se completó en otro dispositivo justo antes. Vuelve a intentarlo."
+            )
+        }
         try {
             markAssignmentCompleted(
                 householdId, taskId, assignmentId, now, pointsAwarded, onTime,
@@ -1051,11 +1116,19 @@ class FirestoreRepository(
         // Handle recurrence: create next assignment respetando assignmentRotation
         // (ver [regenerateNextAssignment] — unificado con [completeTask]; antes
         // esta función siempre reasignaba al mismo miembro que acababa de
-        // completarla, ignorando la rotación por completo).
+        // completarla, ignorando la rotación por completo). Best-effort: los
+        // puntos ya se otorgaron arriba, así que un fallo de red aquí no debe
+        // hacer que el usuario reintente completeAssignment entero y duplique
+        // el otorgamiento — mismo motivo que el paso 5 de [completeTask]
+        // (panel v4, QA hallazgo #1 CRÍTICO).
         if (task.frequency != "once") {
-            regenerateNextAssignment(
-                householdId, taskId, task, assignment.memberId, assignment.mandatory, nextDueDate
-            )
+            try {
+                regenerateNextAssignment(
+                    householdId, taskId, task, assignment.memberId, assignment.mandatory, nextDueDate
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) { }
         }
 
         return assignment.copy(

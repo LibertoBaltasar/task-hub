@@ -459,11 +459,18 @@ data class CreateTaskScreen(
                                     FilterChip(
                                         selected = day in recurrenceDays,
                                         onClick = {
-                                            recurrenceDays = if (day in recurrenceDays) {
+                                            val updated = if (day in recurrenceDays) {
                                                 recurrenceDays - day
                                             } else {
                                                 recurrenceDays + day
                                             }
+                                            // Igual que al elegir "Semanal" por primera vez: no
+                                            // dejar llegar a 0 días marcados, que
+                                            // RecurrenceRules trata silenciosamente como "todos
+                                            // los días" — desmarcar el último día vuelve a
+                                            // marcar los 7 en vez de dejar ese estado ambiguo
+                                            // (panel v4, UX hallazgo ALTA #4).
+                                            recurrenceDays = updated.ifEmpty { (1..7).toSet() }
                                         },
                                         label = { Text(letter) },
                                         modifier = Modifier.semantics { contentDescription = fullName },

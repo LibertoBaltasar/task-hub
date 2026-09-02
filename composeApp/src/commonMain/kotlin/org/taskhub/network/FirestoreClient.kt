@@ -300,6 +300,7 @@ internal suspend fun HttpClient.listAllDocuments(
 ): List<FirestoreDocumentResponse> {
     val documents = mutableListOf<FirestoreDocumentResponse>()
     var pageToken: String? = null
+    var page = 0
     do {
         val response: FirestoreListResponse = get(url) {
             configureAuth()
@@ -308,6 +309,14 @@ internal suspend fun HttpClient.listAllDocuments(
         }.body()
         documents += response.documents
         pageToken = response.nextPageToken
+        page++
+        // Tope de seguridad ante un backend/proxy que devolviera un
+        // nextPageToken no-null indefinidamente (mismo criterio que el
+        // `safety` de RecurrenceRules.nextOccurrence) — sin esto, ese
+        // escenario dejaría la corrutina reintentando peticiones HTTP sin
+        // fin. 200 páginas × 300 = 60.000 documentos, muy por encima de
+        // cualquier hogar real.
+        check(page < 200) { "listAllDocuments: demasiadas páginas para $url (posible bucle de paginación)" }
     } while (pageToken != null)
     return documents
 }

@@ -78,7 +78,21 @@ data class EditTaskScreen(
         var description by remember { mutableStateOf(task.description) }
         var pointsText by remember { mutableStateOf(task.points.toString()) }
         var frequency by remember { mutableStateOf(task.frequency) }
-        var recurrenceDays by remember { mutableStateOf(task.recurrenceDays.toSet()) }
+        // Tareas semanales legado con recurrenceDays vacío (creadas antes del
+        // premarcado de 7 días por defecto) inicializan con los 7 días
+        // marcados en vez de reproducir el estado ambiguo "sin ningún día
+        // marcado" al abrir para editar — mismo criterio que el chip
+        // "Semanal" aplica al elegir la frecuencia por primera vez (panel v4,
+        // UX hallazgo MEDIA #6).
+        var recurrenceDays by remember {
+            mutableStateOf(
+                if (task.frequency == "weekly" && task.recurrenceDays.isEmpty()) {
+                    (1..7).toSet()
+                } else {
+                    task.recurrenceDays.toSet()
+                }
+            )
+        }
         var recurrenceDay by remember { mutableStateOf(task.recurrenceDay) }
         var tags by remember { mutableStateOf(task.tags) }
         var tagsText by remember { mutableStateOf("") }
@@ -488,11 +502,15 @@ data class EditTaskScreen(
                                     FilterChip(
                                         selected = day in recurrenceDays,
                                         onClick = {
-                                            recurrenceDays = if (day in recurrenceDays) {
+                                            val updated = if (day in recurrenceDays) {
                                                 recurrenceDays - day
                                             } else {
                                                 recurrenceDays + day
                                             }
+                                            // Mismo criterio que CreateTaskScreen: no dejar
+                                            // llegar a 0 días marcados (panel v4, UX hallazgo
+                                            // ALTA #4).
+                                            recurrenceDays = updated.ifEmpty { (1..7).toSet() }
                                         },
                                         label = { Text(letter) },
                                         modifier = Modifier.semantics { contentDescription = fullName },

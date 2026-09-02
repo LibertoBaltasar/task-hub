@@ -700,19 +700,30 @@ private fun TaskListContent(
                         // de destruirla y recrearla), habilitando animateItem() para el traslado.
                         key = { "task_${it.task.id}" }
                     ) { item ->
+                        // `onClick`/`onComplete` memoizados: sin esto, cada TaskCard visible
+                        // recibía una lambda con identidad nueva en CADA recomposición de este
+                        // bloque (p.ej. al expandir/colapsar OTRO grupo, o al fijar
+                        // loadingTaskIds de OTRA tarea), anulando el skip de recomposición que
+                        // el resto de la memoización de esta pantalla ya habilita — panel v4,
+                        // Rendimiento hallazgo MEDIO-ALTO.
+                        val onClick = remember(item.task.id) { { onTaskClick(item.task) } }
+                        val canComplete = item.isDueToday && !item.isCompletedToday
+                        val onComplete = remember(item.task.id, canComplete) {
+                            if (canComplete) {
+                                {
+                                    loadingTaskIds[item.task.id] = true
+                                    onCompleteTask(item.task)
+                                }
+                            } else null
+                        }
                         TaskCard(
                             item = item,
                             assignments = assignmentsByTask[item.task.id] ?: emptyList(),
                             memberMap = memberMap,
                             isLoading = loadingTaskIds[item.task.id] == true,
                             hasError = actionErrorSignal != null,
-                            onClick = { onTaskClick(item.task) },
-                            onComplete = if (item.isDueToday && !item.isCompletedToday) {
-                                {
-                                    loadingTaskIds[item.task.id] = true
-                                    onCompleteTask(item.task)
-                                }
-                            } else null,
+                            onClick = onClick,
+                            onComplete = onComplete,
                             modifier = if (reduceMotion) Modifier else Modifier.animateItem()
                         )
                         Spacer(modifier = Modifier.height(8.dp))

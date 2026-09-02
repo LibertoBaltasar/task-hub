@@ -12,6 +12,7 @@ import org.taskhub.network.FIRESTORE_GONE_MESSAGE
 import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.isGoneOrForbidden
+import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
@@ -509,9 +510,23 @@ class TaskScreenModel(
                 } catch (_: Exception) { }
             } catch (e: Exception) {
                 _undoState.value = null
-                _actionState.value = TaskActionState.Error(
-                    e.message ?: "Error al completar tarea"
-                )
+                if (e is FirestoreRepository.TaskCompletionConflictException) {
+                    // Mensaje vía AppStrings (no e.message, que viene fijo en
+                    // español desde el repo) y recarga de la lista: el error
+                    // significa que OTRO dispositivo ya completó esta tarea,
+                    // así que el estado en memoria (botón "completar" activo)
+                    // queda obsoleto — sin recargar, el usuario probablemente
+                    // reintenta y vuelve a chocar con el mismo conflicto
+                    // (panel v4, UX hallazgos ALTA #1 y #2).
+                    _actionState.value = TaskActionState.Error(
+                        AppStrings.get("task_completion_conflict_error", settingsStore.getLanguage())
+                    )
+                    loadTasks(householdId)
+                } else {
+                    _actionState.value = TaskActionState.Error(
+                        e.message ?: "Error al completar tarea"
+                    )
+                }
                 buzz(HapticKind.ERROR)
             }
         }
@@ -651,9 +666,21 @@ class TaskScreenModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _actionState.value = TaskActionState.Error(
-                    e.message ?: "Error al completar tarea"
-                )
+                if (e is FirestoreRepository.AssignmentCompletionConflictException) {
+                    // Mismo motivo que en completeTask: mensaje vía AppStrings
+                    // (no el string fijo en español del repo) y recarga del
+                    // detalle para no dejar la UI con el botón "completar"
+                    // activo sobre una asignación que otro dispositivo ya
+                    // completó (panel v4, UX hallazgos ALTA #1 y #2).
+                    _actionState.value = TaskActionState.Error(
+                        AppStrings.get("task_completion_conflict_error", settingsStore.getLanguage())
+                    )
+                    loadTaskDetail(householdId, taskId)
+                } else {
+                    _actionState.value = TaskActionState.Error(
+                        e.message ?: "Error al completar tarea"
+                    )
+                }
                 buzz(HapticKind.ERROR)
             }
         }

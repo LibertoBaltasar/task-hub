@@ -6,11 +6,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -481,52 +485,68 @@ fun SettingsSheet(
 
         Spacer(Modifier.height(24.dp))
 
-        // ── Privacidad ────────────────────────────────────
-        OutlinedButton(
-            onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large
-        ) {
-            Text(s("settings_privacy_policy"))
-        }
+        // ── Privacidad y datos (enlace a la política + RGPD) ──────────────
+        // Antes el enlace de privacidad y "eliminar cuenta" quedaban sueltos
+        // sin cabecera de sección, inconsistente con el resto del sheet (7
+        // secciones más arriba, todas con SettingsSection) — panel v4,
+        // Estética hallazgo #2 IMPORTANTE.
+        SettingsSection(title = s("settings_privacy_data_title")) {
+            OutlinedButton(
+                onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Text(s("settings_privacy_policy"))
+            }
 
-        Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(16.dp))
 
-        // ── Eliminar cuenta (RGPD) ────────────────────────
-        Text(
-            text = s("settings_delete_account_desc"),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(8.dp))
-        if (deleteAccountError != null) {
+            // ── Eliminar cuenta (RGPD) ────────────────────────
             Text(
-                text = deleteAccountError.orEmpty(),
+                text = s("settings_delete_account_desc"),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
-        }
-        OutlinedButton(
-            onClick = {
-                deleteAccountError = null
-                showDeleteAccountConfirm = true
-            },
-            enabled = !isDeletingAccount,
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-        ) {
-            if (isDeletingAccount) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
+            if (deleteAccountError != null) {
+                Text(
+                    text = deleteAccountError.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    strokeWidth = 2.dp
+                    // Sin esto, TalkBack solo se entera del fallo del borrado
+                    // de cuenta (acción irreversible) si el usuario explora
+                    // manualmente hasta aquí — panel v4, Accesibilidad #1.
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                 )
-                Spacer(Modifier.width(8.dp))
-                Text(s("settings_delete_account_deleting"))
-            } else {
-                Text(s("settings_delete_account_button"))
+                Spacer(Modifier.height(8.dp))
+            }
+            OutlinedButton(
+                onClick = {
+                    deleteAccountError = null
+                    showDeleteAccountConfirm = true
+                },
+                enabled = !isDeletingAccount,
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                if (isDeletingAccount) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(s("settings_delete_account_deleting"))
+                } else {
+                    // Icono real en vez del emoji que llevaba el texto de
+                    // AppStrings — coherente con el patrón ya usado para
+                    // borrar en HouseholdMemberList/HouseholdScreen (panel
+                    // v4, Estética hallazgo #2).
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(s("settings_delete_account_button"))
+                }
             }
         }
 

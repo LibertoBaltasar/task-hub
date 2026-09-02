@@ -39,8 +39,11 @@ object AppStrings {
             "settings_account_sign_in_google" to "Iniciar sesión con Google",
             "settings_account_edit_profile" to "✏️ Editar perfil",
 
+            // Privacidad y datos
+            "settings_privacy_data_title" to "Privacidad y datos",
+
             // Eliminar cuenta (RGPD)
-            "settings_delete_account_button" to "🗑️ Eliminar cuenta",
+            "settings_delete_account_button" to "Eliminar cuenta",
             "settings_delete_account_desc" to "Borra tu cuenta y todos tus datos de forma permanente.",
             "settings_delete_account_confirm_title" to "¿Eliminar tu cuenta?",
             "settings_delete_account_confirm_text" to "Se borrará tu espacio Personal, tu perfil y tu membresía en cualquier otro hogar. Esta acción no se puede deshacer.",
@@ -205,6 +208,12 @@ object AppStrings {
             "transfer_error_member_not_found" to "Miembro no encontrado",
             "appreciate_error_limit" to "Límite semanal alcanzado",
             "donate_error_insufficient_balance" to "Saldo insuficiente",
+            // Conflicto de concurrencia optimista al completar tarea/asignación
+            // (ver FirestoreRepository.TaskCompletionConflictException /
+            // AssignmentCompletionConflictException) — antes se mostraba el
+            // e.message del repo, fijo en español sin importar el idioma de
+            // la app (panel v4, UX hallazgo ALTA #1).
+            "task_completion_conflict_error" to "Esta tarea se completó en otro dispositivo justo antes. Se ha actualizado la lista.",
 
             // Lista de miembros del hogar (HouseholdMemberList.kt)
             "household_member_list_empty_title" to "Aún no hay miembros en este espacio",
@@ -221,7 +230,7 @@ object AppStrings {
             "member_create_task_short" to "+ Tarea",
             "member_remove_action" to "Eliminar miembro",
             "member_remove_confirm_title" to "¿Eliminar miembro?",
-            "member_remove_confirm_text" to "%s dejará de formar parte de este espacio. Esta acción no se puede deshacer.",
+            "member_remove_confirm_text" to "%s dejará de formar parte de este espacio y sus tareas asignadas quedarán a nombre de \"Miembro eliminado\" (deberás reasignarlas a mano). Esta acción no se puede deshacer.",
             "member_remove_confirm_btn" to "Eliminar",
 
             // Sección de tareas del hogar (HouseholdTaskSection.kt)
@@ -584,8 +593,11 @@ object AppStrings {
             "settings_account_sign_in_google" to "Sign in with Google",
             "settings_account_edit_profile" to "✏️ Edit profile",
 
+            // Privacy and data
+            "settings_privacy_data_title" to "Privacy and data",
+
             // Delete account (GDPR)
-            "settings_delete_account_button" to "🗑️ Delete account",
+            "settings_delete_account_button" to "Delete account",
             "settings_delete_account_desc" to "Permanently deletes your account and all your data.",
             "settings_delete_account_confirm_title" to "Delete your account?",
             "settings_delete_account_confirm_text" to "This will delete your Personal space, your profile, and your membership in any other household. This action can't be undone.",
@@ -750,6 +762,7 @@ object AppStrings {
             "transfer_error_member_not_found" to "Member not found",
             "appreciate_error_limit" to "Weekly limit reached",
             "donate_error_insufficient_balance" to "Insufficient balance",
+            "task_completion_conflict_error" to "This task was just completed on another device. The list has been refreshed.",
 
             // Household member list (HouseholdMemberList.kt)
             "household_member_list_empty_title" to "No members in this space yet",
@@ -766,7 +779,7 @@ object AppStrings {
             "member_create_task_short" to "+ Task",
             "member_remove_action" to "Remove member",
             "member_remove_confirm_title" to "Remove member?",
-            "member_remove_confirm_text" to "%s will no longer be part of this space. This action cannot be undone.",
+            "member_remove_confirm_text" to "%s will no longer be part of this space and their assigned tasks will be left under \"Removed member\" (you'll need to reassign them by hand). This action cannot be undone.",
             "member_remove_confirm_btn" to "Remove",
 
             // Household task section (HouseholdTaskSection.kt)

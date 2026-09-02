@@ -9,6 +9,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,17 +38,24 @@ fun RecurrenceNextPreview(
 ) {
     if (frequency == "once") return
 
-    val tz = TimeZone.currentSystemDefault()
-    val nextEpochMs = RecurrenceRules.nextOccurrence(
-        nowEpochMs = Clock.System.now().toEpochMilliseconds(),
-        frequency = frequency,
-        day = if (frequency == "monthly") recurrenceDay else null,
-        weeklyDays = if (frequency == "weekly") recurrenceDays else emptyList(),
-        tz = tz
-    )
-    val date = Instant.fromEpochMilliseconds(nextEpochMs).toLocalDateTime(tz).date
-    val formattedDate = "${date.dayOfMonth.toString().padStart(2, '0')}/" +
-        "${date.monthNumber.toString().padStart(2, '0')}/${date.year}"
+    // Coste acotado (O(1) salvo weekly, ≤14 iteraciones), pero se memoiza para
+    // no recalcularlo en cada recomposición ajena (p.ej. al escribir en otro
+    // campo del formulario) — mismo criterio de memoización aplicado al resto
+    // de la pantalla en esta misma pasada (panel v4, UI/Componentes hallazgo
+    // MENOR).
+    val formattedDate = remember(frequency, recurrenceDays, recurrenceDay) {
+        val tz = TimeZone.currentSystemDefault()
+        val nextEpochMs = RecurrenceRules.nextOccurrence(
+            nowEpochMs = Clock.System.now().toEpochMilliseconds(),
+            frequency = frequency,
+            day = if (frequency == "monthly") recurrenceDay else null,
+            weeklyDays = if (frequency == "weekly") recurrenceDays else emptyList(),
+            tz = tz
+        )
+        val date = Instant.fromEpochMilliseconds(nextEpochMs).toLocalDateTime(tz).date
+        "${date.dayOfMonth.toString().padStart(2, '0')}/" +
+            "${date.monthNumber.toString().padStart(2, '0')}/${date.year}"
+    }
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(

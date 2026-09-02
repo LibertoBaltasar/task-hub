@@ -133,6 +133,8 @@ class MemberRepository(
         if (userId != null) {
             val existing = try {
                 getMembers(householdId).firstOrNull { it.userId == userId }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 null
             }
@@ -244,6 +246,8 @@ class MemberRepository(
         val localId = getLocalId()
         val members = try {
             getMembers(householdId)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             emptyList()
         }
@@ -267,6 +271,8 @@ class MemberRepository(
                 role = "admin",
                 userId = localId
             ).id
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             localId ?: ""
         }
@@ -420,6 +426,12 @@ class MemberRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        // Las demás mutaciones de este archivo invalidan la caché tras
+        // escribir (createMember/deleteMember/updateMemberRole/addMemberPoints/
+        // appreciateMember...); esta se había quedado fuera — sin esto, un
+        // fallback a caché tras un fallo de red justo después de actualizar la
+        // racha devolvía currentStreak/bestStreak/lastStreakDate obsoletos.
+        taskCache.clearMembers(householdId)
     }
 
     /**

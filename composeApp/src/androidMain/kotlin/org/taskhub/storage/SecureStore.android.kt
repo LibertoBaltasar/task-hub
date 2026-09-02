@@ -1,5 +1,6 @@
 package org.taskhub.storage
 
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.russhwolf.settings.Settings
@@ -36,7 +37,14 @@ actual fun createSecureStore(): SecureStore {
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
         SettingsSecureStore(SharedPreferencesSettings(encryptedPrefs))
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        // Antes este fallback era completamente silencioso: si el Keystore
+        // del dispositivo falla, el refresh token pasa a guardarse sin
+        // cifrar sin que quede ningún rastro para diagnosticarlo (panel v4,
+        // Seguridad — hallazgo MEDIO). No se sube a Analytics (podría
+        // filtrar detalles del fallo de Keystore de dispositivos concretos);
+        // solo logcat, igual que otros catches best-effort del proyecto.
+        Log.w("SecureStore", "Keystore no disponible, usando almacenamiento sin cifrar", e)
         SettingsSecureStore(Settings())
     }
 }

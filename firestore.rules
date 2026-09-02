@@ -246,7 +246,14 @@ service cloud.firestore {
           request.auth.uid == mid
           && request.resource.data.role == resource.data.role
         );
-      allow delete: if isTrusted(hid);
+      // El propio dueño del documento también puede borrarlo — es la ruta que
+      // usa [FirestoreRepository.leaveHousehold] (abandonar hogar / eliminar
+      // cuenta) para borrar SU PROPIO miembro. Sin esta cláusula, cualquier
+      // miembro con rol "child" (el que fuerza el alta por invitación más
+      // arriba) recibía 403 al intentar salir de un hogar compartido o al
+      // eliminar su cuenta, y el fallo se tragaba en silencio en el cliente
+      // (best-effort) — v4 panel de expertos, Experto 10 hallazgo #1 CRÍTICO.
+      allow delete: if isTrusted(hid) || request.auth.uid == mid;
     }
 
     // ── Contenido del hogar ──────────────────────────────────────
