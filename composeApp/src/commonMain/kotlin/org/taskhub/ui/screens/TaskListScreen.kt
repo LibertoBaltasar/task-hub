@@ -486,12 +486,42 @@ private fun TaskListContent(
     val todayStartEpoch = now.toLocalDateTime(tz).date
         .atStartOfDayIn(tz).toEpochMilliseconds()
 
-    // Filtrado + búsqueda + cálculo de estado (isDueToday/isCompletedToday vía
-    // RecurrenceRules, 2 veces por tarea) en un único remember: antes se
-    // recalculaba de cero en CADA recomposición de esta pantalla (incluida
-    // cualquiera que no tocara estos datos, como colapsar un grupo o mostrar
-    // el spinner de completar), con coste que escala con el nº de tareas.
-    val tasksWithStatus = remember(state.tasks, assignmentsByTask, filter, tagFilter, searchQuery, currentMemberId, todayStartEpoch) {
+    // Estado por tarea (isDueToday/isCompletedToday/isOverdue vía
+    // RecurrenceRules) calculado UNA vez por tarea — independiente de
+    // searchQuery/filter/tagFilter. Antes vivía en el mismo remember que el
+    // filtro de texto: cada pulsación en el buscador (searchQuery en la key)
+    // recalculaba el estado de TODAS las tareas del hogar, no solo relanzaba
+    // el filtrado (panel v4, Experto 11 #2).
+    val statusByTaskId = remember(state.tasks, todayStartEpoch) {
+        state.tasks.associate { task ->
+            val due = isTaskDueToday(task, todayStartEpoch)
+            val done = isTaskCompletedToday(task, todayStartEpoch)
+            // Recurrentes sin dueDate propio (daily/weekly/monthly): "vencida" es una
+            // ocurrencia programada de un día ya pasado que sigue pendiente
+            // (completado tardío) — ver RecurrenceRules.isOverdueOccurrence.
+            val isOverdue = if (task.dueDate > 0) {
+                task.dueDate < todayStartEpoch && task.lastCompletedDate == null
+            } else {
+                due && RecurrenceRules.isOverdueOccurrence(
+                    frequency = task.frequency,
+                    recurrenceDays = task.recurrenceDays,
+                    recurrenceDay = task.recurrenceDay,
+                    nowEpochMs = todayStartEpoch
+                )
+            }
+            task.id to TaskWithStatus(
+                task = task,
+                isDueToday = due,
+                isCompletedToday = done,
+                isOverdue = isOverdue
+            )
+        }
+    }
+
+    // Filtrado por estado/tag/miembro + búsqueda de texto: sí depende de
+    // searchQuery, pero reutiliza statusByTaskId en vez de recalcular
+    // isDueToday/isCompletedToday/isOverdue por tarea.
+    val tasksWithStatus = remember(statusByTaskId, assignmentsByTask, filter, tagFilter, searchQuery, currentMemberId) {
         // Filter tasks based on filter + tag
         val filteredTasks = state.tasks.filter { task ->
             // Tag filter
@@ -502,11 +532,10 @@ private fun TaskListContent(
                 TaskFilter.ALL -> true
                 TaskFilter.PENDING -> {
                     // Pending = due today AND not completed today
-                    val due = isTaskDueToday(task, todayStartEpoch)
-                    val done = isTaskCompletedToday(task, todayStartEpoch)
-                    due && !done
+                    val status = statusByTaskId.getValue(task.id)
+                    status.isDueToday && !status.isCompletedToday
                 }
-                TaskFilter.COMPLETED -> isTaskCompletedToday(task, todayStartEpoch)
+                TaskFilter.COMPLETED -> statusByTaskId.getValue(task.id).isCompletedToday
                 TaskFilter.MINE -> {
                     val mid = currentMemberId ?: return@filter false
                     val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
@@ -526,30 +555,7 @@ private fun TaskListContent(
             }
         }
 
-        // Build TaskWithStatus list
-        searchFilteredTasks.map { task ->
-            val due = isTaskDueToday(task, todayStartEpoch)
-            val done = isTaskCompletedToday(task, todayStartEpoch)
-            // Recurrentes sin dueDate propio (daily/weekly/monthly): "vencida" es una
-            // ocurrencia programada de un día ya pasado que sigue pendiente
-            // (completado tardío) — ver RecurrenceRules.isOverdueOccurrence.
-            val isOverdue = if (task.dueDate > 0) {
-                task.dueDate < todayStartEpoch && task.lastCompletedDate == null
-            } else {
-                due && RecurrenceRules.isOverdueOccurrence(
-                    frequency = task.frequency,
-                    recurrenceDays = task.recurrenceDays,
-                    recurrenceDay = task.recurrenceDay,
-                    nowEpochMs = todayStartEpoch
-                )
-            }
-            TaskWithStatus(
-                task = task,
-                isDueToday = due,
-                isCompletedToday = done,
-                isOverdue = isOverdue
-            )
-        }
+        searchFilteredTasks.map { task -> statusByTaskId.getValue(task.id) }
     }
 
     // Group by status

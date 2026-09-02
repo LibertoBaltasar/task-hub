@@ -10,6 +10,7 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import org.taskhub.network.models.AssignmentSlot
+import org.taskhub.network.models.TaskAssignmentResponse
 
 /**
  * Reglas puras de recurrencia de tareas (daily/weekly/monthly). Sin I/O —
@@ -303,6 +304,35 @@ object RecurrenceRules {
         if (assignmentRotation.isEmpty()) return fallbackMemberId
         val dow = Instant.fromEpochMilliseconds(nextDueMs).toLocalDateTime(tz).date.dayOfWeek.ordinal + 1
         return assignmentRotation.find { it.dayOfWeek == dow }?.memberId ?: fallbackMemberId
+    }
+
+    /** Decisión de a quién asignar la siguiente ocurrencia, y si hace falta crearla. */
+    data class NextAssignmentDecision(val shouldCreate: Boolean, val memberId: String)
+
+    /**
+     * Decide quién debe quedar asignado a la siguiente ocurrencia de una tarea
+     * recurrente (vía [resolveRotationAssignee]) y si hace falta crear esa
+     * asignación, o si ya existe (deduplicación contra una asignación
+     * "assigned" ya existente para el mismo miembro+fecha límite — p.ej. por
+     * reintentos o carreras que ya cerró la concurrencia optimista de
+     * `completeTask`/`completeAssignment`).
+     *
+     * Extraído de `FirestoreRepository.regenerateNextAssignment` (donde la
+     * parte de I/O — leer/crear asignaciones — sigue viviendo) para poder
+     * testear la parte de decisión sin red (panel v4, Experto 13, hueco #1).
+     */
+    fun resolveNextAssignmentDecision(
+        assignmentRotation: List<AssignmentSlot>,
+        nextDueDate: Long,
+        completedMemberId: String,
+        existingAssignments: List<TaskAssignmentResponse>,
+        tz: TimeZone = TimeZone.currentSystemDefault()
+    ): NextAssignmentDecision {
+        val nextMemberId = resolveRotationAssignee(assignmentRotation, nextDueDate, completedMemberId, tz)
+        val alreadyExists = existingAssignments.any {
+            it.memberId == nextMemberId && it.dueDate == nextDueDate && it.status == "assigned"
+        }
+        return NextAssignmentDecision(shouldCreate = !alreadyExists, memberId = nextMemberId)
     }
 
     /**

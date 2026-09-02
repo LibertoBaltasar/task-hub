@@ -75,7 +75,7 @@ class PointsRulesTest {
     fun currentAppreciationBudget_atTop_remainingIsZero() {
         val weekStart = 1_000_000L
         val budget = PointsRules.currentAppreciationBudget(
-            appreciationGiven = 50,
+            appreciationGiven = PointsRules.WEEKLY_APPRECIATION_BUDGET,
             appreciationWeekStart = weekStart,
             now = weekStart
         )
@@ -105,7 +105,7 @@ class PointsRulesTest {
         )
 
         assertEquals(0, budget.given)
-        assertEquals(50, budget.remaining)
+        assertEquals(PointsRules.WEEKLY_APPRECIATION_BUDGET, budget.remaining)
         // El nuevo weekStart debe ser el lunes que contiene `now`, calculado de forma consistente.
         assertEquals(PointsRules.mondayStartOfWeek(now), budget.weekStart)
     }

@@ -839,7 +839,7 @@ class FirestoreRepository(
         } else {
             task.nextDueAt?.let { RecurrenceRules.endOfDueDay(it) } ?: task.dueDate
         }
-        val outcome = resolveCompletionOutcome(task, effectiveDueDate, now)
+        val outcome = PenaltyRules.resolveCompletionOutcome(task, effectiveDueDate, now)
         val nextDueDate = calculateNextDueDate(task, now)
 
         // 1. Update lastCompletedDate + completedBy (+ nextDueAt si es
@@ -1220,7 +1220,7 @@ class FirestoreRepository(
             assignment.dueDate == 0L -> 0L
             else -> RecurrenceRules.endOfDueDay(assignment.dueDate)
         }
-        val outcome = resolveCompletionOutcome(task, effectiveDueDate, now)
+        val outcome = PenaltyRules.resolveCompletionOutcome(task, effectiveDueDate, now)
         val onTime = outcome.onTime
         val pointsAwarded = outcome.pointsAwarded
 
@@ -1337,9 +1337,6 @@ class FirestoreRepository(
         existingAssignments: List<TaskAssignmentResponse>? = null
     ) {
         if (nextDueDate == null) return
-        val nextMemberId = RecurrenceRules.resolveRotationAssignee(
-            task.assignmentRotation, nextDueDate, completedMemberId
-        )
         val assignments = existingAssignments ?: try {
             getAssignments(householdId, taskId)
         } catch (e: CancellationException) {
@@ -1347,14 +1344,14 @@ class FirestoreRepository(
         } catch (_: Exception) {
             emptyList()
         }
-        val alreadyExists = assignments.any {
-            it.memberId == nextMemberId && it.dueDate == nextDueDate && it.status == "assigned"
-        }
-        if (alreadyExists) return
+        val decision = RecurrenceRules.resolveNextAssignmentDecision(
+            task.assignmentRotation, nextDueDate, completedMemberId, assignments
+        )
+        if (!decision.shouldCreate) return
         assignTask(
             householdId = householdId,
             taskId = taskId,
-            memberIds = listOf(nextMemberId),
+            memberIds = listOf(decision.memberId),
             mandatory = mandatory,
             dueDate = nextDueDate,
             taskTitle = task.title
@@ -1375,73 +1372,16 @@ class FirestoreRepository(
     // ────────────────────────────────────────────────────────
     //  Penalty & Recurrence Logic
     // ────────────────────────────────────────────────────────
-
-    /** Resultado de resolver puntos otorgados + puntualidad al completar una tarea. */
-    private data class CompletionOutcome(val onTime: Boolean, val pointsAwarded: Int)
-
-    /**
-     * Calcula si se completó a tiempo + los puntos a otorgar (con penalización
-     * por retraso si toca), a partir de una fecha límite concreta.
-     *
-     * Compartido por [completeTask] (sin asignación — usa `task.dueDate` para
-     * "once", o `task.nextDueAt` ajustado con [RecurrenceRules.endOfDueDay]
-     * para recurrentes) y [completeAssignment] (con asignación — usa
-     * `assignment.dueDate`, con el mismo ajuste si la tarea es recurrente).
-     * Antes solo `completeAssignment` calculaba penalización; `completeTask`
-     * otorgaba siempre los puntos íntegros con `onTime=true` fijo, ignorando
-     * `task.dueDate`/`penaltyMode` — bug que permitía evitar la penalización
-     * completando desde la lista principal en vez del detalle. Y antes de
-     * `nextDueAt`, `task.dueDate` valía SIEMPRE 0 para tareas recurrentes
-     * (daily/weekly/monthly), así que la penalización nunca se aplicaba ahí
-     * tampoco vía `completeAssignment` salvo que la asignación tuviera una
-     * `dueDate` explícita.
-     *
-     * `dueDate == 0` significa "sin fecha límite" (ver `TaskResponse.dueDate`)
-     * y nunca penaliza — incluye tareas recurrentes antiguas sin `nextDueAt`
-     * todavía (migración aditiva: fallback al comportamiento previo, sin
-     * penalización, hasta que la próxima compleción puebla el campo).
-     */
-    private fun resolveCompletionOutcome(task: TaskResponse, dueDate: Long, now: Long): CompletionOutcome {
-        val onTime = dueDate == 0L || now <= dueDate
-        val pointsAwarded = if (onTime) {
-            task.points
-        } else {
-            val penalty = calculatePenalty(task, dueDate, now)
-            maxOf(task.points - penalty, 0)
-        }
-        return CompletionOutcome(onTime, pointsAwarded)
-    }
-
-    /**
-     * Calculate penalty points for an overdue task.
-     *
-     * - fixed mode: subtracts `penaltyValue` per interval
-     * - percentage mode: subtracts `penaltyValue`% of task.points per interval
-     * - Capped at `penaltyMax` (which should not exceed task.points)
-     */
-    private fun calculatePenalty(task: TaskResponse, dueDate: Long, now: Long): Int {
-        val mode = task.penaltyMode ?: return 0
-        if (now <= dueDate) return 0
-
-        val overdueMs = now - dueDate
-        val intervalMs = when (task.penaltyInterval) {
-            "week" -> 7L * 24 * 60 * 60 * 1000
-            "month" -> 30L * 24 * 60 * 60 * 1000
-            else -> 24L * 60 * 60 * 1000 // day
-        }
-
-        val intervals = (overdueMs / intervalMs).toInt() + 1 // +1 because first interval starts immediately
-
-        val penalty = when (mode) {
-            "fixed" -> task.penaltyValue * intervals
-            "percentage" -> (task.points * task.penaltyValue * intervals) / 100
-            else -> 0
-        }
-
-        // Cap at penaltyMax (if set) and never go below 0
-        val capped = if (task.penaltyMax > 0) minOf(penalty, task.penaltyMax) else penalty
-        return minOf(capped, task.points)
-    }
+    //
+    // El cálculo de puntualidad/penalización vive en [PenaltyRules] (objeto
+    // puro, sin I/O, testeado en `PenaltyRulesTest`) — antes eran métodos
+    // `private` de esta clase, sin test posible por depender del resto del
+    // repositorio (panel v4, Experto 13, hueco #1).
+    //
+    // Compartido por [completeTask] (sin asignación — usa `task.dueDate` para
+    // "once", o `task.nextDueAt` ajustado con [RecurrenceRules.endOfDueDay]
+    // para recurrentes) y [completeAssignment] (con asignación — usa
+    // `assignment.dueDate`, con el mismo ajuste si la tarea es recurrente).
 
     /**
      * Calculate the next due date for a recurring task.

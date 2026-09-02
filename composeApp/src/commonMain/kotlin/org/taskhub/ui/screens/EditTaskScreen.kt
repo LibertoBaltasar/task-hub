@@ -35,6 +35,7 @@ import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.RecurrenceNextPreview
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.filterChipCheckIcon
 import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
@@ -462,6 +463,7 @@ data class EditTaskScreen(
                                         }
                                     },
                                     label = { Text(label) },
+                                    leadingIcon = filterChipCheckIcon(frequency == key),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -510,6 +512,7 @@ data class EditTaskScreen(
                                             recurrenceDays = updated.ifEmpty { (1..7).toSet() }
                                         },
                                         label = { Text(letter) },
+                                        leadingIcon = filterChipCheckIcon(day in recurrenceDays),
                                         modifier = Modifier.semantics { contentDescription = fullName },
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -929,6 +932,7 @@ data class EditTaskScreen(
                                     selected = penaltyMode == "fixed",
                                     onClick = { penaltyMode = "fixed" },
                                     label = { Text(s("create_task_penalty_fixed")) },
+                                    leadingIcon = filterChipCheckIcon(penaltyMode == "fixed"),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                         selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -938,6 +942,7 @@ data class EditTaskScreen(
                                     selected = penaltyMode == "percentage",
                                     onClick = { penaltyMode = "percentage" },
                                     label = { Text(s("create_task_penalty_percentage")) },
+                                    leadingIcon = filterChipCheckIcon(penaltyMode == "percentage"),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                         selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -981,6 +986,7 @@ data class EditTaskScreen(
                                     selected = penaltyInterval == "day",
                                     onClick = { penaltyInterval = "day" },
                                     label = { Text(s("create_task_interval_daily")) },
+                                    leadingIcon = filterChipCheckIcon(penaltyInterval == "day"),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                         selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -990,6 +996,7 @@ data class EditTaskScreen(
                                     selected = penaltyInterval == "week",
                                     onClick = { penaltyInterval = "week" },
                                     label = { Text(s("recurrence_weekly")) },
+                                    leadingIcon = filterChipCheckIcon(penaltyInterval == "week"),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                         selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
@@ -999,6 +1006,7 @@ data class EditTaskScreen(
                                     selected = penaltyInterval == "month",
                                     onClick = { penaltyInterval = "month" },
                                     label = { Text(s("recurrence_monthly")) },
+                                    leadingIcon = filterChipCheckIcon(penaltyInterval == "month"),
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                         selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer

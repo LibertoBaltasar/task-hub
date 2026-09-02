@@ -6,6 +6,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import org.taskhub.network.models.AssignmentSlot
+import org.taskhub.network.models.TaskAssignmentResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,6 +43,32 @@ class RecurrenceRulesTest {
     @Test
     fun clampDayOfMonth_day31InFebruaryNonLeapYear_clampsTo28() {
         assertEquals(28, RecurrenceRules.clampDayOfMonth(31, 2023, 2))
+    }
+
+    @Test
+    fun clampDayOfMonth_day29InFebruaryLeapYear_isUnchanged() {
+        assertEquals(29, RecurrenceRules.clampDayOfMonth(29, 2024, 2)) // 2024 es bisiesto
+    }
+
+    @Test
+    fun clampDayOfMonth_day29InFebruaryNonLeapYear_clampsTo28() {
+        assertEquals(28, RecurrenceRules.clampDayOfMonth(29, 2023, 2))
+    }
+
+    @Test
+    fun clampDayOfMonth_day30InFebruary_clampsToLastDayOfMonth() {
+        assertEquals(29, RecurrenceRules.clampDayOfMonth(30, 2024, 2)) // bisiesto
+        assertEquals(28, RecurrenceRules.clampDayOfMonth(30, 2023, 2)) // no bisiesto
+    }
+
+    @Test
+    fun clampDayOfMonth_day30InThirtyDayMonth_isUnchanged() {
+        assertEquals(30, RecurrenceRules.clampDayOfMonth(30, 2024, 4)) // abril tiene 30 días
+    }
+
+    @Test
+    fun clampDayOfMonth_day29InThirtyOneDayMonth_isUnchanged() {
+        assertEquals(29, RecurrenceRules.clampDayOfMonth(29, 2024, 1)) // enero tiene 31 días
     }
 
     // ── nextOccurrence: daily ────────────────────────────────────
@@ -176,6 +203,56 @@ class RecurrenceRulesTest {
     fun isDueToday_weekly_todayInRecurrenceDaysAndNotCompleted_isDue() {
         val now = epochOf(2024, 3, 15) // viernes
         assertTrue(RecurrenceRules.isDueToday("weekly", listOf(5), null, null, now, tz))
+    }
+
+    // ── isDueToday: weekly — VARIOS recurrenceDays a la vez (lunes+miércoles+viernes) ──
+
+    @Test
+    fun isDueToday_weeklyMultipleDays_todayIsOneOfThem_neverCompleted_isDue() {
+        // Lunes(1)+miércoles(3)+viernes(5); 2024-03-13 es miércoles.
+        val wednesday = epochOf(2024, 3, 13)
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, null, wednesday, tz))
+    }
+
+    @Test
+    fun isDueToday_weeklyMultipleDays_todayIsNotAnyOfThem_neverCompleted_isNotDue() {
+        // Martes(2) no está en lunes+miércoles+viernes.
+        val tuesday = epochOf(2024, 3, 12)
+        assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, null, tuesday, tz))
+    }
+
+    @Test
+    fun isDueToday_weeklyMultipleDays_completedOnMonday_stillDueOnWednesday() {
+        // Completar el lunes de esta semana no cubre la ocurrencia del
+        // miércoles: cada día marcado tiene su propia ocurrencia semanal.
+        val completedMonday = epochOf(2024, 3, 11)
+        val wednesday = epochOf(2024, 3, 13)
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, completedMonday, wednesday, tz))
+    }
+
+    @Test
+    fun isDueToday_weeklyMultipleDays_completedOnWednesday_notDueAgainOnThursday() {
+        // Jueves no está en la lista -> nunca toca, independientemente de compleciones.
+        val completedWednesday = epochOf(2024, 3, 13)
+        val thursday = epochOf(2024, 3, 14)
+        assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, completedWednesday, thursday, tz))
+    }
+
+    @Test
+    fun isDueToday_weeklyMultipleDays_completedOnWednesday_isDueAgainOnFriday() {
+        // El miércoles ya se completó, pero el viernes es una ocurrencia
+        // distinta de la misma semana -> vuelve a tocar.
+        val completedWednesday = epochOf(2024, 3, 13)
+        val friday = epochOf(2024, 3, 15)
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, completedWednesday, friday, tz))
+    }
+
+    @Test
+    fun isDueToday_weeklyMultipleDays_completedOnFriday_notDueUntilNextMonday() {
+        val completedFriday = epochOf(2024, 3, 15)
+        val nextMonday = epochOf(2024, 3, 18)
+        // El lunes siguiente es una ocurrencia nueva -> vuelve a tocar.
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, completedFriday, nextMonday, tz))
     }
 
     // ── isDueToday: monthly (con recurrenceDay) ───────────────────
@@ -416,6 +493,27 @@ class RecurrenceRulesTest {
         assertTrue(completedNextDay > end)
     }
 
+    @Test
+    fun endOfDueDay_lastDayOfMonth_crossesIntoNextMonth() {
+        val dueDayStart = LocalDateTime(2024, 3, 31, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
+        val end = RecurrenceRules.endOfDueDay(dueDayStart, tz)
+        assertEquals(LocalDate(2024, 4, 1), dateOf(end))
+    }
+
+    @Test
+    fun endOfDueDay_lastDayOfFebruaryLeapYear_crossesIntoMarch() {
+        val dueDayStart = LocalDateTime(2024, 2, 29, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
+        val end = RecurrenceRules.endOfDueDay(dueDayStart, tz)
+        assertEquals(LocalDate(2024, 3, 1), dateOf(end))
+    }
+
+    @Test
+    fun endOfDueDay_lastDayOfYear_crossesIntoNextYear() {
+        val dueDayStart = LocalDateTime(2024, 12, 31, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
+        val end = RecurrenceRules.endOfDueDay(dueDayStart, tz)
+        assertEquals(LocalDate(2025, 1, 1), dateOf(end))
+    }
+
     // ── resolveRotationAssignee ────────────────────────────────────
 
     @Test
@@ -474,5 +572,134 @@ class RecurrenceRulesTest {
     @Test
     fun purgeMemberFromRotation_emptyRotation_returnsEmpty() {
         assertTrue(RecurrenceRules.purgeMemberFromRotation(emptyList(), "member-A").isEmpty())
+    }
+
+    // ── Timezone explícita distinta de currentSystemDefault() ─────
+    //
+    // Todos los tests de arriba usan `tz` = currentSystemDefault() de la
+    // máquina que ejecuta el test — nunca demuestran que el parámetro [tz]
+    // realmente se respeta. Aquí se usa un mismo instante UTC con dos zonas
+    // de offset muy distinto (Kiritimati UTC+14 / Pago Pago UTC-11, 25h de
+    // diferencia) para comprobar que el resultado depende de [tz] y no de la
+    // zona del sistema (panel v4, Experto 13, hueco #5).
+
+    private val tzFarEast = TimeZone.of("Pacific/Kiritimati") // UTC+14
+    private val tzFarWest = TimeZone.of("Pacific/Pago_Pago") // UTC-11
+
+    @Test
+    fun isDueToday_explicitTz_sameInstantFallsOnDifferentLocalWeekday() {
+        // 2024-03-14T23:00:00Z -> viernes 15 en Kiritimati, jueves 14 en Pago Pago.
+        val instant = LocalDateTime(2024, 3, 14, 23, 0, 0).toInstant(TimeZone.UTC).toEpochMilliseconds()
+
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(5), null, null, instant, tzFarEast)) // viernes
+        assertFalse(RecurrenceRules.isDueToday("weekly", listOf(5), null, null, instant, tzFarWest)) // jueves, no viernes
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(4), null, null, instant, tzFarWest)) // jueves
+    }
+
+    @Test
+    fun endOfDueDay_explicitNonDefaultTz_usesThatZonesMidnight() {
+        val dueDayStartInFarEast = LocalDateTime(2024, 3, 15, 0, 0, 0).toInstant(tzFarEast).toEpochMilliseconds()
+        val end = RecurrenceRules.endOfDueDay(dueDayStartInFarEast, tzFarEast)
+
+        val endLocalDate = kotlinx.datetime.Instant.fromEpochMilliseconds(end).toLocalDateTime(tzFarEast).date
+        assertEquals(LocalDate(2024, 3, 16), endLocalDate)
+    }
+
+    @Test
+    fun resolveRotationAssignee_explicitTz_sameInstantResolvesDifferentSlot() {
+        // Mismo instante que arriba: viernes(5) en Kiritimati, jueves(4) en Pago Pago.
+        val instant = LocalDateTime(2024, 3, 14, 23, 0, 0).toInstant(TimeZone.UTC).toEpochMilliseconds()
+        val rotation = listOf(
+            AssignmentSlot(dayOfWeek = 4, memberId = "member-thursday"),
+            AssignmentSlot(dayOfWeek = 5, memberId = "member-friday")
+        )
+
+        assertEquals(
+            "member-friday",
+            RecurrenceRules.resolveRotationAssignee(rotation, instant, "fallback", tzFarEast)
+        )
+        assertEquals(
+            "member-thursday",
+            RecurrenceRules.resolveRotationAssignee(rotation, instant, "fallback", tzFarWest)
+        )
+    }
+
+    // ── resolveNextAssignmentDecision ──────────────────────────────
+
+    private fun assignment(
+        memberId: String,
+        dueDate: Long,
+        status: String = "assigned"
+    ) = TaskAssignmentResponse(id = "assignment-1", taskId = "task-1", memberId = memberId, dueDate = dueDate, status = status)
+
+    @Test
+    fun resolveNextAssignmentDecision_emptyRotation_usesFallbackAndCreates() {
+        val decision = RecurrenceRules.resolveNextAssignmentDecision(
+            assignmentRotation = emptyList(),
+            nextDueDate = 1_000L,
+            completedMemberId = "member-A",
+            existingAssignments = emptyList(),
+            tz = tz
+        )
+        assertTrue(decision.shouldCreate)
+        assertEquals("member-A", decision.memberId)
+    }
+
+    @Test
+    fun resolveNextAssignmentDecision_matchingAssignedDuplicate_doesNotCreate() {
+        val nextDue = 1_000L
+        val decision = RecurrenceRules.resolveNextAssignmentDecision(
+            assignmentRotation = emptyList(),
+            nextDueDate = nextDue,
+            completedMemberId = "member-A",
+            existingAssignments = listOf(assignment("member-A", nextDue, status = "assigned")),
+            tz = tz
+        )
+        assertFalse(decision.shouldCreate)
+        assertEquals("member-A", decision.memberId)
+    }
+
+    @Test
+    fun resolveNextAssignmentDecision_existingAssignmentWithDifferentDueDate_stillCreates() {
+        val decision = RecurrenceRules.resolveNextAssignmentDecision(
+            assignmentRotation = emptyList(),
+            nextDueDate = 2_000L,
+            completedMemberId = "member-A",
+            existingAssignments = listOf(assignment("member-A", 1_000L, status = "assigned")),
+            tz = tz
+        )
+        assertTrue(decision.shouldCreate)
+    }
+
+    @Test
+    fun resolveNextAssignmentDecision_existingAssignmentAlreadyCompleted_stillCreates() {
+        // Solo deduplica contra asignaciones "assigned" — una "completed" para
+        // el mismo miembro/fecha no cuenta como ya regenerada.
+        val nextDue = 1_000L
+        val decision = RecurrenceRules.resolveNextAssignmentDecision(
+            assignmentRotation = emptyList(),
+            nextDueDate = nextDue,
+            completedMemberId = "member-A",
+            existingAssignments = listOf(assignment("member-A", nextDue, status = "completed")),
+            tz = tz
+        )
+        assertTrue(decision.shouldCreate)
+    }
+
+    @Test
+    fun resolveNextAssignmentDecision_rotationResolvesDifferentMember_dedupesAgainstThatMember() {
+        // 2024-03-18 es lunes (dow=1) -> la rotación asigna a member-monday,
+        // no a quien completó la tarea.
+        val nextDue = epochOf(2024, 3, 18)
+        val rotation = listOf(AssignmentSlot(dayOfWeek = 1, memberId = "member-monday"))
+        val decision = RecurrenceRules.resolveNextAssignmentDecision(
+            assignmentRotation = rotation,
+            nextDueDate = nextDue,
+            completedMemberId = "member-A",
+            existingAssignments = listOf(assignment("member-monday", nextDue, status = "assigned")),
+            tz = tz
+        )
+        assertEquals("member-monday", decision.memberId)
+        assertFalse(decision.shouldCreate)
     }
 }
