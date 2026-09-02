@@ -64,7 +64,7 @@ separados, para evitar inflar el recuento.
 | # | Hallazgo | Severidad | Esfuerzo | Estado |
 |---|---|---|---|---|
 | 1 | Duplicación de puntos: precondition tautológica + reintento tras fallo en regenerar asignación | CRÍTICO | Medio | **Aplicado** |
-| 2 | `firestore.rules`: miembro no puede borrar su propio documento (`leaveHousehold`/eliminar cuenta rotos para rol "child") | CRÍTICO | Bajo | **Aplicado** (REGLAS LISTAS, pendiente de desplegar) |
+| 2 | `firestore.rules`: miembro no puede borrar su propio documento (`leaveHousehold`/eliminar cuenta rotos para rol "child") | CRÍTICO | Bajo | **Aplicado** (REGLAS DESPLEGADAS — ruleset `29319b00`) |
 | 3 | `leaveHousehold` deja hogares huérfanos e imborrables si el último en salir no es owner | ALTO | Bajo | **Aplicado** |
 | 4 | `invites/{code}` no se borra en `deleteHousehold` (código de invitación fantasma) | ALTO | Bajo | **Aplicado** |
 | 5 | Mensajes de conflicto hardcodeados en español + UI no se refresca tras conflicto | ALTA (UX) | Bajo | **Aplicado** |
@@ -480,8 +480,8 @@ los cambios recientes.
    — incumplimiento directo del derecho de supresión (RGPD art. 17) camuflado.
    También rompía la función normal "Abandonar hogar" para cualquier
    no-admin. **Aplicado**: `allow delete: if isTrusted(hid) || request.auth.uid
-   == mid;` en `firestore.rules` — **REGLAS LISTAS**, pendiente de desplegar
-   (el coordinador no despliega reglas, ver convención del proyecto).
+   == mid;` en `firestore.rules` — **REGLAS DESPLEGADAS** (ruleset
+   `29319b00-f081-48db-bf41-20d0e431afc4`, 2026-09-02).
 
 ### ALTO — Ambos aplicados
 
@@ -718,3 +718,166 @@ promesa (duplicación de puntos) están cerrados. Quedan bugs ALTO/MEDIO reales
 pero de menor frecuencia (interacción rotación×eliminar-miembro,
 completer≠asignado) documentados como PROPUESTA por requerir decisiones de
 semántica de datos que no son un "fix localizado" seguro.
+
+---
+
+## Fixes aplicados — archivos tocados
+
+**Integridad de puntos / recurrencia (cluster CRÍTICO, 3 hallazgos independientes → 1 fix coordinado)**
+- `network/FirestoreRepository.kt` — `completeTask`: comprobación de
+  "freshness" contra `task.lastCompletedDate` del caller antes de otorgar
+  puntos (en vez de una precondition tautológica); paso 5
+  (`regenerateNextAssignment`) envuelto en try/catch best-effort.
+- `network/FirestoreRepository.kt` — `completeAssignment`: misma
+  comprobación contra `assignment.status` del caller; cola
+  (`regenerateNextAssignment`) envuelta en try/catch best-effort.
+
+**Privacidad / RGPD (borrado real)**
+- `firestore.rules` — `members/{mid}`: `allow delete` ahora también permite
+  `request.auth.uid == mid` (propio dueño del documento). **REGLAS
+  DESPLEGADAS** (ruleset `29319b00-f081-48db-bf41-20d0e431afc4`).
+- `network/FirestoreRepository.kt` — `leaveHousehold`: reordenado para
+  borrar el hogar completo ANTES de perder `isMember` cuando el usuario que
+  sale se queda como único miembro.
+- `network/FirestoreRepository.kt` — `deleteHousehold`: borra
+  `invites/{household.inviteCode}` antes del resto del cascade.
+
+**Programador senior / robustez**
+- `network/FirestoreClient.kt` — `listAllDocuments`: tope de seguridad de
+  200 páginas.
+- `network/MemberRepository.kt` — `updateMemberStreak` invalida
+  `taskCache`; 3 puntos con `catch (e: CancellationException) { throw e }`
+  añadido antes del `catch (_: Exception)`.
+- `storage/SecureStore.android.kt` — log (`Log.w`) en el fallback silencioso
+  a almacenamiento sin cifrar ante fallo de Keystore.
+
+**UX — mensajes de conflicto y selector de recurrencia**
+- `ui/models/TaskScreenModel.kt` — `completeTask`/`completeAssignment`:
+  detectan las excepciones de conflicto específicamente, usan
+  `AppStrings.get("task_completion_conflict_error", lang)` y recargan
+  (`loadTasks`/`loadTaskDetail`) en vez de dejar la UI con datos obsoletos.
+- `ui/i18n/AppStrings.kt` — nueva clave `task_completion_conflict_error`
+  (ES/EN).
+- `ui/screens/CreateTaskScreen.kt` / `EditTaskScreen.kt` — el chip de día no
+  permite llegar a `recurrenceDays` vacío (se re-premarcan los 7 al
+  desmarcar el último).
+- `ui/screens/EditTaskScreen.kt` — inicializa `recurrenceDays` a los 7 días
+  si la tarea es "weekly" legado con `recurrenceDays` vacío al abrir para
+  editar.
+- `ui/i18n/AppStrings.kt` — `member_remove_confirm_text` (ES/EN) ampliado
+  para explicar que las tareas asignadas quedan a nombre de "Miembro
+  eliminado".
+
+**Estética / Accesibilidad / UI**
+- `ui/components/SettingsSheet.kt` — sección "Privacidad y datos" con
+  cabecera propia (`SettingsSection`), icono real (`Icons.Default.Delete`)
+  en vez de emoji, `liveRegion` en el texto de error de "eliminar cuenta".
+- `ui/i18n/AppStrings.kt` — `settings_privacy_data_title` (nueva, ES/EN),
+  `settings_delete_account_button` sin emoji (ES/EN).
+- `ui/components/HouseholdMemberList.kt` — parámetro `roleChangePending`
+  renombrado a `actionPending` (ahora también gobierna "eliminar miembro").
+- `ui/components/RecurrenceNextPreview.kt` — cálculo de la próxima ocurrencia
+  memoizado con `remember(frequency, recurrenceDays, recurrenceDay)`.
+
+**Rendimiento**
+- `ui/screens/TaskListScreen.kt` — `onClick`/`onComplete` de `TaskCard`
+  memoizados por `item.task.id` (antes se recreaban en cada recomposición
+  del bloque de `items`, anulando el skip de recomposición).
+
+## Verificación (OBLIGATORIO)
+
+```
+cd /home/liberto/task-hub && ./gradlew :composeApp:compileDebugKotlinAndroid --console=plain
+```
+`BUILD SUCCESSFUL in 31s` — sin errores; solo warnings de deprecación
+preexistentes (Google Sign-In, Vibrator, EncryptedSharedPreferences/MasterKey
+de AndroidX Security), ninguno introducido por esta ronda.
+
+```
+cd /home/liberto/task-hub && ./gradlew :composeApp:jvmTest --console=plain
+```
+`BUILD SUCCESSFUL` — 85 tests, 0 fallos (mismo recuento que antes de esta
+ronda; ningún test nuevo se añadió, ninguno se rompió).
+
+## PROPUESTAS no aplicadas — veredicto y coste/beneficio
+
+### Recurrencia / integridad de datos
+- **Asignación fantasma tras eliminar miembro con rotación activa** (Exp. 2
+  #2, Exp. 8 relacionado) — coste medio-alto (iterar todas las tareas del
+  hogar al eliminar un miembro), beneficio medio (confusión de UI, no
+  pérdida de puntos).
+- **`completeTask` empareja completer↔asignación por `memberId`** (Exp. 8
+  #3) — coste medio (decidir semántica cuando hay varias asignaciones
+  "assigned" para distintos miembros), beneficio medio-alto (rotación
+  íntegra en hogares donde cualquiera completa las tareas de cualquiera).
+- **Editar tarea recurrente asignada resetea `dueDate` de la asignación a 0**
+  (Exp. 8 #4) — coste bajo-medio, beneficio medio (penalización silenciosa
+  desactivada un ciclo).
+- **Hogar compartido sin owner tras "eliminar cuenta"** (Exp. 2 #6) — coste
+  medio (decidir política de reasignación de rol o bloqueo), beneficio
+  medio (edge case, hogares con un solo admin que se borra).
+- **Sync de Calendar inmediato para asignación regenerada** (Exp. 2 #3) —
+  coste bajo, beneficio bajo (ya mitigado por `reconcile()`).
+
+### Privacidad / seguridad — requieren decisión de producto o backend
+- `deleteHousehold` no debería borrar el documento del hogar si hubo fallos
+  en subcolecciones (Exp. 8 #2) — coste medio, beneficio alto (evita
+  huérfanos RGPD), pero cambia el contrato observable ("¿qué ve el usuario si
+  el borrado queda incompleto?").
+- `deleteAccount` no debería borrar la cuenta Auth si el cascade-delete tuvo
+  fallos de red (Exp. 12 #2) — coste medio, mismo motivo.
+- `authorName` en mensajes/comentarios no se anonimiza al borrar cuenta (Exp.
+  10 #4) — decisión de producto (¿reescribir a placeholder o documentar como
+  limitación?).
+- Revocar el vínculo OAuth de Google Calendar al eliminar cuenta (Exp. 10
+  #5) — coste bajo-medio (llamada a `revoke` específica de plataforma).
+- Reautenticación reciente antes de "eliminar cuenta" (Exp. 9, Exp. 3 #2) —
+  hardening, no bloqueante.
+- Doble confirmación para "eliminar cuenta" (Exp. 3/5, coordinado) — friction
+  de producto, decisión del usuario.
+- `firestore.rules`: validar `appreciationGiven`/`appreciationWeekStart`/
+  `leftAt` en ramas `create` de `members/{mid}` (Exp. 9 #2) — bajo impacto
+  real (redundante con limitación conocida sin Cloud Functions).
+
+### Arquitectónicas / escalabilidad — refactors de mayor superficie
+- Extraer `rememberHouseholdName` compartido para las 7+2 pantallas con
+  topbar (Exp. 1 #1, Exp. 4 #1) — resolvería tanto el parpadeo como la
+  duplicación de 35 líneas, pero es una abstracción nueva compartida (fuera
+  de "APLICA YA" por decisión explícita del encargo).
+- Paginar `getTaskHistory` (Exp. 7 #1) — coste bajo (mismo patrón ya
+  aplicado 4 veces), beneficio medio-alto a futuro.
+- Paralelizar `deleteAllDocuments`/`deleteHousehold` (Exp. 7 #2, Exp. 11 #4)
+  — coste bajo-medio, beneficio alto para hogares con historial real.
+- Generalizar `DestructiveConfirmDialog` para acciones no destructivas (Exp.
+  4 #2) — cambia la API de un componente compartido.
+- Extraer `DeleteAccountSection` de `SettingsSheet` (Exp. 4 #5) — refactor
+  estructural, sin urgencia funcional.
+- `SecureStore` perezoso en `SettingsStore` (Exp. 11 #6) — cambia el
+  constructor de una clase usada en varios sitios.
+- `FilterChip` con `leadingIcon` de check para no depender solo del color
+  (Exp. 3 #2) — decisión de sistema de diseño, 4 sitios.
+- Separar el `remember` de `isDueToday` del de `searchQuery` en
+  `TaskListContent` (Exp. 11 #2) — bajo riesgo pero requiere restructurar el
+  bloque, se prefiere una pasada dedicada con más margen de verificación
+  visual.
+
+## Deuda pendiente y riesgos — resumen para el usuario
+
+1. **Regla `firestore.rules` desplegada.** El fix crítico de privacidad
+   (`members/{mid}` delete) está en producción (ruleset
+   `29319b00-f081-48db-bf41-20d0e431afc4`, desplegado 2026-09-02). El borrado
+   real de cuenta/abandonar-hogar ya funciona en producción para miembros con
+   rol "child".
+2. **Dos bugs ALTO de recurrencia quedan documentados pero sin corregir**
+   (asignación fantasma tras eliminar miembro con rotación; completer≠
+   asignado) — de menor frecuencia que los CRÍTICOS ya cerrados, pero reales.
+3. **Cobertura de tests sigue en el mismo punto que v3** para las áreas más
+   sensibles (penalización/rotación puras sin test, `ScreenModel`s sin test,
+   reglas de Firestore sin test de emulador) — ver top-10 del Experto 13.
+4. **Deuda arquitectónica de escalabilidad conocida y acotada**:
+   `getTaskHistory` sin paginar, cascade-delete secuencial — sin impacto hoy
+   (hogares pequeños), a vigilar si el uso real crece.
+5. **7 PROPUESTAs de privacidad/seguridad de hardening** (reautenticación,
+   revocar OAuth, anonimizar `authorName`, doble confirmación) quedan a
+   decisión del usuario — ninguna es bloqueante para el cumplimiento RGPD
+   central ya corregido en esta ronda.
