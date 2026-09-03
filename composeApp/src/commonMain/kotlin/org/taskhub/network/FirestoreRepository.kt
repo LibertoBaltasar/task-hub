@@ -1283,6 +1283,35 @@ class FirestoreRepository(
         }
         taskCache.clearTasks(householdId)
 
+        // Sincronizar el resto de asignaciones "assigned" de este mismo ciclo
+        // como completadas — mismo motivo y mismo patrón que el paso 4 de
+        // [completeTask] (panel de revisión 2026-09-03, Expertos 2/6/8/12/13:
+        // completeAssignment dejaba huérfanas las asignaciones de otros
+        // miembros del mismo ciclo; si esas asignaciones se completaban por
+        // separado más tarde, duplicaban puntos/historial para la misma
+        // ocurrencia real). Los puntos ya se otorgaron arriba SOLO a
+        // `assignment.memberId`: las asignaciones hermanas se marcan
+        // completadas con `pointsAwarded=0` para no inflar las estadísticas
+        // de otros miembros con puntos que nunca recibieron.
+        val siblingAssignments = try {
+            getAssignments(householdId, taskId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+        for (sibling in siblingAssignments) {
+            if (sibling.id == assignmentId || sibling.status != "assigned") continue
+            try {
+                markAssignmentCompleted(
+                    householdId, taskId, sibling.id, now,
+                    pointsAwarded = 0, onTime = onTime
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) { }
+        }
+
         // Handle recurrence: create next assignment respetando assignmentRotation
         // (ver [regenerateNextAssignment] — unificado con [completeTask]; antes
         // esta función siempre reasignaba al mismo miembro que acababa de
@@ -1294,7 +1323,8 @@ class FirestoreRepository(
         if (task.frequency != "once") {
             try {
                 regenerateNextAssignment(
-                    householdId, taskId, task, assignment.memberId, assignment.mandatory, nextDueDate
+                    householdId, taskId, task, assignment.memberId, assignment.mandatory,
+                    nextDueDate, siblingAssignments
                 )
             } catch (e: CancellationException) {
                 throw e

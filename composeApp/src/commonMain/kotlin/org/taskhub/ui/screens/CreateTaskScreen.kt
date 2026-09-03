@@ -9,8 +9,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -119,7 +122,7 @@ data class CreateTaskScreen(
                     ) { Text(s("task_date_accept")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDatePicker = false }) { Text(s("household_cancel")) }
+                    TextButton(onClick = { showDatePicker = false }) { Text(s("common_cancel")) }
                 }
             ) {
                 DatePicker(state = datePickerState)
@@ -314,7 +317,7 @@ data class CreateTaskScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("+")
+                                Icon(Icons.Default.Add, contentDescription = null)
                             }
                         }
                     }
@@ -347,7 +350,7 @@ data class CreateTaskScreen(
                                         contentColor = MaterialTheme.colorScheme.error
                                     )
                                 ) {
-                                    Text("✕")
+                                    Icon(Icons.Default.Close, contentDescription = null)
                                 }
                             }
                         }
@@ -558,7 +561,7 @@ data class CreateTaskScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("+")
+                                Icon(Icons.Default.Add, contentDescription = null)
                             }
                         }
                     }
@@ -576,7 +579,11 @@ data class CreateTaskScreen(
                                         onClick = { tags = tags - tag },
                                         label = { Text(tag) },
                                         trailingIcon = {
-                                            Text("✕", style = MaterialTheme.typography.labelSmall)
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(FilterChipDefaults.IconSize)
+                                            )
                                         }
                                     )
                                 }
@@ -601,7 +608,8 @@ data class CreateTaskScreen(
                                     onClick = {
                                         tags = if (tag in tags) tags - tag else tags + tag
                                     },
-                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
+                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+                                    leadingIcon = filterChipCheckIcon(tag in tags)
                                 )
                             }
                         }
@@ -959,10 +967,10 @@ private fun QuickTemplatesSection(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                Text(
-                    text = if (expanded) "\u25B2" else "\u25BC",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) s("household_task_section_collapse") else s("household_task_section_expand"),
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
 

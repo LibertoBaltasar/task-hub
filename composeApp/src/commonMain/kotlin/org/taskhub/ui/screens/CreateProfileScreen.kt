@@ -18,6 +18,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.filterChipCheckIcon
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
@@ -157,13 +158,15 @@ data class CreateProfileScreen(val householdId: String) : Screen {
                         selected = role == "admin",
                         onClick = { role = "admin" },
                         label = { Text(s("member_role_admin_short")) },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        leadingIcon = filterChipCheckIcon(role == "admin")
                     )
                     FilterChip(
                         selected = role == "child",
                         onClick = { role = "child" },
                         label = { Text(s("member_role_child_short")) },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        leadingIcon = filterChipCheckIcon(role == "child")
                     )
                 }
 

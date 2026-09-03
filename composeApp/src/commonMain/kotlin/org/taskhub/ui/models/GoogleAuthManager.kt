@@ -284,6 +284,8 @@ class GoogleAuthManager(
             syncHouseholdsToCloud()
             syncGoogleAvatar(result)
             _state.value = GoogleAuthState.SignedIn(result.email)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             _state.value = GoogleAuthState.Error(
                 e.message ?: "Error al iniciar sesión con Google"
@@ -310,6 +312,8 @@ class GoogleAuthManager(
                 bio = existing?.bio ?: "",
                 status = existing?.status ?: ""
             )
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // No crítico: se reintenta en el próximo login.
         }
@@ -327,6 +331,8 @@ class GoogleAuthManager(
                     inviteCode = household.inviteCode,
                     isPersonal = household.isPersonal
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Hogar obsoleto/eliminado — ignorar
             }
@@ -348,11 +354,15 @@ class GoogleAuthManager(
         val uid = settingsStore.getGoogleUid() ?: return
         try {
             restoreHouseholds(uid)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // No crítico: se reintenta en el próximo arranque/login.
         }
         try {
             repointPersonalHousehold()
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // No crítico.
         }
@@ -370,6 +380,8 @@ class GoogleAuthManager(
         try {
             val personal = repo.getOrCreatePersonalHousehold()
             householdStore.replacePersonalHousehold(personal.id)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Offline/transitorio: App.kt lo reintenta en el próximo arranque.
         }
@@ -389,6 +401,8 @@ class GoogleAuthManager(
         scope.launch {
             try {
                 repo.saveUserHouseholds(uid, ids)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // No crítico — se reintenta en el próximo cambio
             }

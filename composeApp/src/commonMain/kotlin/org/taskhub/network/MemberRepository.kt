@@ -197,6 +197,8 @@ class MemberRepository(
         if (userId != null) {
             try {
                 upsertUserProfile(userId = userId, displayName = displayName, avatarUrl = avatarUrl)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // No crítico: el perfil se puede reclamar más tarde.
             }

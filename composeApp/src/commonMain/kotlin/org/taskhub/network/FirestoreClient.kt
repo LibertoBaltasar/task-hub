@@ -110,6 +110,8 @@ class FirestoreClient(
                 tokenExpiry = refreshed.tokenExpiry
                 settingsStore.setGoogleRefreshToken(refreshed.refreshToken ?: googleRefresh)
                 return@withLock
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Sesión de Google caducada → cae al flujo anónimo.
                 settingsStore.clearGoogleAuth()
@@ -126,6 +128,8 @@ class FirestoreClient(
                 tokenExpiry = refreshed.tokenExpiry
                 settingsStore.saveAnonymousAuth(refreshed.refreshToken ?: savedRefresh, refreshed.userId)
                 return@withLock
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Token caducado/revocado → alta anónima nueva.
                 settingsStore.clearAnonymousAuth()

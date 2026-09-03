@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -71,10 +73,10 @@ fun LazyListScope.householdMemberList(
                 else -> {}
             }
 
-            Text(
-                text = if (membersExpanded) "▲" else "▼",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
+            Icon(
+                imageVector = if (membersExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (membersExpanded) s("household_task_section_collapse") else s("household_task_section_expand"),
+                tint = MaterialTheme.colorScheme.primary
             )
         }
     }

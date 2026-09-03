@@ -381,7 +381,18 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.height(16.dp))
+                            // Sin este texto, un borrado/salida que tarda (cascade-delete
+                            // de tareas/asignaciones/historial) se ve como una pantalla
+                            // colgada — panel de revisión 2026-09-03, Experto 5, IMPORTANTE #2.
+                            Text(
+                                text = s(if (isDeleting) "household_deleting_progress" else "household_leaving_progress"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 } else {
                     // Content

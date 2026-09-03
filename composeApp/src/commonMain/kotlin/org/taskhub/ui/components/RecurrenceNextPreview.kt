@@ -42,8 +42,12 @@ fun RecurrenceNextPreview(
     // no recalcularlo en cada recomposición ajena (p.ej. al escribir en otro
     // campo del formulario) — mismo criterio de memoización aplicado al resto
     // de la pantalla en esta misma pasada (panel v4, UI/Componentes hallazgo
-    // MENOR).
-    val formattedDate = remember(frequency, recurrenceDays, recurrenceDay) {
+    // MENOR). El "ahora" queda fuera de la key (ver `todayEpochDay` más abajo)
+    // para que dejar el formulario abierto cruzando medianoche no congele la
+    // fecha mostrada con la hora de apertura (panel de revisión 2026-09-03,
+    // Expertos 4/11, MENOR — regresión introducida por esta misma memoización).
+    val todayEpochDay = Clock.System.now().toEpochMilliseconds() / 86_400_000L
+    val formattedDate = remember(frequency, recurrenceDays, recurrenceDay, todayEpochDay) {
         val tz = TimeZone.currentSystemDefault()
         val nextEpochMs = RecurrenceRules.nextOccurrence(
             nowEpochMs = Clock.System.now().toEpochMilliseconds(),

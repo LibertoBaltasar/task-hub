@@ -136,7 +136,7 @@ data class TaskDetailScreen(
                             Icon(Icons.Default.Edit, contentDescription = s("task_detail_edit_content_desc"))
                         }
                         IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = s("household_delete_btn"))
+                            Icon(Icons.Default.Delete, contentDescription = s("common_delete"))
                         }
                     }
                 )
@@ -876,7 +876,7 @@ private fun TaskDetailContent(
             },
             dismissButton = {
                 TextButton(onClick = { showChangeWhoDialog = false }) {
-                    Text(s("household_cancel"))
+                    Text(s("common_cancel"))
                 }
             }
         )

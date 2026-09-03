@@ -75,6 +75,8 @@ class HouseholdRepository(
         if (!isPersonal) {
             try {
                 createInvite(inviteCode, id)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // No crítico: sin invite, otros no pueden unirse por código.
             }
@@ -105,6 +107,8 @@ class HouseholdRepository(
         //    devolverlo tal cual y refrescar la caché local.
         val existing = try {
             getHousehold(personalId)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }

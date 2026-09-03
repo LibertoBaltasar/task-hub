@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -179,7 +181,7 @@ data class EditTaskScreen(
                     }) { Text(s("task_date_accept")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDatePicker = false }) { Text(s("household_cancel")) }
+                    TextButton(onClick = { showDatePicker = false }) { Text(s("common_cancel")) }
                 }
             ) {
                 DatePicker(state = datePickerState)
@@ -357,7 +359,7 @@ data class EditTaskScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("+")
+                                Icon(Icons.Default.Add, contentDescription = null)
                             }
                         }
                     }
@@ -390,7 +392,7 @@ data class EditTaskScreen(
                                         contentColor = MaterialTheme.colorScheme.error
                                     )
                                 ) {
-                                    Text("✕")
+                                    Icon(Icons.Default.Close, contentDescription = null)
                                 }
                             }
                         }
@@ -598,7 +600,7 @@ data class EditTaskScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Text("+")
+                                Icon(Icons.Default.Add, contentDescription = null)
                             }
                         }
                     }
@@ -616,7 +618,11 @@ data class EditTaskScreen(
                                         onClick = { tags = tags - tag },
                                         label = { Text(tag) },
                                         trailingIcon = {
-                                            Text("✕", style = MaterialTheme.typography.labelSmall)
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(FilterChipDefaults.IconSize)
+                                            )
                                         }
                                     )
                                 }
@@ -641,7 +647,8 @@ data class EditTaskScreen(
                                     onClick = {
                                         tags = if (tag in tags) tags - tag else tags + tag
                                     },
-                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
+                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+                                    leadingIcon = filterChipCheckIcon(tag in tags)
                                 )
                             }
                         }
@@ -778,7 +785,7 @@ data class EditTaskScreen(
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
-                                                    Text("▼")
+                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
                                                 }
 
                                                 DropdownMenu(

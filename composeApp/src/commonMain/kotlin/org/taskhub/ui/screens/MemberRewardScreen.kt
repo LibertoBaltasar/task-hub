@@ -261,7 +261,7 @@ data class MemberRewardScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showConfirmDialog = false }) {
-                        Text(s("household_cancel"))
+                        Text(s("common_cancel"))
                     }
                 }
             )

@@ -51,6 +51,7 @@ import org.taskhub.ui.models.*
 import org.taskhub.ui.components.EmptyTasksIllustration
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.filterChipCheckIcon
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.components.TaskHubTopBar
@@ -1257,7 +1258,8 @@ private fun FilterChipsRow(
                     selected = currentFilter == filter,
                     onClick = { onFilterChange(filter) },
                     label = { Text(label) },
-                    colors = statusFilterColors
+                    colors = statusFilterColors,
+                    leadingIcon = filterChipCheckIcon(currentFilter == filter)
                 )
             }
         }
@@ -1279,7 +1281,8 @@ private fun FilterChipsRow(
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                             selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
+                        ),
+                        leadingIcon = filterChipCheckIcon(tagFilter != null)
                     )
                     DropdownMenu(
                         expanded = tagExpanded,

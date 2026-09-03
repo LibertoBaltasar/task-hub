@@ -176,6 +176,10 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         placeholder = { Text(s("create_reward_title_placeholder")) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        isError = title.isBlank(),
+                        supportingText = {
+                            if (title.isBlank()) Text(s("create_task_title_required"))
+                        },
                         colors = taskHubTextFieldColors()
                     )
 
@@ -205,6 +209,10 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         prefix = { Text("⭐ ") },
+                        isError = (costText.toIntOrNull() ?: 0) <= 0,
+                        supportingText = {
+                            if ((costText.toIntOrNull() ?: 0) <= 0) Text(s("create_task_points_error_positive"))
+                        },
                         colors = taskHubTextFieldColors()
                     )
 

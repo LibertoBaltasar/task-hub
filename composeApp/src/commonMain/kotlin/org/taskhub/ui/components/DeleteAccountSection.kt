@@ -40,6 +40,12 @@ fun DeleteAccountSection(
     var showDeleteAccountConfirm by remember { mutableStateOf(false) }
     var showDeleteAccountConfirm2 by remember { mutableStateOf(false) }
     var isDeletingAccount by remember { mutableStateOf(false) }
+    // Distingue el paso de reautenticación (puede relanzar el selector de
+    // cuenta de Google) del borrado en sí — antes ambos mostraban el mismo
+    // texto "Eliminando cuenta…", confundiendo al usuario cuando de repente
+    // aparecía un selector de cuentas sin explicación (panel de revisión
+    // 2026-09-03, Experto 5, IMPORTANTE #1).
+    var isReauthenticating by remember { mutableStateOf(false) }
     var deleteAccountError by remember { mutableStateOf<String?>(null) }
 
     Text(
@@ -77,7 +83,7 @@ fun DeleteAccountSection(
                 strokeWidth = 2.dp
             )
             Spacer(Modifier.width(8.dp))
-            Text(s("settings_delete_account_deleting"))
+            Text(s(if (isReauthenticating) "settings_delete_account_reauthenticating" else "settings_delete_account_deleting"))
         } else {
             // Icono real en vez del emoji que llevaba el texto de AppStrings
             // — coherente con el patrón ya usado para borrar en
@@ -118,7 +124,10 @@ fun DeleteAccountSection(
                     // Reautenticación reciente ANTES del borrado irreversible
                     // — panel v4, Experto 9. No-op (true) para cuentas
                     // anónimas, ver KDoc de [GoogleAuthManager.reauthenticateForDeletion].
-                    if (!authManager.reauthenticateForDeletion()) {
+                    isReauthenticating = true
+                    val reauthOk = authManager.reauthenticateForDeletion()
+                    isReauthenticating = false
+                    if (!reauthOk) {
                         isDeletingAccount = false
                         deleteAccountError = s("settings_delete_account_reauth_error")
                         return@launch
