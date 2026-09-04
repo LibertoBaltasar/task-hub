@@ -214,7 +214,17 @@ data class TaskAssignmentResponse(
     val onTime: Boolean? = null,
     val assignedAt: Long = 0,
     /** ID del evento en Google Calendar vinculado, o null si no está sincronizada. */
-    val googleEventId: String? = null
+    val googleEventId: String? = null,
+    /**
+     * `updateTime` de Firestore de ESTE documento en el momento en que se
+     * leyó (RFC3339, tal cual lo devuelve la API REST) — usado como
+     * `currentDocument.updateTime` (precondition de concurrencia optimista)
+     * al cerrar asignaciones hermanas en `completeTask`/`completeAssignment`
+     * (panel de revisión 2026-09-03/04, Experto 12). `null` si el documento
+     * no se leyó de Firestore (p.ej. instancias construidas en memoria tras
+     * un `assignTask`).
+     */
+    val updateTime: String? = null
 )
 
 // ── Comments DTO ─────────────────────────────────────────
@@ -224,7 +234,15 @@ data class CommentResponse(
     val id: String,
     val authorName: String,
     val text: String,
-    val createdAt: Long = 0
+    val createdAt: Long = 0,
+    /**
+     * ID del miembro autor, para poder anonimizar `authorName` al expulsar/
+     * abandonar (mismo patrón que [MessageResponse.memberId]) — panel de
+     * revisión 2026-09-03/04, Experto 2/10. `null` en comentarios creados
+     * ANTES de este campo: no hay forma de retro-migrarlos (el documento no
+     * guardaba memberId), así que quedan sin poder anonimizarse.
+     */
+    val memberId: String? = null
 )
 
 // ── Message DTO ────────────────────────────────────────────

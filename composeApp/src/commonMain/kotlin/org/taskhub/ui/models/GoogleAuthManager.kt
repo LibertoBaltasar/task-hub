@@ -106,10 +106,30 @@ class GoogleAuthManager(
         launchGoogleSignIn()
     }
 
-    /** Cierra sesión: vuelve al modo anónimo. */
+    /**
+     * Cierra sesión: vuelve al modo anónimo.
+     *
+     * Limpia también el `fcmToken` del perfil global de la cuenta que cierra
+     * sesión (best-effort, en segundo plano) — sin esto, en un dispositivo
+     * familiar compartido el token de push quedaba asociado indefinidamente
+     * a la cuenta anterior tras cerrar sesión localmente (panel de revisión
+     * 2026-09-03/04, Experto 10, NUEVO).
+     */
     fun signOut() {
+        val uidBeingSignedOut = settingsStore.getGoogleUid()
         settingsStore.clearGoogleAuth()
         _state.value = GoogleAuthState.Anonymous
+        if (uidBeingSignedOut != null) {
+            scope.launch {
+                try {
+                    repo.clearFcmToken(uidBeingSignedOut)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // No crítico: el token se sobrescribirá en el próximo login de esa cuenta.
+                }
+            }
+        }
     }
 
     /**

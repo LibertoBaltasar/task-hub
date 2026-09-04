@@ -3,7 +3,33 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v6)
+    //  Task Hub — Reglas de seguridad (v7)
+    //
+    //  v7 editada 2026-09-04 (encargo "correcciones integridad/seguridad/
+    //  privacidad" tras el panel de revisión 2026-09-03/04, Experto 9,
+    //  punto 11: "rewardRedemptions/taskHistory sin validar campos en
+    //  create"). Añade validación de datos a las dos únicas escrituras de
+    //  `create` que quedaban sin restricción de CAMPOS (ya estaban acotadas a
+    //  isMember(hid)/isOwner(hid), pero un cliente modificado podía mandar
+    //  cualquier `memberId`/`pointsSpent`/`points` vía REST directo):
+    //   - taskHistory/{thid} create: `memberId` debe ser un miembro real del
+    //     hogar (existsMemberDoc) y `points` no puede ser negativo. NO se
+    //     exige `memberId == request.auth.uid`: "cualquier miembro puede
+    //     completar cualquier tarea" es un comportamiento de producto ya
+    //     existente (ver completeTask/completeAssignment — un padre/madre
+    //     completa tareas en nombre de perfiles "hijo/a" sin cuenta propia
+    //     desde el mismo dispositivo/sesión), así que esa igualdad
+    //     rompería ese flujo real.
+    //   - rewardRedemptions/{rrid} create: `memberId` debe ser un miembro
+    //     real del hogar, y `pointsSpent` debe coincidir EXACTAMENTE con el
+    //     `cost` real de la recompensa referenciada (`rewardId`) en ese
+    //     instante — cierra la vía de canjear con menos puntos de los que
+    //     cuesta la recompensa manipulando el payload REST.
+    //  Limitación conocida (no resuelta aquí, ver "limitación arquitectónica"
+    //  más abajo): sigue sin poder validarse que `points`/`pointsSpent`
+    //  reflejen una tarea/recompensa concreta correctamente calculada (p.ej.
+    //  con penalización aplicada) sin un backend — solo que no sean
+    //  negativos / no superen el coste real.
     //
     //  v6 editada 2026-09-02 (encargo "PROPUESTAS panel v4 —
     //  privacidad/seguridad", punto 7: Experto 9 hallazgo #2). Desplegada en
@@ -176,6 +202,12 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/households/$(hid)/members/$(request.auth.uid));
     }
 
+    // ¿Existe un miembro con este ID en el hogar? (no exige que sea el
+    // usuario autenticado — ver v7, taskHistory/rewardRedemptions create).
+    function existsMemberDoc(hid, mid) {
+      return exists(/databases/$(database)/documents/households/$(hid)/members/$(mid));
+    }
+
     // Miembro con rol "admin" vinculado a una cuenta (distinto del owner).
     function isAdminMember(hid) {
       return isMember(hid) && myMemberDoc(hid).data.role == "admin";
@@ -320,7 +352,12 @@ service cloud.firestore {
     // tarea, en su propio dispositivo), pero editar/borrar una entrada ya
     // existente (p.ej. para manipular StatsScreen) se restringe a admin/owner.
     match /households/{hid}/taskHistory/{thid} {
-      allow read, create: if isMember(hid) || isOwner(hid);
+      allow read: if isMember(hid) || isOwner(hid);
+      // v7: memberId debe ser un miembro real del hogar y points no puede
+      // ser negativo — ver cabecera del archivo (Experto 9, punto 11).
+      allow create: if (isMember(hid) || isOwner(hid))
+        && existsMemberDoc(hid, request.resource.data.memberId)
+        && request.resource.data.points >= 0;
       allow update: if isTrusted(hid);
       // delete: admin/owner puede borrar cualquier registro; además, el
       // propio miembro puede borrar SU PROPIO registro (memberId ==
@@ -350,7 +387,14 @@ service cloud.firestore {
       allow write: if isTrusted(hid);
     }
     match /households/{hid}/rewardRedemptions/{rrid} {
-      allow read, create: if isMember(hid) || isOwner(hid);
+      allow read: if isMember(hid) || isOwner(hid);
+      // v7: memberId debe ser un miembro real del hogar y pointsSpent debe
+      // coincidir con el cost real de la recompensa referenciada — ver
+      // cabecera del archivo (Experto 9, punto 11).
+      allow create: if (isMember(hid) || isOwner(hid))
+        && existsMemberDoc(hid, request.resource.data.memberId)
+        && request.resource.data.pointsSpent
+           == get(/databases/$(database)/documents/households/$(hid)/rewards/$(request.resource.data.rewardId)).data.cost;
       allow update, delete: if isTrusted(hid);
     }
     match /households/{hid}/members/{mid}/achievements/{achid} {

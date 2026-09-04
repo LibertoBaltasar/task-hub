@@ -747,7 +747,8 @@ class TaskRepository(
             pointsAwarded = f["pointsAwarded"]?.integerValue?.toIntOrNull(),
             onTime = f["onTime"]?.booleanValue,
             assignedAt = f["assignedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            googleEventId = f["googleEventId"]?.stringValue
+            googleEventId = f["googleEventId"]?.stringValue,
+            updateTime = doc.updateTime
         )
     }
 
@@ -755,15 +756,17 @@ class TaskRepository(
     //  Comments (subcollection under households/{id}/tasks/{taskId})
     // ────────────────────────────────────────────────────────
 
-    /** Add a comment to a task. */
+    /** Add a comment to a task. [memberId] identifica al autor (ver [CommentResponse.memberId]). */
     suspend fun addComment(
         householdId: String,
         taskId: String,
+        memberId: String,
         authorName: String,
         text: String
     ): CommentResponse {
         val now = Clock.System.now().toEpochMilliseconds()
         val fields = mapOf(
+            "memberId" to FirestoreValue(stringValue = memberId),
             "authorName" to FirestoreValue(stringValue = authorName),
             "text" to FirestoreValue(stringValue = text),
             "createdAt" to FirestoreValue(integerValue = now.toString())
@@ -778,7 +781,7 @@ class TaskRepository(
         }.body()
 
         val id = extractDocId(response.name, "addComment")
-        return CommentResponse(id, authorName, text, now)
+        return CommentResponse(id, authorName, text, now, memberId)
     }
 
     /** List comments for a task. */
@@ -792,14 +795,72 @@ class TaskRepository(
             tryAuthOrApiKey()
         }.body()
 
-        return response.documents.map { doc ->
-            val f = doc.fields
-            CommentResponse(
-                id = extractDocId(doc.name, "getComments"),
-                authorName = f["authorName"]?.stringValue ?: "",
-                text = f["text"]?.stringValue ?: "",
-                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
-            )
+        return response.documents.map { doc -> toCommentResponse(doc) }
+    }
+
+    private fun toCommentResponse(doc: FirestoreDocumentResponse): CommentResponse {
+        val f = doc.fields
+        return CommentResponse(
+            id = extractDocId(doc.name, "getComments"),
+            authorName = f["authorName"]?.stringValue ?: "",
+            text = f["text"]?.stringValue ?: "",
+            createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
+            memberId = f["memberId"]?.stringValue
+        )
+    }
+
+    /**
+     * Anonimiza `authorName` de los comentarios de tarea de los miembros en
+     * [memberIds] — mismo patrón que [HouseholdRepository.anonymizeMemberMessages],
+     * aplicado a comentarios en vez de mensajes de chat (panel de revisión
+     * 2026-09-03/04, Experto 2/10). Los comentarios son subcolección de CADA
+     * tarea (no del hogar), así que hay que recorrer todas las tareas del
+     * hogar; en paralelo por tarea (mismo motivo que [getAllAssignments]:
+     * evita un barrido secuencial en hogares con muchas tareas).
+     *
+     * Best-effort por comentario y por tarea: un fallo puntual no aborta el
+     * resto. Los comentarios sin `memberId` (creados antes de este campo, ver
+     * KDoc de [CommentResponse.memberId]) no se pueden identificar como del
+     * miembro anonimizado y quedan sin tocar — limitación conocida, no
+     * retro-migrable.
+     */
+    suspend fun anonymizeMemberComments(householdId: String, memberIds: Set<String>, anonymizedName: String) {
+        if (memberIds.isEmpty()) return
+        val tasks = try {
+            getTasks(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        coroutineScope {
+            tasks.map { task ->
+                async {
+                    val comments = try {
+                        getComments(householdId, task.id)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    comments.filter { it.memberId in memberIds }.forEach { comment ->
+                        try {
+                            client.patch(
+                                "$baseUrl/households/$householdId/tasks/${task.id}/comments/${comment.id}"
+                            ) {
+                                withAuth()
+                                updateMaskFieldPaths("authorName")
+                                contentType(ContentType.Application.Json)
+                                setBody(FirestoreDocument(mapOf("authorName" to FirestoreValue(stringValue = anonymizedName))))
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // No crítico: se prioriza anonimizar el resto de comentarios.
+                        }
+                    }
+                }
+            }.awaitAll()
         }
     }
 }

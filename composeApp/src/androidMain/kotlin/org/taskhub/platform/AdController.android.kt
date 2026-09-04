@@ -3,6 +3,8 @@ package org.taskhub.platform
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.RequestConfiguration
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import org.taskhub.ads.AdConfig
@@ -105,6 +107,34 @@ object AdControllerImpl : AdController {
     }
 
     override fun isBannerEnabled(): Boolean = AdConfig.bannerEnabled
+
+    /**
+     * Actualiza la `RequestConfiguration` global de AdMob por sesión, según
+     * el rol del perfil activo — plumbing para el hallazgo "señalización
+     * AdMob por sesión" (panel de revisión 2026-09-03/04, Experto 10).
+     *
+     * DELIBERADAMENTE no relaja el TFCD a UNSPECIFIED/FALSE cuando
+     * [isChildProfile] es `false`: `TaskHubApplication.onCreate` ya fija
+     * `TAG_FOR_CHILD_DIRECTED_TREATMENT_TRUE` de forma FIJA y GLOBAL como fix
+     * CRÍTICO explícitamente "con independencia de qué perfil esté activo en
+     * el dispositivo" (mismo panel, mismo experto) — un dispositivo familiar
+     * compartido puede tener un perfil admin activo un momento y uno "child"
+     * al siguiente, y AdMob no permite variar el TFCD por `AdRequest`
+     * individual, solo por sesión/config global. Bajar la señal cuando un
+     * admin está activo reabriría exactamente el hueco que ese fix CRÍTICO
+     * cerró. Esta función deja el plumbing listo (wiring desde el rol del
+     * miembro activo) para si el producto decide en el futuro relajarlo con
+     * más garantías (p.ej. un modo "solo admin" verificado); hoy reafirma
+     * TRUE siempre, ignorando [isChildProfile] a propósito.
+     */
+    override fun updateChildDirectedSignal(isChildProfile: Boolean) {
+        MobileAds.setRequestConfiguration(
+            RequestConfiguration.Builder()
+                .setTagForChildDirectedTreatment(RequestConfiguration.TAG_FOR_CHILD_DIRECTED_TREATMENT_TRUE)
+                .setMaxAdContentRating(RequestConfiguration.MAX_AD_CONTENT_RATING_G)
+                .build()
+        )
+    }
 }
 
 actual fun createAdController(): AdController = AdControllerImpl

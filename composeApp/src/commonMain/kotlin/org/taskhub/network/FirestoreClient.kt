@@ -95,10 +95,21 @@ class FirestoreClient(
      *
      * POST https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=API_KEY
      * Body: {"returnSecureToken":true}
+     *
+     * Devuelve el [bearerToken] vigente — leído DENTRO de la sección protegida
+     * por [authMutex], no por el caller después de que `withLock` ya haya
+     * soltado el lock (panel de revisión 2026-09-03/04, Experto 6, NUEVO):
+     * antes los 3 llamadores ([withAuth]/[tryAuthOrApiKey]/
+     * [deleteFirebaseAccount]) leían `bearerToken` en su propio cuerpo, fuera
+     * de cualquier mutex, así que una ráfaga de llamadas concurrentes podía
+     * intercalarse entre "esta corrutina terminó `ensureAuth()`" y "esta
+     * corrutina lee `bearerToken`" con OTRA corrutina que también estuviera
+     * refrescando el token — `@Volatile` garantiza visibilidad de memoria,
+     * pero no que el valor leído sea el que ESTA llamada acaba de asegurar.
      */
-    suspend fun ensureAuth() = authMutex.withLock {
+    suspend fun ensureAuth(): String? = authMutex.withLock {
         val now = Clock.System.now().toEpochMilliseconds()
-        if (bearerToken != null && now < tokenExpiry) return@withLock
+        if (bearerToken != null && now < tokenExpiry) return@withLock bearerToken
 
         // 1) Restaurar sesión de Google si existe (UID estable del login Google).
         val googleRefresh = settingsStore.getGoogleRefreshToken()
@@ -109,7 +120,7 @@ class FirestoreClient(
                 cachedLocalId = refreshed.userId
                 tokenExpiry = refreshed.tokenExpiry
                 settingsStore.setGoogleRefreshToken(refreshed.refreshToken ?: googleRefresh)
-                return@withLock
+                return@withLock bearerToken
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -127,7 +138,7 @@ class FirestoreClient(
                 cachedLocalId = refreshed.userId
                 tokenExpiry = refreshed.tokenExpiry
                 settingsStore.saveAnonymousAuth(refreshed.refreshToken ?: savedRefresh, refreshed.userId)
-                return@withLock
+                return@withLock bearerToken
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -158,6 +169,7 @@ class FirestoreClient(
         // expiresIn is in seconds. Refresh 5 minutes before actual expiry.
         tokenExpiry = now + (expiresIn * 1000) - 300_000
         settingsStore.saveAnonymousAuth(refreshToken, localId)
+        bearerToken
     }
 
     /**
@@ -217,8 +229,8 @@ class FirestoreClient(
      * Calls [ensureAuth] first so the token is always fresh.
      */
     suspend fun HttpRequestBuilder.withAuth() {
-        ensureAuth()
-        bearerToken?.let { header("Authorization", "Bearer $it") }
+        val token = ensureAuth()
+        token?.let { header("Authorization", "Bearer $it") }
     }
 
     /**
@@ -227,8 +239,8 @@ class FirestoreClient(
      */
     suspend fun HttpRequestBuilder.tryAuthOrApiKey() {
         try {
-            ensureAuth()
-            bearerToken?.let { header("Authorization", "Bearer $it") }
+            val token = ensureAuth()
+            token?.let { header("Authorization", "Bearer $it") }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -268,8 +280,7 @@ class FirestoreClient(
      * Body: {"idToken": "..."}
      */
     suspend fun deleteFirebaseAccount() {
-        ensureAuth()
-        val token = bearerToken
+        val token = ensureAuth()
             ?: throw IllegalStateException("No hay sesión activa para eliminar la cuenta")
         client.post("https://identitytoolkit.googleapis.com/v1/accounts:delete?key=$apiKey") {
             contentType(ContentType.Application.Json)

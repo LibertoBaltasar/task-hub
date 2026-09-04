@@ -252,6 +252,21 @@ class TaskScreenModel(
                 _allTags.value = tagSet.toList().sorted()
 
                 _listState.value = TaskListUiState.Success(tasks, assignments, members)
+
+                // Señalización AdMob por sesión según el rol del perfil activo
+                // — ver KDoc de [AdController.updateChildDirectedSignal].
+                // loadTasks() se dispara en cada apertura de la lista de
+                // tareas (tras setCurrentMemberId con el perfil activo), así
+                // que es el punto más temprano/central para refrescar la
+                // señal. Best-effort: nunca debe interrumpir la carga.
+                try {
+                    val myRole = members.find { it.id == _currentMemberId.value }?.role
+                    if (myRole != null) {
+                        adController.updateChildDirectedSignal(myRole == "child")
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 // Relanzar: si no, una loadTasks() más reciente que ya canceló este
                 // Job ve su propia cancelación tratada como un error normal aquí
@@ -577,6 +592,24 @@ class TaskScreenModel(
                     state.previousLastCompletedDate,
                     state.previousCompletedBy
                 )
+                // Revertir las asignaciones que completeTask marcó "completed"
+                // (propia + hermanas) y borrar la del siguiente ciclo si ya se
+                // había regenerado — ver KDoc de
+                // [FirestoreRepository.undoTaskCompletionAssignments] (panel
+                // de revisión 2026-09-03/04, Experto 2/8): sin esto, deshacer
+                // solo revertía la tarea/puntos/historial, dejando
+                // asignaciones "completed" huérfanas para siempre. Best-effort:
+                // requiere el task fresco para conocer frequency/recurrencia.
+                if (state.completedAt != 0L) {
+                    try {
+                        val task = repo.getTask(state.householdId, state.taskId)
+                        repo.undoTaskCompletionAssignments(
+                            state.householdId, state.taskId, state.completedAt, task
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) { }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -732,6 +765,18 @@ class TaskScreenModel(
                 }
                 _currentMemberId.value = myMemberId
                 _myAssignment.value = assignments.find { it.memberId == myMemberId }
+
+                // Señalización AdMob por sesión según el rol del perfil activo
+                // — ver KDoc de [AdController.updateChildDirectedSignal].
+                // Best-effort: nunca debe interrumpir la carga del detalle.
+                try {
+                    val myRole = members.find { it.id == myMemberId }?.role
+                    if (myRole != null) {
+                        adController.updateChildDirectedSignal(myRole == "child")
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FirestoreException) {
@@ -929,8 +974,9 @@ class TaskScreenModel(
         screenModelScope.launch {
             _commentsState.value = CommentsUiState.Loading
             try {
+                val memberId = _currentMemberId.value ?: repo.resolveCurrentMember(householdId)
                 val authorName = resolveCurrentMemberName(householdId)
-                repo.addComment(householdId, taskId, authorName, text)
+                repo.addComment(householdId, taskId, memberId, authorName, text)
                 // Reload comments
                 loadComments(householdId, taskId)
             } catch (e: CancellationException) {
@@ -1060,8 +1106,14 @@ class TaskScreenModel(
         val currentHour = now.toLocalDateTime(tz).hour
 
         val assignments = repo.getAllAssignments(householdId)
+        // pointsAwarded > 0 excluye las compleciones "fantasma" (asignaciones
+        // hermanas cerradas con pointsAwarded=0 al completar el ciclo para
+        // todos los miembros asignados, ver StatsScreenModel.computeStats) —
+        // sin este filtro, un miembro podía desbloquear logros permanentes
+        // (p.ej. "10 tareas completadas") sin haber completado ninguna
+        // (panel de revisión 2026-09-03/04, Experto 8, NUEVO).
         val completedCount = assignments.count {
-            it.memberId == member.id && it.status == "completed"
+            it.memberId == member.id && it.status == "completed" && (it.pointsAwarded ?: 0) > 0
         }
 
         val alreadyUnlocked = repo.getMemberAchievements(householdId, member.id)

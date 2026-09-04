@@ -65,9 +65,20 @@ class MemberRepository(
      * Invalida la entrada de [currentMemberCache] de un hogar. La llaman
      * `deleteHousehold`/`leaveHousehold` (se quedan en [FirestoreRepository],
      * ver KDoc de la clase) tras borrar/abandonar el hogar.
+     *
+     * Protegida por [currentMemberMutex] (mismo mutex que [resolveCurrentMember]):
+     * antes era una escritura (`MutableMap.remove`) totalmente desprotegida
+     * sobre una `mutableMapOf` no thread-safe, mientras que [resolveCurrentMember]
+     * sí serializaba sus propias lecturas/escrituras — una invalidación
+     * concurrente con una resolución en curso podía dejar el mapa en un
+     * estado inconsistente (panel de revisión 2026-09-03/04, Experto 6:
+     * matiz sobre v5, que solo documentaba lecturas fuera de mutex, no esta
+     * escritura).
      */
-    fun invalidateCurrentMember(householdId: String) {
-        currentMemberCache.remove(householdId)
+    suspend fun invalidateCurrentMember(householdId: String) {
+        currentMemberMutex.withLock {
+            currentMemberCache.remove(householdId)
+        }
     }
 
     // ────────────────────────────────────────────────────────

@@ -108,9 +108,17 @@ private fun computeStats(
     // assignments capture completeAssignment() calls
     val memberHistory = history.filter { it.memberId == member.id }
 
-    // Tasks completed by member (from assignments)
+    // Tasks completed by member (from assignments). pointsAwarded > 0 excluye
+    // las compleciones "fantasma" que completeTask/completeAssignment crean
+    // en las asignaciones HERMANAS al cerrar el ciclo para todos los
+    // miembros asignados (pointsAwarded=0 porque los puntos ya se otorgaron
+    // solo a quien completó realmente) — sin este filtro, inflaban el
+    // recuento de tareas completadas de miembros que no hicieron nada (panel
+    // de revisión 2026-09-03/04, Experto 2/8).
     val memberAssignments = assignments.filter { it.memberId == member.id }
-    val completedAssignments = memberAssignments.filter { it.status == "completed" && it.completedAt != null }
+    val completedAssignments = memberAssignments.filter {
+        it.status == "completed" && it.completedAt != null && (it.pointsAwarded ?: 0) > 0
+    }
 
     // Combine both sources for per-day counts. taskId incluido para que la
     // distribución por categoría (más abajo) pueda contar TODAS las

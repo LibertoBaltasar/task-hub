@@ -77,17 +77,27 @@ class SettingsStore(
     // ── Google Calendar ──────────────────────────────────
 
     fun hasGoogleLinked(): Boolean =
-        settings.getStringOrNull(KEY_GOOGLE_ACCESS_TOKEN) != null
+        getGoogleAccessToken() != null
 
+    /**
+     * Cifrado en [secureStore] — ver [getGoogleRefreshToken] (mismo mecanismo
+     * y migración automática de un valor legado en texto plano). Antes se
+     * guardaba sin cifrar en [settings] pese a ser un token OAuth real con
+     * scope de Calendar (panel de revisión 2026-09-03/04, Experto 9): de vida
+     * corta (~1h) y mitigado parcialmente por excluir `sharedpref` de los
+     * backups de Android, pero sigue siendo un secreto en texto plano en
+     * disco mientras dura.
+     */
     fun getGoogleAccessToken(): String? =
-        settings.getStringOrNull(KEY_GOOGLE_ACCESS_TOKEN)
+        secureStore.getString(KEY_GOOGLE_ACCESS_TOKEN) ?: migrateLegacyToken(KEY_GOOGLE_ACCESS_TOKEN)
 
     fun setGoogleAccessToken(token: String?) {
         if (token != null) {
-            settings.putString(KEY_GOOGLE_ACCESS_TOKEN, token)
+            secureStore.putString(KEY_GOOGLE_ACCESS_TOKEN, token)
         } else {
-            settings.remove(KEY_GOOGLE_ACCESS_TOKEN)
+            secureStore.remove(KEY_GOOGLE_ACCESS_TOKEN)
         }
+        settings.remove(KEY_GOOGLE_ACCESS_TOKEN) // por si quedaba el valor legado sin cifrar
     }
 
     /** Interruptor del usuario para la sincronización automática con Calendar. */
@@ -99,6 +109,7 @@ class SettingsStore(
 
     /** Desvincula Calendar: borra el token, los calendarIds cacheados y desactiva el sync. */
     fun unlinkGoogleCalendar() {
+        secureStore.remove(KEY_GOOGLE_ACCESS_TOKEN)
         settings.remove(KEY_GOOGLE_ACCESS_TOKEN)
         settings.remove(KEY_CALENDAR_IDS)
         settings.putBoolean(KEY_CALENDAR_SYNC_ENABLED, false)
