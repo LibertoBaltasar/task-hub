@@ -389,26 +389,40 @@ class FirestoreRepository(
         val taskIds = listDocumentIds("$householdUrl/tasks")
         val memberIds = listDocumentIds("$householdUrl/members")
 
+        // Un único Semaphore compartido por TODO el cascade-delete (no uno por
+        // llamada a deleteAllDocuments) — antes cada llamada creaba el suyo
+        // propio, así que el límite de MAX_CONCURRENT_DELETES no se respetaba
+        // de verdad: con hasta 20 taskJobs en vuelo a la vez, cada uno con su
+        // propio semáforo interno de 20, el pico real de DELETE concurrentes
+        // podía llegar a ~400 en vez de 20 (panel de revisión 2026-09-04,
+        // Experto 2). No se envuelve el `async` de cada tarea/miembro en su
+        // propio permiso (como antes) porque compartir el mismo Semaphore en
+        // dos niveles anidados (uno por tarea + uno por documento dentro de
+        // esa tarea) puede autobloquearse: si las 20 tareas en vuelo agotan
+        // los permisos del nivel exterior, sus llamadas anidadas a
+        // deleteAllDocuments se quedan esperando permisos que nunca se
+        // liberan porque los tenedores están, a su vez, esperando permisos
+        // del mismo semáforo. Compartir el límite solo al nivel de la
+        // petición HTTP individual (dentro de deleteAllDocuments) evita el
+        // interbloqueo y sigue acotando el pico real de conexiones.
+        val limiter = Semaphore(MAX_CONCURRENT_DELETES)
         val subcollectionResults = coroutineScope {
-            val fanOutLimiter = Semaphore(MAX_CONCURRENT_DELETES)
             val taskJobs = taskIds.map { tid ->
                 async {
-                    fanOutLimiter.withPermit {
-                        val okAssignments = deleteAllDocuments("$householdUrl/tasks/$tid/assignments")
-                        val okComments = deleteAllDocuments("$householdUrl/tasks/$tid/comments")
-                        okAssignments && okComments
-                    }
+                    val okAssignments = deleteAllDocuments("$householdUrl/tasks/$tid/assignments", limiter = limiter)
+                    val okComments = deleteAllDocuments("$householdUrl/tasks/$tid/comments", limiter = limiter)
+                    okAssignments && okComments
                 }
             }
             val memberJobs = memberIds.map { mid ->
-                async { fanOutLimiter.withPermit { deleteAllDocuments("$householdUrl/members/$mid/achievements") } }
+                async { deleteAllDocuments("$householdUrl/members/$mid/achievements", limiter = limiter) }
             }
             val flatJobs = listOf(
-                async { deleteAllDocuments("$householdUrl/taskHistory") },
-                async { deleteAllDocuments("$householdUrl/notifications") },
-                async { deleteAllDocuments("$householdUrl/rewardRedemptions") },
-                async { deleteAllDocuments("$householdUrl/rewards") },
-                async { deleteAllDocuments("$householdUrl/messages") }
+                async { deleteAllDocuments("$householdUrl/taskHistory", limiter = limiter) },
+                async { deleteAllDocuments("$householdUrl/notifications", limiter = limiter) },
+                async { deleteAllDocuments("$householdUrl/rewardRedemptions", limiter = limiter) },
+                async { deleteAllDocuments("$householdUrl/rewards", limiter = limiter) },
+                async { deleteAllDocuments("$householdUrl/messages", limiter = limiter) }
             )
             (taskJobs + memberJobs + flatJobs).awaitAll()
         }
@@ -416,8 +430,8 @@ class FirestoreRepository(
 
         val parentCollectionResults = coroutineScope {
             listOf(
-                async { deleteAllDocuments("$householdUrl/tasks", knownIds = taskIds) },
-                async { deleteAllDocuments("$householdUrl/members", knownIds = memberIds) }
+                async { deleteAllDocuments("$householdUrl/tasks", knownIds = taskIds, limiter = limiter) },
+                async { deleteAllDocuments("$householdUrl/members", knownIds = memberIds, limiter = limiter) }
             ).awaitAll()
         }
         if (parentCollectionResults.any { !it }) hadFailures = true
@@ -432,6 +446,9 @@ class FirestoreRepository(
         taskCache.clearHousehold(householdId)
         memberRepository.invalidateCurrentMember(householdId)
     }
+
+    /** Invalida toda la caché de miembro actual (todos los hogares) — ver [MemberRepository.invalidateAllCurrentMembers]. */
+    suspend fun invalidateAllCurrentMembers() = memberRepository.invalidateAllCurrentMembers()
 
     /**
      * Lista los IDs de todos los documentos de una colección — ver
@@ -456,11 +473,20 @@ class FirestoreRepository(
      * (`Semaphore`) — antes lanzaba un `async` por documento sin límite, y
      * una colección `taskHistory` real de miles de documentos podía disparar
      * miles de conexiones HTTP concurrentes de golpe (panel v7, #20).
+     *
+     * [limiter] es compartido entre todas las llamadas de un mismo
+     * `deleteHousehold` (ver esa función) para que el límite sea real a
+     * nivel de cascade-delete completo, no por colección — el valor por
+     * defecto (uno nuevo por llamada) solo aplica si se invoca de forma
+     * aislada fuera de ese flujo.
      */
-    private suspend fun deleteAllDocuments(collectionUrl: String, knownIds: List<String>? = null): Boolean {
+    private suspend fun deleteAllDocuments(
+        collectionUrl: String,
+        knownIds: List<String>? = null,
+        limiter: Semaphore = Semaphore(MAX_CONCURRENT_DELETES)
+    ): Boolean {
         val ids = knownIds ?: listDocumentIds(collectionUrl)
         if (ids.isEmpty()) return true
-        val limiter = Semaphore(MAX_CONCURRENT_DELETES)
         return coroutineScope {
             ids.map { id ->
                 async {
@@ -1172,24 +1198,23 @@ class FirestoreRepository(
         val oldMemberId = task.completedBy
         val completedAt = task.lastCompletedDate ?: Clock.System.now().toEpochMilliseconds()
 
-        // 1. Transferir puntos SOLO si había un completer previo registrado.
-        //    (quien marca hecho recibe los puntos; al corregir se mueven de la
-        //    persona anterior a la nueva). Si completedBy era null (tarea legacy
-        //    completada antes de registrar quién), fijamos el nuevo sin tocar
-        //    puntos para no duplicarlos.
-        if (oldMemberId != null && oldMemberId != newMemberId) {
-            addMemberPoints(householdId, oldMemberId, -taskPoints)
-            addMemberPoints(householdId, newMemberId, taskPoints)
-        }
-
-        // 2. Actualizar completedBy en la tarea — con concurrencia optimista
-        //    (panel de revisión 2026-09-03/04, Experto 12, MENOR: antes este
-        //    PATCH era incondicional, así que una edición/compleción
-        //    concurrente de la misma tarea podía perderse silenciosamente).
-        //    Probabilidad real baja (corrección manual, uso esporádico), pero
-        //    el precondition es gratis: si hay conflicto, se propaga como
-        //    fallo normal (el propio ScreenModel ya trata cualquier
-        //    excepción como error recargable, sin reintento automático).
+        // 1. Actualizar completedBy en la tarea PRIMERO — con concurrencia
+        //    optimista (panel de revisión 2026-09-03/04, Experto 12, MENOR:
+        //    antes este PATCH era incondicional, así que una edición/
+        //    compleción concurrente de la misma tarea podía perderse
+        //    silenciosamente). Este paso va ANTES de transferir puntos (al
+        //    revés que en una versión anterior) precisamente para que un
+        //    conflicto aquí aborte limpiamente SIN haber movido puntos
+        //    todavía: si los puntos se transfirieran primero y este PATCH
+        //    fallara, un reintento del usuario (misma corrección, mismo
+        //    oldMemberId/newMemberId) duplicaría la transferencia, porque
+        //    nada en el estado remoto indica que ya se movieron — el mismo
+        //    anti-patrón "reintentar duplica puntos" que completeTask/
+        //    completeAssignment evitan poniendo su PATCH con precondición
+        //    como primer paso (panel de revisión 2026-09-04, Experto 12,
+        //    CRÍTICO). Si hay conflicto, se propaga como fallo normal (el
+        //    propio ScreenModel ya trata cualquier excepción aquí como error
+        //    recargable, sin reintento automático).
         val currentTaskDoc: FirestoreDocumentResponse = client.get(
             "$baseUrl/households/$householdId/tasks/$taskId"
         ) { withAuth() }.body()
@@ -1202,6 +1227,16 @@ class FirestoreRepository(
             setBody(FirestoreDocument(fields))
         }
         taskCache.clearTasks(householdId)
+
+        // 2. Transferir puntos SOLO si había un completer previo registrado.
+        //    (quien marca hecho recibe los puntos; al corregir se mueven de la
+        //    persona anterior a la nueva). Si completedBy era null (tarea legacy
+        //    completada antes de registrar quién), fijamos el nuevo sin tocar
+        //    puntos para no duplicarlos.
+        if (oldMemberId != null && oldMemberId != newMemberId) {
+            addMemberPoints(householdId, oldMemberId, -taskPoints)
+            addMemberPoints(householdId, newMemberId, taskPoints)
+        }
 
         // 3. Reasignar el registro de historial de esa compleción para que las
         //    estadísticas (StatsScreen) sigan coherentes.
@@ -1521,7 +1556,6 @@ class FirestoreRepository(
                 contentType(ContentType.Application.Json)
                 setBody(FirestoreDocument(taskFields))
             }
-            taskCache.clearTasks(householdId)
         } catch (e: CancellationException) {
             throw e
         } catch (e: FirestoreException) {
@@ -1529,8 +1563,16 @@ class FirestoreRepository(
             // Otro dispositivo ya sincronizó el documento de la tarea entre
             // la lectura de arriba y este PATCH — se descarta esta
             // sincronización en vez de sobrescribirla (best-effort, ver
-            // comentario de arriba).
+            // comentario de arriba). El documento remoto cambió igualmente
+            // (por el otro escritor), así que la caché local sigue estando
+            // stale — se invalida abajo, fuera del try, en ambos casos
+            // (panel de revisión 2026-09-04, Experto 12: antes solo se
+            // invalidaba en el camino feliz, dejando una ventana donde una
+            // lectura offline inmediatamente posterior a un conflicto
+            // descartado podía servir `lastCompletedDate`/`completedBy`/
+            // `nextDueAt` obsoletos desde caché).
         }
+        taskCache.clearTasks(householdId)
 
         // Sincronizar el resto de asignaciones "assigned" de este mismo ciclo
         // como completadas — mismo motivo y mismo patrón que el paso 4 de

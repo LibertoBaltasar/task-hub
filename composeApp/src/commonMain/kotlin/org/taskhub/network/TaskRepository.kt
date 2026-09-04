@@ -732,13 +732,13 @@ class TaskRepository(
         householdId: String,
         taskId: String
     ): List<CommentResponse> {
-        val response: FirestoreListResponse = client.get(
+        val documents = client.listAllDocuments(
             "$baseUrl/households/$householdId/tasks/$taskId/comments"
         ) {
             tryAuthOrApiKey()
-        }.body()
+        }
 
-        return response.documents.map { doc -> toCommentResponse(doc) }
+        return documents.map { doc -> toCommentResponse(doc) }
     }
 
     private fun toCommentResponse(doc: FirestoreDocumentResponse): CommentResponse =

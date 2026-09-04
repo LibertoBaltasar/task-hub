@@ -237,6 +237,7 @@ object AppStrings {
             "profile_error_loading_own" to "Error al cargar tu perfil",
             "profile_error_loading" to "Error al cargar el perfil",
             "profile_error_saving" to "Error al guardar el perfil",
+            "profile_default_name" to "Usuario",
             "notification_error_loading" to "Error al cargar notificaciones",
             "task_error_loading" to "Error al cargar tareas",
             "task_error_creating" to "Error al crear tarea",
@@ -248,6 +249,7 @@ object AppStrings {
             "task_error_deleting" to "Error al eliminar tarea",
             "task_comment_error_loading" to "Error al cargar comentarios",
             "task_comment_error_adding" to "Error al añadir comentario",
+            "task_comment_default_author" to "Miembro",
             "calendar_sync_error" to "Error al sincronizar con Google Calendar",
             "household_error_creating" to "Error al crear el espacio",
             "household_error_invalid_invite_code" to "Código de invitación inválido",
@@ -281,7 +283,6 @@ object AppStrings {
             "member_remove_confirm_btn" to "Eliminar",
 
             // Sección de tareas del hogar (HouseholdTaskSection.kt)
-            "household_task_section_error" to "Error al cargar tareas",
             "household_task_section_pending_count" to "%d pendientes",
             "household_task_section_empty_personal" to "No tienes tareas personales",
             "household_task_section_empty_shared" to "No hay tareas pendientes",
@@ -832,6 +833,7 @@ object AppStrings {
             "profile_error_loading_own" to "Error loading your profile",
             "profile_error_loading" to "Error loading profile",
             "profile_error_saving" to "Error saving profile",
+            "profile_default_name" to "User",
             "notification_error_loading" to "Error loading notifications",
             "task_error_loading" to "Error loading tasks",
             "task_error_creating" to "Error creating task",
@@ -843,6 +845,7 @@ object AppStrings {
             "task_error_deleting" to "Error deleting task",
             "task_comment_error_loading" to "Error loading comments",
             "task_comment_error_adding" to "Error adding comment",
+            "task_comment_default_author" to "Member",
             "calendar_sync_error" to "Error syncing with Google Calendar",
             "household_error_creating" to "Error creating space",
             "household_error_invalid_invite_code" to "Invalid invite code",
@@ -871,7 +874,6 @@ object AppStrings {
             "member_remove_confirm_btn" to "Remove",
 
             // Household task section (HouseholdTaskSection.kt)
-            "household_task_section_error" to "Failed to load tasks",
             "household_task_section_pending_count" to "%d pending",
             "household_task_section_empty_personal" to "You have no personal tasks",
             "household_task_section_empty_shared" to "No pending tasks",

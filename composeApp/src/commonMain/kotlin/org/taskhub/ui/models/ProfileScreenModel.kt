@@ -87,7 +87,7 @@ class ProfileScreenModel(
                     _otherProfileState.value = ProfileUiState.Success(profile)
                 } else {
                     _otherProfileState.value = ProfileUiState.Success(
-                        UserProfile(id = userId, displayName = "Usuario")
+                        UserProfile(id = userId, displayName = s("profile_default_name"))
                     )
                 }
             } catch (e: CancellationException) {

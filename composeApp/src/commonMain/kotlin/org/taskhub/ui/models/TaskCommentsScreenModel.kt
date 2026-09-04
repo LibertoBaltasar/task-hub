@@ -97,11 +97,11 @@ class TaskCommentsScreenModel(
     private suspend fun resolveCurrentMemberName(householdId: String, memberId: String): String {
         return try {
             val member = repo.getMembers(householdId).find { it.id == memberId }
-            member?.displayName?.takeIf { it.isNotBlank() } ?: "Miembro"
+            member?.displayName?.takeIf { it.isNotBlank() } ?: s("task_comment_default_author")
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            "Usuario"
+            s("profile_default_name")
         }
     }
 }

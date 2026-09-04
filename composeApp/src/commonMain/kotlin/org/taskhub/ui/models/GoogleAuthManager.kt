@@ -115,11 +115,27 @@ class GoogleAuthManager(
      * familiar compartido el token de push quedaba asociado indefinidamente
      * a la cuenta anterior tras cerrar sesión localmente (panel de revisión
      * 2026-09-03/04, Experto 10, NUEVO).
+     *
+     * También invalida la caché de "miembro actual" de [MemberRepository]
+     * (todos los hogares) — sin esto, en un dispositivo familiar compartido,
+     * tras cerrar sesión de un perfil e iniciar con otro, el `memberId`
+     * cacheado del perfil anterior podía seguir resolviéndose para el mismo
+     * hogar, atribuyendo compleciones/puntos al miembro equivocado (panel de
+     * revisión 2026-09-04, Experto 9/10, NUEVO).
      */
     fun signOut() {
         val uidBeingSignedOut = settingsStore.getGoogleUid()
         settingsStore.clearGoogleAuth()
         _state.value = GoogleAuthState.Anonymous
+        scope.launch {
+            try {
+                repo.invalidateAllCurrentMembers()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // No crítico: la caché se autocorrige en la siguiente resolución.
+            }
+        }
         if (uidBeingSignedOut != null) {
             scope.launch {
                 try {

@@ -81,6 +81,20 @@ class MemberRepository(
         }
     }
 
+    /**
+     * Invalida TODA la caché de miembro actual (todos los hogares). La llama
+     * `GoogleAuthManager.signOut()` — sin esto, en un dispositivo familiar
+     * compartido, tras cerrar sesión de un perfil e iniciar con otro, el
+     * `memberId` cacheado del perfil anterior podía seguir resolviéndose para
+     * el mismo hogar, atribuyendo compleciones/puntos al miembro equivocado
+     * (panel de revisión 2026-09-04, Experto 9/10, NUEVO).
+     */
+    suspend fun invalidateAllCurrentMembers() {
+        currentMemberMutex.withLock {
+            currentMemberCache.clear()
+        }
+    }
+
     // ────────────────────────────────────────────────────────
     //  Household membership
     // ────────────────────────────────────────────────────────

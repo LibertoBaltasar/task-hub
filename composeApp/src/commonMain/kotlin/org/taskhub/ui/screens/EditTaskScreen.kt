@@ -24,6 +24,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.*
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.MemberResponse
@@ -147,6 +148,8 @@ data class EditTaskScreen(
                     selectedMembers = assignments.map { it.memberId }.toSet()
                     mandatory = assignments.firstOrNull()?.mandatory ?: false
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Una subcolección vacía NO lanza excepción en Firestore (devuelve
                 // documents: []); un fallo aquí es un error real de red, no "sin

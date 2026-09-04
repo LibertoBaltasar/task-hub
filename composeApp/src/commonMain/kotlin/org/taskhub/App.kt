@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.CancellationException
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.FadeTransition
@@ -107,6 +108,8 @@ fun App() {
                         val personal = repo.getOrCreatePersonalHousehold()
                         householdStore.replacePersonalHousehold(personal.id)
                         personalId = personal.id
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                         // Sin conexión: recurrir al guardado local o a un placeholder.
                         personalId = householdStore.getPersonalHouseholdId()
@@ -128,6 +131,8 @@ fun App() {
                     if (!personalId.isNullOrBlank() && personalId != "personal-offline") {
                         try {
                             repo.ensurePersonalMember(personalId)
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (_: Exception) {
                             // No crítico: si falla (offline), se reintenta al reabrir
                         }
@@ -148,6 +153,8 @@ fun App() {
                         if (uid != null && fcmToken != null) {
                             repo.saveFcmToken(uid, fcmToken)
                         }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (_: Exception) {
                         // Offline/transitorio: se reintenta en el próximo arranque.
                     }

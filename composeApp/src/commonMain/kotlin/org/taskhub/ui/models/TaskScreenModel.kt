@@ -1004,16 +1004,22 @@ class TaskScreenModel(
         val now = Clock.System.now()
         val currentHour = now.toLocalDateTime(tz).hour
 
-        val assignments = repo.getAllAssignments(householdId)
-        // pointsAwarded > 0 excluye las compleciones "fantasma" (asignaciones
-        // hermanas cerradas con pointsAwarded=0 al completar el ciclo para
-        // todos los miembros asignados, ver StatsScreenModel.computeStats) —
-        // sin este filtro, un miembro podía desbloquear logros permanentes
-        // (p.ej. "10 tareas completadas") sin haber completado ninguna
-        // (panel de revisión 2026-09-03/04, Experto 8, NUEVO).
-        val completedCount = assignments.count {
-            it.memberId == member.id && it.status == "completed" && (it.pointsAwarded ?: 0) > 0
-        }
+        // Se cuenta desde `taskHistory`, no desde `assignments`: completeTask/
+        // completeAssignment escriben un registro de taskHistory UNA vez por
+        // compleción real (siempre por quien la completó, con los puntos que
+        // sea, incluido 0 por penalización) y NUNCA para las asignaciones
+        // hermanas que se cierran como "fantasma" al completar el ciclo para
+        // todos los miembros asignados (esas solo tocan `assignments`, ver
+        // AssignmentCompletionRules.siblingsToClose). Filtrar `assignments`
+        // por `pointsAwarded > 0` (como se hacía antes) evitaba los logros
+        // fantasma pero además undercontaba compleciones REALES penalizadas a
+        // 0 puntos por tardanza — un miembro que completa tarde y pierde
+        // todos los puntos nunca desbloqueaba logros de "N tareas completadas"
+        // (panel de revisión 2026-09-04, Experto 8, IMPORTANTE). `taskHistory`
+        // no tiene ninguno de los dos problemas: es un registro por-compleción
+        // real, sin entradas fantasma.
+        val history = repo.getTaskHistory(householdId)
+        val completedCount = history.count { it.memberId == member.id }
 
         val alreadyUnlocked = repo.getMemberAchievements(householdId, member.id)
 

@@ -41,9 +41,9 @@ fun ExpandableSectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(modifier)
             .heightIn(min = 48.dp)
-            .clickable(onClick = onToggle),
+            .clickable(onClick = onToggle)
+            .then(modifier),
         verticalAlignment = Alignment.CenterVertically
     ) {
         content()
