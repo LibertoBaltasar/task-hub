@@ -125,8 +125,9 @@ data class EditTaskScreen(
         }
 
         var assignmentsLoadFailed by remember { mutableStateOf(false) }
+        var assignmentsReloadTrigger by remember { mutableStateOf(0) }
 
-        // Precargar fecha límite y asignaciones existentes (para poder editarlas)
+        // Precargar fecha límite (una sola vez).
         LaunchedEffect(Unit) {
             if (task.dueDate > 0) {
                 val dt = Instant.fromEpochMilliseconds(task.dueDate)
@@ -134,7 +135,13 @@ data class EditTaskScreen(
                 deadlineDay = "${dt.year}-${dt.monthNumber.toString().padStart(2, '0')}-${dt.dayOfMonth.toString().padStart(2, '0')}"
                 deadlineTime = "${dt.hour.toString().padStart(2, '0')}:${dt.minute.toString().padStart(2, '0')}"
             }
+        }
+
+        // Precargar asignaciones existentes (para poder editarlas); reintentable
+        // tras un fallo de red sin tener que salir y volver a entrar en la pantalla.
+        LaunchedEffect(assignmentsReloadTrigger) {
             try {
+                assignmentsLoadFailed = false
                 val assignments = taskModel.getAssignments(householdId, task.id)
                 if (assignments.isNotEmpty()) {
                     selectedMembers = assignments.map { it.memberId }.toSet()
@@ -359,7 +366,7 @@ data class EditTaskScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
+                                Icon(Icons.Default.Add, contentDescription = s("create_task_add_item"))
                             }
                         }
                     }
@@ -392,7 +399,7 @@ data class EditTaskScreen(
                                         contentColor = MaterialTheme.colorScheme.error
                                     )
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = null)
+                                    Icon(Icons.Default.Close, contentDescription = s("common_delete"))
                                 }
                             }
                         }
@@ -600,7 +607,7 @@ data class EditTaskScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
+                                Icon(Icons.Default.Add, contentDescription = s("create_task_add_tag"))
                             }
                         }
                     }
@@ -663,11 +670,17 @@ data class EditTaskScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         if (assignmentsLoadFailed) {
-                            Text(
-                                text = s("edit_task_assignment_load_error"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = s("edit_task_assignment_load_error"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = { assignmentsReloadTrigger++ }) {
+                                    Text(s("common_retry"))
+                                }
+                            }
                         }
                     }
 

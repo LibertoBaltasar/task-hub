@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List as ListIcon
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Close
@@ -18,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +81,7 @@ data class CreateTaskScreen(
 
         // Form state
         var title by remember { mutableStateOf("") }
+        var titleTouched by remember { mutableStateOf(false) }
         var description by remember { mutableStateOf("") }
         var pointsText by remember { mutableStateOf("10") }
         var frequency by remember { mutableStateOf("once") }
@@ -270,13 +273,13 @@ data class CreateTaskScreen(
                     item {
                         OutlinedTextField(
                             value = title,
-                            onValueChange = { title = it },
+                            onValueChange = { title = it; titleTouched = true },
                             label = { Text(s("create_task_title_field")) },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) titleTouched = true },
                             singleLine = true,
-                            isError = title.isBlank(),
+                            isError = titleTouched && title.isBlank(),
                             supportingText = {
-                                if (title.isBlank()) {
+                                if (titleTouched && title.isBlank()) {
                                     Text(s("create_task_title_required"))
                                 }
                             }
@@ -317,7 +320,7 @@ data class CreateTaskScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
+                                Icon(Icons.Default.Add, contentDescription = s("create_task_add_item"))
                             }
                         }
                     }
@@ -350,7 +353,7 @@ data class CreateTaskScreen(
                                         contentColor = MaterialTheme.colorScheme.error
                                     )
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = null)
+                                    Icon(Icons.Default.Close, contentDescription = s("common_delete"))
                                 }
                             }
                         }
@@ -561,7 +564,7 @@ data class CreateTaskScreen(
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
-                                Icon(Icons.Default.Add, contentDescription = null)
+                                Icon(Icons.Default.Add, contentDescription = s("create_task_add_tag"))
                             }
                         }
                     }
@@ -955,9 +958,10 @@ private fun QuickTemplatesSection(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "\uD83D\uDCCB",
-                        style = MaterialTheme.typography.titleMedium
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ListIcon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(

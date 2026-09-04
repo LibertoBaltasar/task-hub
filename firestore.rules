@@ -3,12 +3,16 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v6 — PENDIENTE DE DESPLIEGUE)
+    //  Task Hub — Reglas de seguridad (v6)
     //
     //  v6 editada 2026-09-02 (encargo "PROPUESTAS panel v4 —
-    //  privacidad/seguridad", punto 7: Experto 9 hallazgo #2). NO
-    //  desplegada todavía — el despliegue lo hace el coordinador Hermes vía
-    //  scripts/deploy_firestore_rules.py.
+    //  privacidad/seguridad", punto 7: Experto 9 hallazgo #2). Desplegada en
+    //  producción el 2026-09-03 23:45:46Z (commit dd60412) vía
+    //  scripts/deploy_firestore_rules.py. Ruleset
+    //  projects/task-hub-62f98/rulesets/45e73f01-088f-4344-aef0-c97a101938f2
+    //  (sustituye al v5 4d5f5625-f24e-40e1-a8b3-954a33715a72) — confirmado
+    //  por comparación byte a byte contra firebaserules.googleapis.com en el
+    //  panel de expertos 2026-09-03/04 (Expertos 2 y 9).
     //
     //  Cambio v5→v6: la rama de `create` en members/{mid} (tanto
     //  owner/admin como auto-alta por invitación) no validaba

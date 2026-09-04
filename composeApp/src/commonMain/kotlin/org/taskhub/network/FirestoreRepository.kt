@@ -625,6 +625,23 @@ class FirestoreRepository(
         } catch (_: Exception) {
             // No crítico: ver KDoc de deleteMember.
         }
+        // Anonimiza los mensajes de chat del miembro expulsado — mismo patrón
+        // ya usado en leaveHousehold (panel v6, Experto 10 #2): a diferencia
+        // de abandonar voluntariamente, la expulsión por admin se había
+        // quedado sin esta llamada, dejando el nombre real del expulsado
+        // visible para siempre en el chat. Best-effort, igual que en
+        // leaveHousehold.
+        try {
+            householdRepository.anonymizeMemberMessages(
+                householdId,
+                setOf(memberId),
+                AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No crítico: ver KDoc de deleteMember.
+        }
         return result
     }
 

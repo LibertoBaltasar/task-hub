@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -45,8 +46,10 @@ data class CreateRewardScreen(val householdId: String) : Screen {
         val householdName = rememberHouseholdName(householdId, householdModel)
 
         var title by remember { mutableStateOf("") }
+        var titleTouched by remember { mutableStateOf(false) }
         var description by remember { mutableStateOf("") }
         var costText by remember { mutableStateOf("") }
+        var costTouched by remember { mutableStateOf(false) }
         var selectedIcon by remember { mutableStateOf("🎁") }
 
         // Emoji picker state
@@ -171,14 +174,14 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                     // Title
                     OutlinedTextField(
                         value = title,
-                        onValueChange = { title = it },
+                        onValueChange = { title = it; titleTouched = true },
                         label = { Text(s("create_reward_title_field")) },
                         placeholder = { Text(s("create_reward_title_placeholder")) },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) titleTouched = true },
                         singleLine = true,
-                        isError = title.isBlank(),
+                        isError = titleTouched && title.isBlank(),
                         supportingText = {
-                            if (title.isBlank()) Text(s("create_task_title_required"))
+                            if (titleTouched && title.isBlank()) Text(s("create_task_title_required"))
                         },
                         colors = taskHubTextFieldColors()
                     )
@@ -203,15 +206,16 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                             if (newValue.all { it.isDigit() } && newValue.length <= 6) {
                                 costText = newValue
                             }
+                            costTouched = true
                         },
                         label = { Text(s("create_reward_cost_label")) },
                         placeholder = { Text("50") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) costTouched = true },
                         singleLine = true,
                         prefix = { Text("⭐ ") },
-                        isError = (costText.toIntOrNull() ?: 0) <= 0,
+                        isError = costTouched && (costText.toIntOrNull() ?: 0) <= 0,
                         supportingText = {
-                            if ((costText.toIntOrNull() ?: 0) <= 0) Text(s("create_task_points_error_positive"))
+                            if (costTouched && (costText.toIntOrNull() ?: 0) <= 0) Text(s("create_task_points_error_positive"))
                         },
                         colors = taskHubTextFieldColors()
                     )

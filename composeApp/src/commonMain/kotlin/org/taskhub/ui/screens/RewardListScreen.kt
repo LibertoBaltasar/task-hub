@@ -127,15 +127,16 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = "🎁",
-                                style = MaterialTheme.typography.displayLarge
+                                style = MaterialTheme.typography.displayMedium
                             )
                             Spacer(Modifier.height(16.dp))
                             Text(
                                 text = s("reward_list_empty_title"),
                                 style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
                             )
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(4.dp))
                             Text(
                                 text = if (isAdmin) s("reward_list_empty_admin") else s("reward_list_empty_member"),
                                 style = MaterialTheme.typography.bodyMedium,

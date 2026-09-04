@@ -71,10 +71,10 @@ class FirestoreClient(
         HttpResponseValidator {
             validateResponse { response ->
                 if (response.status.value >= 400) {
-                    val bodyText = runCatching { response.bodyAsText() }.getOrDefault("")
-                    val errorBody = runCatching {
+                    val bodyText = orDefault("") { response.bodyAsText() }
+                    val errorBody = orDefault(null) {
                         errorParsingJson.decodeFromString<FirestoreErrorEnvelope>(bodyText)
-                    }.getOrNull()?.error
+                    }?.error
                     val message = errorBody?.message?.takeIf { it.isNotBlank() }
                         ?: bodyText.takeIf { it.isNotBlank() }
                         ?: "Firestore respondió ${response.status.value} sin más detalles"

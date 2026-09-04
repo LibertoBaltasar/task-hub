@@ -1,5 +1,6 @@
 package org.taskhub.ui.models
 
+import kotlinx.coroutines.CancellationException
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.network.models.TaskAssignmentResponse
@@ -43,6 +44,8 @@ class CalendarSyncManager(
             val id = calendarRepo.ensureCalendar(accessToken, calendarName(householdName, isPersonal))
             settingsStore.setCalendarId(householdId, id)
             id
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             null
         }
@@ -67,11 +70,19 @@ class CalendarSyncManager(
 
             val token = authManager.ensureCalendarAccessToken() ?: return
             val calendarId = ensureCalendarId(householdId, householdName, isPersonal, token) ?: return
-            val tasks = try { repo.getTasks(householdId) } catch (_: Exception) { emptyList() }
+            val tasks = try {
+                repo.getTasks(householdId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
 
             for (assignment in mine) {
                 createEventForAssignment(householdId, calendarId, token, assignment, tasks)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Best-effort: se reintenta en el próximo reconcile.
         }
@@ -134,6 +145,8 @@ class CalendarSyncManager(
                     dueDateEpochMs = newDueDate
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Best-effort: se reintenta en el próximo reconcile.
         }
@@ -159,11 +172,19 @@ class CalendarSyncManager(
 
             val token = authManager.ensureCalendarAccessToken() ?: return
             val calendarId = ensureCalendarId(householdId, householdName, isPersonal, token) ?: return
-            val tasks = try { repo.getTasks(householdId) } catch (_: Exception) { emptyList() }
+            val tasks = try {
+                repo.getTasks(householdId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
 
             for (assignment in pending) {
                 createEventForAssignment(householdId, calendarId, token, assignment, tasks)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Best-effort: se reintenta en el próximo reconcile.
         }
@@ -195,6 +216,8 @@ class CalendarSyncManager(
             )
             repo.updateAssignmentGoogleEventId(householdId, assignment.taskId, assignment.id, event.id)
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             false
         }
@@ -217,6 +240,8 @@ class CalendarSyncManager(
                 dueDateEpochMs = assignment.dueDate
             )
             repo.updateAssignmentGoogleEventId(householdId, assignment.taskId, assignment.id, event.id)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Best-effort: esta asignación se reintenta en el próximo reconcile.
         }
@@ -229,10 +254,14 @@ class CalendarSyncManager(
             val token = authManager.ensureCalendarAccessToken() ?: return
             try {
                 calendarRepo.deleteEvent(token, calendarId, eventId)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Puede que ya no exista (borrado a mano) — igualmente limpiamos el campo.
             }
             repo.updateAssignmentGoogleEventId(householdId, assignment.taskId, assignment.id, null)
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Exception) {
             // Best-effort: si falla, el evento huérfano queda en Calendar hasta el próximo intento.
         }

@@ -9,6 +9,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -216,7 +219,7 @@ data class CalendarScreen(
                             contentDescription = if (mode == CalendarMode.WEEK) s("calendar_prev_week") else s("calendar_prev_month")
                         }
                     ) {
-                        Text("◀", style = MaterialTheme.typography.titleMedium)
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null)
                     }
                     Text(
                         text = when (mode) {
@@ -249,7 +252,7 @@ data class CalendarScreen(
                             contentDescription = if (mode == CalendarMode.WEEK) s("calendar_next_week") else s("calendar_next_month")
                         }
                     ) {
-                        Text("▶", style = MaterialTheme.typography.titleMedium)
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
                     }
                 }
 

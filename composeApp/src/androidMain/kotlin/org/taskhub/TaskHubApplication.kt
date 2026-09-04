@@ -31,9 +31,14 @@ class TaskHubApplication : Application() {
         // sirva publicidad conductual/personalizada, con independencia de qué
         // perfil esté activo en el dispositivo (panel de revisión 2026-09-03,
         // Experto 10, CRÍTICO #2). Debe fijarse ANTES de MobileAds.initialize().
+        // TFCD por sí solo evita anuncios personalizados/conductuales, pero no
+        // garantiza que el CONTENIDO del anuncio sea apto para audiencia
+        // infantil — se fija explícitamente la clasificación máxima "G" (panel
+        // 2026-09-04, Experto 10).
         MobileAds.setRequestConfiguration(
             RequestConfiguration.Builder()
                 .setTagForChildDirectedTreatment(RequestConfiguration.TAG_FOR_CHILD_DIRECTED_TREATMENT_TRUE)
+                .setMaxAdContentRating(RequestConfiguration.MAX_AD_CONTENT_RATING_G)
                 .build()
         )
 

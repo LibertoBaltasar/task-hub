@@ -417,9 +417,10 @@ class TaskScreenModel(
                     ?: repo.resolveCurrentMember(householdId)
 
                 // Fetch the task to get its points + save previous state for undo
-                val tasks = repo.getTasks(householdId)
-                val task = tasks.find { it.id == taskId }
-                    ?: throw IllegalStateException("Tarea no encontrada")
+                // (getTask, no getTasks().find() — evita releer la colección
+                // completa de tareas del hogar para localizar una sola, panel
+                // 2026-09-04, Experto 11 CRÍTICO).
+                val task = repo.getTask(householdId, taskId)
                 val memberBefore = repo.getMembers(householdId).find { it.id == memberId }
 
                 // Save undo info BEFORE completing (puntos/racha previos incluidos)
@@ -711,9 +712,11 @@ class TaskScreenModel(
             _detailState.value = TaskDetailUiState.Loading
             _myAssignment.value = null
             try {
-                val tasks = repo.getTasks(householdId)
-                val task = tasks.find { it.id == taskId }
-                    ?: throw IllegalStateException("Tarea no encontrada")
+                // getTask, no getTasks().find() — misma razón que completeTask
+                // (panel 2026-09-04, Experto 11 CRÍTICO): loadTaskDetail se
+                // dispara en cada apertura de TaskDetailScreen y tras casi
+                // cualquier mutación.
+                val task = repo.getTask(householdId, taskId)
 
                 val assignments = repo.getAssignments(householdId, taskId)
                 val members = repo.getMembers(householdId)
