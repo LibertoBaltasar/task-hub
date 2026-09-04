@@ -18,6 +18,7 @@ import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardActionState
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.theme.*
+import org.taskhub.ui.components.DestructiveConfirmDialog
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.rememberHouseholdName
@@ -230,40 +231,29 @@ data class MemberRewardScreen(
             }
         }
 
-        // Confirmation dialog
+        // Confirmation dialog — unificado con DestructiveConfirmDialog (no es
+        // una acción destructiva: canjear una recompensa gasta puntos pero no
+        // borra ni pierde datos, panel v7, #24).
         if (showConfirmDialog) {
-            AlertDialog(
-                onDismissRequest = { showConfirmDialog = false },
-                title = { Text(s("member_reward_confirm_title")) },
-                text = {
-                    Text(
-                        s("member_reward_confirm_text")
-                            .replace("%1", reward.title)
-                            .replace("%2", reward.cost.toString())
-                            .replace("%3", (memberPoints - reward.cost).toString())
+            DestructiveConfirmDialog(
+                title = s("member_reward_confirm_title"),
+                text = s("member_reward_confirm_text")
+                    .replace("%1", reward.title)
+                    .replace("%2", reward.cost.toString())
+                    .replace("%3", (memberPoints - reward.cost).toString()),
+                s = s,
+                onDismiss = { showConfirmDialog = false },
+                onConfirm = {
+                    showConfirmDialog = false
+                    memberModel.redeemReward(
+                        householdId = householdId,
+                        rewardId = reward.id,
+                        memberId = memberId,
+                        pointsSpent = reward.cost
                     )
                 },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            showConfirmDialog = false
-                            memberModel.redeemReward(
-                                householdId = householdId,
-                                rewardId = reward.id,
-                                memberId = memberId,
-                                pointsSpent = reward.cost
-                            )
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-                    ) {
-                        Text(s("member_reward_confirm_yes"))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showConfirmDialog = false }) {
-                        Text(s("common_cancel"))
-                    }
-                }
+                confirmLabel = s("member_reward_confirm_yes"),
+                destructive = false
             )
         }
     }

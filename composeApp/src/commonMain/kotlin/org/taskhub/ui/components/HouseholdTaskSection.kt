@@ -1,11 +1,12 @@
 package org.taskhub.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,40 +19,32 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import org.koin.compose.koinInject
-import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.models.HouseholdPreviewState
 import org.taskhub.ui.screens.TaskDetailScreen
 
+/**
+ * Tarjeta desplegable con las primeras tareas sin completar de un hogar.
+ * Puramente presentacional: [previewState] llega ya resuelto desde
+ * [org.taskhub.ui.models.HomeScreenModel.loadHouseholdPreview] — antes este
+ * composable inyectaba `FirestoreRepository` directamente y hacía su propio
+ * fetch en un `LaunchedEffect`, el único sitio del árbol que no pasaba por
+ * un ScreenModel (panel v7, #15).
+ */
 @Composable
 fun HouseholdTaskSection(
     household: SavedHousehold,
+    previewState: HouseholdPreviewState?,
     onViewAll: (String) -> Unit = {}
 ) {
-    val repo = koinInject<FirestoreRepository>()
     val navigator = LocalNavigator.currentOrThrow
     val lang = LocalAppSettings.current.currentLanguage
     val s = { key: String -> AppStrings.get(key, lang) }
+    val reduceMotion = shouldReduceMotion()
 
-    var tasks by remember { mutableStateOf<List<TaskResponse>>(emptyList()) }
     var expanded by remember { mutableStateOf(true) }
-    var isLoading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(household.id) {
-        try {
-            val allTasks = repo.getTasks(household.id)
-            tasks = allTasks
-                .filter { it.lastCompletedDate == null || it.lastCompletedDate == 0L }
-                .take(5)
-            error = null
-        } catch (e: Exception) {
-            error = s("household_task_section_error")
-        }
-        isLoading = false
-    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -63,12 +56,9 @@ fun HouseholdTaskSection(
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .clickable { expanded = !expanded },
-                verticalAlignment = Alignment.CenterVertically
+            ExpandableSectionHeader(
+                expanded = expanded,
+                onToggle = { expanded = !expanded }
             ) {
                 // Etiqueta visual para espacio Personal
                 if (household.isPersonal) {
@@ -89,28 +79,26 @@ fun HouseholdTaskSection(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
-                if (!isLoading && error == null) {
+                if (previewState is HouseholdPreviewState.Success) {
                     Text(
-                        text = s("household_task_section_pending_count").replace("%d", "${tasks.size}"),
+                        text = s("household_task_section_pending_count").replace("%d", "${previewState.tasks.size}"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Spacer(Modifier.width(4.dp))
-                Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp
-                                 else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) s("household_task_section_collapse") else s("household_task_section_expand")
-                )
             }
 
-            AnimatedVisibility(visible = expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = if (reduceMotion) EnterTransition.None else expandVertically(),
+                exit = if (reduceMotion) ExitTransition.None else shrinkVertically()
+            ) {
                 Column {
                     Spacer(Modifier.height(8.dp))
 
-                    val currentError = error
-                    when {
-                        isLoading -> {
+                    when (previewState) {
+                        null, is HouseholdPreviewState.Loading -> {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 contentAlignment = Alignment.Center
@@ -122,28 +110,29 @@ fun HouseholdTaskSection(
                                 )
                             }
                         }
-                        currentError != null -> {
+                        is HouseholdPreviewState.Error -> {
                             Text(
-                                text = currentError,
+                                text = previewState.message,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
-                        tasks.isEmpty() -> {
-                            Text(
-                                text = if (household.isPersonal) s("household_task_section_empty_personal")
-                                       else s("household_task_section_empty_shared"),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                        else -> {
-                            tasks.forEach { task ->
-                                TaskRow(task = task) {
-                                    navigator.push(
-                                        TaskDetailScreen(household.id, task.id)
-                                    )
+                        is HouseholdPreviewState.Success -> {
+                            if (previewState.tasks.isEmpty()) {
+                                Text(
+                                    text = if (household.isPersonal) s("household_task_section_empty_personal")
+                                           else s("household_task_section_empty_shared"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            } else {
+                                previewState.tasks.forEach { task ->
+                                    TaskRow(task = task) {
+                                        navigator.push(
+                                            TaskDetailScreen(household.id, task.id)
+                                        )
+                                    }
                                 }
                             }
                         }

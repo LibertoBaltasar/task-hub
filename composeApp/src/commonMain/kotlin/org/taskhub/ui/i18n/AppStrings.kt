@@ -12,6 +12,8 @@ object AppStrings {
             "common_cancel" to "Cancelar",
             "common_delete" to "Eliminar",
             "common_retry" to "Reintentar",
+            "common_collapse" to "Colapsar",
+            "common_expand" to "Expandir",
             "error_icon_content_desc" to "Error",
 
             // Settings
@@ -220,6 +222,39 @@ object AppStrings {
             "transfer_error_member_not_found" to "Miembro no encontrado",
             "appreciate_error_limit" to "Límite semanal alcanzado",
             "donate_error_insufficient_balance" to "Saldo insuficiente",
+
+            // Fallbacks de error de dominio (antes hardcodeados en español vía
+            // `e.message ?: "..."`, sin pasar por AppStrings — panel v7, #23).
+            "member_error_loading" to "Error al cargar miembros",
+            "member_error_adding" to "Error al añadir miembro",
+            "member_error_removing" to "Error al eliminar miembro",
+            "member_error_role" to "Error al cambiar el rol",
+            "reward_error_loading" to "Error al cargar recompensas",
+            "reward_error_creating" to "Error al crear recompensa",
+            "reward_error_deleting" to "Error al eliminar recompensa",
+            "reward_error_redeeming" to "Error al canjear recompensa",
+            "google_auth_error_sign_in" to "Error al iniciar sesión con Google",
+            "profile_error_loading_own" to "Error al cargar tu perfil",
+            "profile_error_loading" to "Error al cargar el perfil",
+            "profile_error_saving" to "Error al guardar el perfil",
+            "notification_error_loading" to "Error al cargar notificaciones",
+            "task_error_loading" to "Error al cargar tareas",
+            "task_error_creating" to "Error al crear tarea",
+            "task_error_completing" to "Error al completar tarea",
+            "task_error_reassigning" to "Error al cambiar quién hizo la tarea",
+            "task_error_loading_single" to "Error al cargar tarea",
+            "task_error_assigning" to "Error al asignar tarea",
+            "task_error_updating" to "Error al actualizar tarea",
+            "task_error_deleting" to "Error al eliminar tarea",
+            "task_comment_error_loading" to "Error al cargar comentarios",
+            "task_comment_error_adding" to "Error al añadir comentario",
+            "calendar_sync_error" to "Error al sincronizar con Google Calendar",
+            "household_error_creating" to "Error al crear el espacio",
+            "household_error_invalid_invite_code" to "Código de invitación inválido",
+            "household_error_loading" to "Error al cargar el espacio",
+            "household_error_deleting" to "Error al eliminar el espacio",
+            "household_error_leaving" to "Error al salir del espacio",
+
             // Conflicto de concurrencia optimista al completar tarea/asignación
             // (ver FirestoreRepository.TaskCompletionConflictException /
             // AssignmentCompletionConflictException) — antes se mostraba el
@@ -248,8 +283,6 @@ object AppStrings {
             // Sección de tareas del hogar (HouseholdTaskSection.kt)
             "household_task_section_error" to "Error al cargar tareas",
             "household_task_section_pending_count" to "%d pendientes",
-            "household_task_section_collapse" to "Colapsar",
-            "household_task_section_expand" to "Expandir",
             "household_task_section_empty_personal" to "No tienes tareas personales",
             "household_task_section_empty_shared" to "No hay tareas pendientes",
             "household_task_section_view_all" to "Ver todas →",
@@ -578,6 +611,8 @@ object AppStrings {
             "common_cancel" to "Cancel",
             "common_delete" to "Delete",
             "common_retry" to "Retry",
+            "common_collapse" to "Collapse",
+            "common_expand" to "Expand",
             "error_icon_content_desc" to "Error",
 
             // Settings
@@ -782,6 +817,39 @@ object AppStrings {
             "transfer_error_member_not_found" to "Member not found",
             "appreciate_error_limit" to "Weekly limit reached",
             "donate_error_insufficient_balance" to "Insufficient balance",
+
+            // Domain error fallbacks (previously hardcoded in Spanish via
+            // `e.message ?: "..."`, bypassing AppStrings — panel v7, #23).
+            "member_error_loading" to "Error loading members",
+            "member_error_adding" to "Error adding member",
+            "member_error_removing" to "Error removing member",
+            "member_error_role" to "Error changing role",
+            "reward_error_loading" to "Error loading rewards",
+            "reward_error_creating" to "Error creating reward",
+            "reward_error_deleting" to "Error deleting reward",
+            "reward_error_redeeming" to "Error redeeming reward",
+            "google_auth_error_sign_in" to "Error signing in with Google",
+            "profile_error_loading_own" to "Error loading your profile",
+            "profile_error_loading" to "Error loading profile",
+            "profile_error_saving" to "Error saving profile",
+            "notification_error_loading" to "Error loading notifications",
+            "task_error_loading" to "Error loading tasks",
+            "task_error_creating" to "Error creating task",
+            "task_error_completing" to "Error completing task",
+            "task_error_reassigning" to "Error changing who did the task",
+            "task_error_loading_single" to "Error loading task",
+            "task_error_assigning" to "Error assigning task",
+            "task_error_updating" to "Error updating task",
+            "task_error_deleting" to "Error deleting task",
+            "task_comment_error_loading" to "Error loading comments",
+            "task_comment_error_adding" to "Error adding comment",
+            "calendar_sync_error" to "Error syncing with Google Calendar",
+            "household_error_creating" to "Error creating space",
+            "household_error_invalid_invite_code" to "Invalid invite code",
+            "household_error_loading" to "Error loading space",
+            "household_error_deleting" to "Error deleting space",
+            "household_error_leaving" to "Error leaving space",
+
             "task_completion_conflict_error" to "This task was just completed on another device. The list has been refreshed.",
 
             // Household member list (HouseholdMemberList.kt)
@@ -805,8 +873,6 @@ object AppStrings {
             // Household task section (HouseholdTaskSection.kt)
             "household_task_section_error" to "Failed to load tasks",
             "household_task_section_pending_count" to "%d pending",
-            "household_task_section_collapse" to "Collapse",
-            "household_task_section_expand" to "Expand",
             "household_task_section_empty_personal" to "You have no personal tasks",
             "household_task_section_empty_shared" to "No pending tasks",
             "household_task_section_view_all" to "View all →",

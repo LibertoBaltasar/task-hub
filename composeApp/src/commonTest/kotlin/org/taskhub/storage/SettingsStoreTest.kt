@@ -108,6 +108,56 @@ class SettingsStoreTest {
 
         assertNull(store(settings, secureStore).getAnonymousRefreshToken())
     }
+
+    // ── getCalendarId/setCalendarId — mapa por hogar (panel v7, #30) ──
+
+    @Test
+    fun getCalendarId_withoutSetCalendarId_returnsNull() {
+        val store = store(FakeSettings(), FakeSecureStore())
+
+        assertNull(store.getCalendarId("household-1"))
+    }
+
+    @Test
+    fun setCalendarId_thenGetCalendarId_returnsSameValue() {
+        val store = store(FakeSettings(), FakeSecureStore())
+
+        store.setCalendarId("household-1", "calendar-abc")
+
+        assertEquals("calendar-abc", store.getCalendarId("household-1"))
+    }
+
+    @Test
+    fun setCalendarId_forMultipleHouseholds_keepsThemIndependent() {
+        val store = store(FakeSettings(), FakeSecureStore())
+
+        store.setCalendarId("household-1", "calendar-abc")
+        store.setCalendarId("household-2", "calendar-xyz")
+
+        assertEquals("calendar-abc", store.getCalendarId("household-1"))
+        assertEquals("calendar-xyz", store.getCalendarId("household-2"))
+    }
+
+    @Test
+    fun setCalendarId_overwritesPreviousValueForSameHousehold() {
+        val store = store(FakeSettings(), FakeSecureStore())
+
+        store.setCalendarId("household-1", "calendar-old")
+        store.setCalendarId("household-1", "calendar-new")
+
+        assertEquals("calendar-new", store.getCalendarId("household-1"))
+    }
+
+    @Test
+    fun getCalendarId_withCorruptedStoredJson_returnsNullInsteadOfThrowing() {
+        // Simula un valor corrupto (p. ej. escrito por una versión anterior
+        // incompatible del esquema) — getCalendarIdMap() atrapa el error de
+        // parseo y cae a mapa vacío en vez de propagar la excepción.
+        val settings = FakeSettings(mutableMapOf("taskhub_calendar_ids" to "{not-valid-json"))
+        val store = store(settings, FakeSecureStore())
+
+        assertNull(store.getCalendarId("household-1"))
+    }
 }
 
 /** Doble de prueba mínimo de [SecureStore], sin cifrado real. */

@@ -3,6 +3,7 @@ package org.taskhub.ui.models
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,11 +59,18 @@ class StatsScreenModel(
         screenModelScope.launch {
             _uiState.value = StatsUiState.Loading
             try {
-                // Load all data — including taskHistory for accurate stats
+                // Load all data — including taskHistory for accurate stats.
+                // getAllAssignments(tasks) reutiliza la lista ya cargada en vez
+                // de volver a pedirla internamente, y las 3 lecturas
+                // independientes de las tareas se lanzan en paralelo en vez de
+                // encadenarse en serie (panel v7, #18/#19).
                 val tasks = repo.getTasks(householdId)
-                val assignments = repo.getAllAssignments(householdId)
-                val history = repo.getTaskHistory(householdId)
-                val members = repo.getMembers(householdId)
+                val assignmentsDeferred = async { repo.getAllAssignments(householdId, tasks) }
+                val historyDeferred = async { repo.getTaskHistory(householdId) }
+                val membersDeferred = async { repo.getMembers(householdId) }
+                val assignments = assignmentsDeferred.await()
+                val history = historyDeferred.await()
+                val members = membersDeferred.await()
                 val member = members.find { it.id == memberId }
 
                 if (member != null) {

@@ -13,6 +13,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.datetime.Clock
 // NOTA: FormDataContent/Parameters (refresh de token) y errorParsingJson/HttpClient
 // ahora viven en FirestoreClient (ver fase 1 del refactor, docs/refactor-arquitectura-2026-08-31.md).
@@ -46,6 +48,14 @@ import org.taskhub.platform.secureRandomInt
 import org.taskhub.ui.i18n.AppStrings
 
 /**
+ * Límite de peticiones DELETE concurrentes al borrar en cascada colecciones
+ * potencialmente grandes (`taskHistory`, asignaciones/comentarios por tarea)
+ * — ver [FirestoreRepository.deleteAllDocuments]/[FirestoreRepository.deleteHousehold]
+ * (panel v7, #20).
+ */
+private const val MAX_CONCURRENT_DELETES = 20
+
+/**
  * Talks directly to Firestore REST API — no Ktor server needed.
  *
  * Firestore REST API docs:
@@ -56,26 +66,32 @@ import org.taskhub.ui.i18n.AppStrings
  * Anonymous Auth requires zero user interaction (no Google Sign-In, no UI).
  */
 class FirestoreRepository(
-    private val projectId: String = "task-hub-62f98",
+    private val projectId: String = DEFAULT_FIRESTORE_PROJECT_ID,
     private val apiKey: String = DEFAULT_API_KEY,
     private val taskCache: TaskCache,
     private val settingsStore: SettingsStore,
-    private val firestoreClient: FirestoreClient = FirestoreClient(apiKey, settingsStore)
+    private val firestoreClient: FirestoreClient = FirestoreClient(apiKey, settingsStore),
+    // ── Repos de dominio — recibidos por inyección (registrados como
+    // `single` de Koin, ver AppModule.kt) en vez de construidos a mano aquí
+    // dentro. Antes eran campos privados armados en el cuerpo de la clase, lo
+    // que forzaba a que TODA orquestación cross-dominio (completeTask,
+    // deleteHousehold, redeemReward...) viviera en esta fachada porque no
+    // había forma de que un repo de dominio dependiera de otro sin pasar por
+    // aquí — causa raíz diagnosticada en el panel de revisión 2026-09-03/04,
+    // Experto 7 (panel v7, #16). Los valores por defecto solo cubren el caso
+    // de construir esta clase fuera de Koin (tests, previews).
+    private val notificationRepository: NotificationRepository = NotificationRepository(firestoreBaseUrl(projectId), firestoreClient),
+    private val rewardsRepository: RewardsRepository = RewardsRepository(firestoreBaseUrl(projectId), firestoreClient),
+    private val taskRepository: TaskRepository = TaskRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache, notificationRepository),
+    private val householdRepository: HouseholdRepository = HouseholdRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache),
+    private val memberRepository: MemberRepository = MemberRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache)
 ) {
-    private val baseUrl = "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
+    private val baseUrl = firestoreBaseUrl(projectId)
 
     // ── Cliente HTTP + auth de bajo nivel (ver FirestoreClient, fase 1 del
     // refactor). `client` se mantiene como alias local para no tocar los ~60
     // call-sites internos (`client.get/post/patch/delete`) de este archivo.
     private val client = firestoreClient.client
-
-    // ── Repos de dominio (fase 2 del refactor) — FirestoreRepository actúa
-    // como facade temporal mientras dura la migración (fase 3).
-    private val notificationRepository = NotificationRepository(baseUrl, firestoreClient)
-    private val rewardsRepository = RewardsRepository(baseUrl, firestoreClient)
-    private val taskRepository = TaskRepository(baseUrl, firestoreClient, taskCache, notificationRepository)
-    private val householdRepository = HouseholdRepository(baseUrl, firestoreClient, taskCache) { getLocalId() }
-    private val memberRepository = MemberRepository(baseUrl, firestoreClient, taskCache, { getLocalId() }) { currentUserIdentities() }
 
     // ────────────────────────────────────────────────────────
     //  Auth
@@ -87,13 +103,8 @@ class FirestoreRepository(
      */
     private suspend fun ensureAuth() = firestoreClient.ensureAuth()
 
-    /**
-     * Devuelve el UID del usuario actual (anónimo o Google). Cae al UID persistido
-     * si aún no se ha autenticado en esta sesión, para que esté disponible antes
-     * de la primera llamada de red (p.ej. al crear el miembro "Yo" del Personal).
-     */
-    fun getLocalId(): String? =
-        firestoreClient.cachedLocalId ?: settingsStore.getGoogleUid() ?: settingsStore.getAnonymousUid()
+    /** Ver [FirestoreClient.getLocalId]. */
+    fun getLocalId(): String? = firestoreClient.getLocalId()
 
     /**
      * True si el usuario actual es el owner del hogar (comparación de
@@ -116,20 +127,8 @@ class FirestoreRepository(
         return localId == household.ownerId
     }
 
-    /**
-     * Todas las identidades posibles del usuario actual, sin duplicados:
-     * UID de Google (si ha iniciado sesión), UID anónimo persistido y el UID
-     * activo en esta sesión. Sirve para resolver "¿este miembro soy yo?" con
-     * independencia de en qué momento se creó el miembro (antes o después de
-     * vincular Google), lo que evita duplicados al unirse y perfiles que no
-     * se borran al salir.
-     */
-    fun currentUserIdentities(): List<String> =
-        listOfNotNull(
-            settingsStore.getGoogleUid(),
-            settingsStore.getAnonymousUid(),
-            firestoreClient.cachedLocalId
-        ).distinct()
+    /** Ver [FirestoreClient.currentUserIdentities]. */
+    fun currentUserIdentities(): List<String> = firestoreClient.currentUserIdentities()
 
     /**
      * Inicia sesión con Google: intercambia un Google idToken por un token de
@@ -391,15 +390,18 @@ class FirestoreRepository(
         val memberIds = listDocumentIds("$householdUrl/members")
 
         val subcollectionResults = coroutineScope {
+            val fanOutLimiter = Semaphore(MAX_CONCURRENT_DELETES)
             val taskJobs = taskIds.map { tid ->
                 async {
-                    val okAssignments = deleteAllDocuments("$householdUrl/tasks/$tid/assignments")
-                    val okComments = deleteAllDocuments("$householdUrl/tasks/$tid/comments")
-                    okAssignments && okComments
+                    fanOutLimiter.withPermit {
+                        val okAssignments = deleteAllDocuments("$householdUrl/tasks/$tid/assignments")
+                        val okComments = deleteAllDocuments("$householdUrl/tasks/$tid/comments")
+                        okAssignments && okComments
+                    }
                 }
             }
             val memberJobs = memberIds.map { mid ->
-                async { deleteAllDocuments("$householdUrl/members/$mid/achievements") }
+                async { fanOutLimiter.withPermit { deleteAllDocuments("$householdUrl/members/$mid/achievements") } }
             }
             val flatJobs = listOf(
                 async { deleteAllDocuments("$householdUrl/taskHistory") },
@@ -449,20 +451,28 @@ class FirestoreRepository(
      * subcolección — pero SÍ se reporta en el valor de retorno para que
      * [deleteHousehold] sepa que el cascade quedó incompleto. Devuelve true
      * solo si TODOS los documentos se borraron.
+     *
+     * El fan-out se limita a [MAX_CONCURRENT_DELETES] peticiones simultáneas
+     * (`Semaphore`) — antes lanzaba un `async` por documento sin límite, y
+     * una colección `taskHistory` real de miles de documentos podía disparar
+     * miles de conexiones HTTP concurrentes de golpe (panel v7, #20).
      */
     private suspend fun deleteAllDocuments(collectionUrl: String, knownIds: List<String>? = null): Boolean {
         val ids = knownIds ?: listDocumentIds(collectionUrl)
         if (ids.isEmpty()) return true
+        val limiter = Semaphore(MAX_CONCURRENT_DELETES)
         return coroutineScope {
             ids.map { id ->
                 async {
-                    try {
-                        client.delete("$collectionUrl/$id") { withAuth() }
-                        true
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        false
+                    limiter.withPermit {
+                        try {
+                            client.delete("$collectionUrl/$id") { withAuth() }
+                            true
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            false
+                        }
                     }
                 }
             }.awaitAll().all { it }
@@ -1361,6 +1371,10 @@ class FirestoreRepository(
     suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> =
         taskRepository.getAllAssignments(householdId)
 
+    /** Ver [TaskRepository.getAllAssignments] (overload que reutiliza tareas ya cargadas). */
+    suspend fun getAllAssignments(householdId: String, tasks: List<TaskResponse>): List<TaskAssignmentResponse> =
+        taskRepository.getAllAssignments(householdId, tasks)
+
     /**
      * Marca el documento de una asignación como completada (sin tocar puntos
      * del miembro). Si [expectedUpdateTime] no es null, se usa como
@@ -1535,8 +1549,7 @@ class FirestoreRepository(
         } catch (_: Exception) {
             emptyList()
         }
-        for (sibling in siblingAssignments) {
-            if (sibling.id == assignmentId || sibling.status != "assigned") continue
+        for (sibling in AssignmentCompletionRules.siblingsToClose(siblingAssignments, assignmentId)) {
             try {
                 markAssignmentCompleted(
                     householdId, taskId, sibling.id, now,
@@ -1873,26 +1886,12 @@ class FirestoreRepository(
         // 1. Guardar primero el registro de canje: si el paso 2 (descontar
         //    puntos) falla a mitad de camino, queda un registro auditable en
         //    vez de puntos perdidos sin ningún rastro de en qué se gastaron.
-        val fields = mapOf(
-            "rewardId" to FirestoreValue(stringValue = rewardId),
-            "memberId" to FirestoreValue(stringValue = memberId),
-            "redeemedAt" to FirestoreValue(integerValue = now.toString()),
-            "pointsSpent" to FirestoreValue(integerValue = pointsSpent.toString())
-        )
-
-        val response: FirestoreDocumentResponse = client.post(
-            "$baseUrl/households/$householdId/rewardRedemptions"
-        ) {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
+        val redemption = rewardsRepository.createRedemption(householdId, rewardId, memberId, pointsSpent, now)
 
         // 2. Descontar los puntos del miembro.
         addMemberPoints(householdId, memberId, -pointsSpent)
 
-        val id = extractDocId(response.name, "redeemReward")
-        return RewardRedemption(id, rewardId, memberId, now, pointsSpent)
+        return redemption
     }
 
     /** Get all reward redemptions for a household. */

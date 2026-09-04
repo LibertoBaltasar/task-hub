@@ -50,6 +50,7 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.EmptyTasksIllustration
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
+import org.taskhub.ui.components.ExpandableSectionHeader
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.filterChipCheckIcon
 import org.taskhub.ui.components.PointsBadge
@@ -1101,8 +1102,6 @@ private fun GroupHeader(
     isCollapsed: Boolean,
     onToggle: () -> Unit
 ) {
-    val appSettings = LocalAppSettings.current
-    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
     val semantic = MaterialTheme.semanticColors
     // isOverdue es un estado (vencida) → semanticColors.error, no la marca coral;
     // el resto ("toca hoy/próximo") usa la marca teal (primaryContainer).
@@ -1130,13 +1129,12 @@ private fun GroupHeader(
         color = backgroundColor,
         shadowElevation = 1.dp
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .clickable(onClick = onToggle)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+        ExpandableSectionHeader(
+            expanded = !isCollapsed,
+            onToggle = onToggle,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            chevronTint = contentColor,
+            chevronSize = 20.dp
         ) {
             // Colored dot indicator
             Surface(
@@ -1161,15 +1159,6 @@ private fun GroupHeader(
                 PointsBadge(text = "!")
                 Spacer(modifier = Modifier.width(8.dp))
             }
-
-            // Collapse/expand icon
-            Icon(
-                imageVector = if (isCollapsed) Icons.Default.KeyboardArrowDown
-                             else Icons.Default.KeyboardArrowUp,
-                contentDescription = if (isCollapsed) s("household_task_section_expand") else s("household_task_section_collapse"),
-                tint = contentColor,
-                modifier = Modifier.size(20.dp)
-            )
         }
     }
 }

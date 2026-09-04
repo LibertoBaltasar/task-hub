@@ -12,6 +12,7 @@ import org.taskhub.network.models.UserProfile
 import org.taskhub.platform.HapticKind
 import org.taskhub.platform.vibrate
 import org.taskhub.storage.SettingsStore
+import org.taskhub.ui.i18n.AppStrings
 
 /**
  * Estados de carga del perfil de usuario (propio o ajeno).
@@ -35,6 +36,8 @@ class ProfileScreenModel(
     private fun buzz(kind: HapticKind) {
         if (settingsStore.isVibrationEnabled()) vibrate(kind)
     }
+
+    private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())
 
     private val _myProfileState = MutableStateFlow<ProfileUiState>(ProfileUiState.Idle)
     val myProfileState: StateFlow<ProfileUiState> = _myProfileState.asStateFlow()
@@ -67,7 +70,7 @@ class ProfileScreenModel(
                 throw e
             } catch (e: Exception) {
                 _myProfileState.value = ProfileUiState.Error(
-                    e.message ?: "Error al cargar tu perfil"
+                    e.message ?: s("profile_error_loading_own")
                 )
             }
         }
@@ -91,7 +94,7 @@ class ProfileScreenModel(
                 throw e
             } catch (e: Exception) {
                 _otherProfileState.value = ProfileUiState.Error(
-                    e.message ?: "Error al cargar el perfil"
+                    e.message ?: s("profile_error_loading")
                 )
             }
         }
@@ -128,7 +131,7 @@ class ProfileScreenModel(
                 throw e
             } catch (e: Exception) {
                 _saveState.value = ProfileSaveState.Error(
-                    e.message ?: "Error al guardar el perfil"
+                    e.message ?: s("profile_error_saving")
                 )
                 buzz(HapticKind.ERROR)
             }

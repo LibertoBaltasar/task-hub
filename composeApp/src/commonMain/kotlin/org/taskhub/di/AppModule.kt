@@ -4,8 +4,15 @@ import com.russhwolf.settings.Settings
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.koin.dsl.onClose
+import org.taskhub.network.FirestoreClient
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.GoogleCalendarRepository
+import org.taskhub.network.HouseholdRepository
+import org.taskhub.network.MemberRepository
+import org.taskhub.network.NotificationRepository
+import org.taskhub.network.RewardsRepository
+import org.taskhub.network.TaskRepository
+import org.taskhub.network.firestoreBaseUrl
 import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.createNotificationScheduler
 import org.taskhub.platform.createAdController
@@ -22,6 +29,7 @@ import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.models.ProfileScreenModel
 import org.taskhub.ui.models.StatsScreenModel
+import org.taskhub.ui.models.TaskCommentsScreenModel
 import org.taskhub.ui.models.TaskScreenModel
 
 val appModule: Module = module {
@@ -43,8 +51,30 @@ val appModule: Module = module {
     // SettingsStore (panel v4, Experto 11 #6).
     single { SettingsStore(settings = get(), secureStoreProvider = lazy { get<SecureStore>() }) }
 
-    // Network — talks directly to Firestore REST API
-    single { FirestoreRepository(taskCache = get(), settingsStore = get()) }
+    // Network — talks directly to Firestore REST API.
+    // FirestoreClient y los repos de dominio se registran como `single`
+    // independientes (antes eran campos privados construidos a mano dentro
+    // de FirestoreRepository) para que la fachada los reciba por inyección
+    // en vez de ser la única forma de construirlos — causa raíz de por qué
+    // seguía creciendo con cada refactor (panel v7, #16).
+    single { FirestoreClient(apiKey = FirestoreRepository.DEFAULT_API_KEY, settingsStore = get()) }
+    single { NotificationRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get()) }
+    single { RewardsRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get()) }
+    single { TaskRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get(), notificationRepository = get()) }
+    single { HouseholdRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
+    single { MemberRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
+    single {
+        FirestoreRepository(
+            taskCache = get(),
+            settingsStore = get(),
+            firestoreClient = get(),
+            notificationRepository = get(),
+            rewardsRepository = get(),
+            taskRepository = get(),
+            householdRepository = get(),
+            memberRepository = get()
+        )
+    }
 
     // Google Calendar integration
     single { GoogleCalendarRepository() }
@@ -69,7 +99,8 @@ val appModule: Module = module {
     factory { HouseholdScreenModel(repo = get(), householdStore = get(), authManager = get(), settingsStore = get()) }
     factory { MemberScreenModel(repo = get(), settingsStore = get()) }
     factory { ProfileScreenModel(repo = get(), settingsStore = get()) }
-    factory { NotificationScreenModel(repo = get()) }
+    factory { NotificationScreenModel(repo = get(), settingsStore = get()) }
     factory { TaskScreenModel(repo = get(), notificationScheduler = get(), calendarSync = get(), adController = get(), settingsStore = get()) }
+    factory { TaskCommentsScreenModel(repo = get(), settingsStore = get()) }
     factory { StatsScreenModel(repo = get()) }
 }

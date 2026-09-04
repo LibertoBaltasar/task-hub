@@ -15,13 +15,24 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.serialization.json.Json
 
+/** Project ID por defecto de Firestore — ver [firestoreBaseUrl]. */
+const val DEFAULT_FIRESTORE_PROJECT_ID = "task-hub-62f98"
+
+/**
+ * URL base de la API REST de Firestore para un proyecto — construida en un
+ * único sitio para que [FirestoreRepository] y los repos de dominio
+ * (registrados como `single` de Koin, ver `AppModule.kt`) usen exactamente la
+ * misma URL sin duplicar la plantilla (panel v7, #16).
+ */
+fun firestoreBaseUrl(projectId: String = DEFAULT_FIRESTORE_PROJECT_ID): String =
+    "https://firestore.googleapis.com/v1/projects/$projectId/databases/(default)/documents"
+
 /**
  * Cliente HTTP + autenticación Firebase de bajo nivel, extraído de
  * [FirestoreRepository] (ver docs/refactor-arquitectura-2026-08-31.md, punto 6,
  * fase 1). Sin lógica de dominio: solo transporte, gestión de tokens y parseo
  * de errores de la API REST de Firestore/Firebase Auth. Se inyecta por
- * composición en [FirestoreRepository] y, en fases futuras, en los repos de
- * dominio que se extraigan de él.
+ * composición en [FirestoreRepository] y en los repos de dominio.
  */
 class FirestoreClient(
     private val apiKey: String,
@@ -87,6 +98,36 @@ class FirestoreClient(
             }
         }
     }
+
+    /**
+     * Devuelve el UID del usuario actual (anónimo o Google). Cae al UID persistido
+     * si aún no se ha autenticado en esta sesión, para que esté disponible antes
+     * de la primera llamada de red (p.ej. al crear el miembro "Yo" del Personal).
+     *
+     * Vive aquí (no en `FirestoreRepository`) porque solo depende de
+     * [cachedLocalId]/[settingsStore], nada del resto de la fachada — moverlo
+     * es lo que permite que los repos de dominio ([MemberRepository]/
+     * [HouseholdRepository]) dependan de [FirestoreClient] directamente en vez
+     * de recibir `getLocalId`/`currentUserIdentities` como lambdas para evitar
+     * un ciclo hacia `FirestoreRepository` (panel v7, #16).
+     */
+    fun getLocalId(): String? =
+        cachedLocalId ?: settingsStore.getGoogleUid() ?: settingsStore.getAnonymousUid()
+
+    /**
+     * Todas las identidades posibles del usuario actual, sin duplicados:
+     * UID de Google (si ha iniciado sesión), UID anónimo persistido y el UID
+     * activo en esta sesión. Sirve para resolver "¿este miembro soy yo?" con
+     * independencia de en qué momento se creó el miembro (antes o después de
+     * vincular Google), lo que evita duplicados al unirse y perfiles que no
+     * se borran al salir. Ver [getLocalId].
+     */
+    fun currentUserIdentities(): List<String> =
+        listOfNotNull(
+            settingsStore.getGoogleUid(),
+            settingsStore.getAnonymousUid(),
+            cachedLocalId
+        ).distinct()
 
     /**
      * Ensures we have a valid anonymous auth token, signing up anonymously if needed.

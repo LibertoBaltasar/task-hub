@@ -161,7 +161,19 @@ class CalendarSyncManager(
         if (!settingsStore.isCalendarSyncEnabled()) return
         try {
             val myMemberId = repo.resolveCurrentMember(householdId)
-            val assignments = repo.getAllAssignments(householdId)
+            // Tareas cargadas UNA vez y reutilizadas tanto para
+            // getAllAssignments(tasks) como para construir los eventos más
+            // abajo — antes se pedían dos veces (una dentro de
+            // getAllAssignments(), otra explícita) cuando había pendientes
+            // (panel v7, #18).
+            val tasks = try {
+                repo.getTasks(householdId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val assignments = repo.getAllAssignments(householdId, tasks)
             val pending = assignments.filter {
                 it.memberId == myMemberId &&
                     it.dueDate > 0 &&
@@ -172,13 +184,6 @@ class CalendarSyncManager(
 
             val token = authManager.ensureCalendarAccessToken() ?: return
             val calendarId = ensureCalendarId(householdId, householdName, isPersonal, token) ?: return
-            val tasks = try {
-                repo.getTasks(householdId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                emptyList()
-            }
 
             for (assignment in pending) {
                 createEventForAssignment(householdId, calendarId, token, assignment, tasks)

@@ -2,6 +2,7 @@ package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -21,6 +22,7 @@ import org.taskhub.platform.updateWidgetPendingTasks
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
 import org.taskhub.storage.SettingsStore
+import org.taskhub.ui.i18n.AppStrings
 
 /**
  * ViewModel compartido para [HomeScreen].
@@ -79,7 +81,7 @@ class HomeScreenModel(
                                 repo.getTasks(h.id)
                                     .filter { isPending(it) }
                                     .map { h.id to it }
-                            } catch (e: kotlinx.coroutines.CancellationException) {
+                            } catch (e: CancellationException) {
                                 throw e
                             } catch (_: Exception) {
                                 // Silently skip households that fail (offline, deleted, etc.)
@@ -106,7 +108,7 @@ class HomeScreenModel(
                     householdTasks = sorted.groupBy({ it.first }, { it.second }),
                     pendingCount = sorted.size
                 )
-            } catch (e: kotlinx.coroutines.CancellationException) {
+            } catch (e: CancellationException) {
                 // Relanzar: si no, una loadAllTasks() más reciente que ya canceló
                 // este Job ve su propia cancelación como un error normal aquí y
                 // puede sobrescribir el resultado correcto de la carga nueva.
@@ -114,7 +116,39 @@ class HomeScreenModel(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Error al cargar tareas"
+                    error = e.message ?: AppStrings.get("task_error_loading", settingsStore.getLanguage())
+                )
+            }
+        }
+    }
+
+    // ── Previsualización por hogar (HouseholdTaskSection) ─────
+
+    private val _previewTasks = MutableStateFlow<Map<String, HouseholdPreviewState>>(emptyMap())
+    val previewTasks: StateFlow<Map<String, HouseholdPreviewState>> = _previewTasks.asStateFlow()
+
+    /**
+     * Carga las primeras tareas sin completar de UN hogar, para la
+     * previsualización de [org.taskhub.ui.components.HouseholdTaskSection].
+     * Antes esa sección inyectaba [FirestoreRepository] directamente y hacía
+     * su propio fetch en un `LaunchedEffect`, sin pasar por ningún ScreenModel
+     * — el único sitio del árbol con ese patrón (panel v7, #15).
+     */
+    fun loadHouseholdPreview(householdId: String) {
+        screenModelScope.launch {
+            _previewTasks.value = _previewTasks.value + (householdId to HouseholdPreviewState.Loading)
+            try {
+                val tasks = repo.getTasks(householdId)
+                    .filter { it.lastCompletedDate == null || it.lastCompletedDate == 0L }
+                    .take(5)
+                _previewTasks.value = _previewTasks.value + (householdId to HouseholdPreviewState.Success(tasks))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _previewTasks.value = _previewTasks.value + (
+                    householdId to HouseholdPreviewState.Error(
+                        e.message ?: AppStrings.get("task_error_loading", settingsStore.getLanguage())
+                    )
                 )
             }
         }
@@ -175,4 +209,11 @@ class HomeScreenModel(
         val pendingCount: Int = 0,
         val error: String? = null
     )
+}
+
+/** Estado de previsualización de tareas de UN hogar. Ver [HomeScreenModel.loadHouseholdPreview]. */
+sealed class HouseholdPreviewState {
+    data object Loading : HouseholdPreviewState()
+    data class Success(val tasks: List<TaskResponse>) : HouseholdPreviewState()
+    data class Error(val message: String) : HouseholdPreviewState()
 }

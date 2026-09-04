@@ -19,6 +19,7 @@ import org.taskhub.storage.SettingsStore
 import org.taskhub.platform.HapticKind
 import org.taskhub.platform.logAnalyticsEvent
 import org.taskhub.platform.vibrate
+import org.taskhub.ui.i18n.AppStrings
 
 sealed class HouseholdUiState {
     data object Idle : HouseholdUiState()
@@ -51,6 +52,8 @@ class HouseholdScreenModel(
         if (settingsStore.isVibrationEnabled()) vibrate(kind)
     }
 
+    private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())
+
     private val _uiState = MutableStateFlow<HouseholdUiState>(HouseholdUiState.Idle)
     val uiState: StateFlow<HouseholdUiState> = _uiState.asStateFlow()
 
@@ -74,7 +77,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
-                    e.message ?: "Error al crear el espacio"
+                    e.message ?: s("household_error_creating")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -103,7 +106,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
-                    e.message ?: "Código de invitación inválido"
+                    e.message ?: s("household_error_invalid_invite_code")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -129,7 +132,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
-                    e.message ?: "Error al cargar el espacio"
+                    e.message ?: s("household_error_loading")
                 )
             }
         }
@@ -160,7 +163,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 buzz(HapticKind.ERROR)
-                onError(e.message ?: "Error al eliminar el espacio")
+                onError(e.message ?: s("household_error_deleting"))
             }
         }
     }
@@ -181,7 +184,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 buzz(HapticKind.ERROR)
-                onError(e.message ?: "Error al salir del espacio")
+                onError(e.message ?: s("household_error_leaving"))
             }
         }
     }
@@ -212,7 +215,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 _messagesUiState.value = MessagesUiState.Error(
-                    e.message ?: "Error al cargar mensajes"
+                    e.message ?: s("messages_error_loading")
                 )
             }
         }
@@ -235,7 +238,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 _messagesUiState.value = MessagesUiState.Error(
-                    e.message ?: "Error al enviar mensaje"
+                    e.message ?: s("messages_error_sending")
                 )
             }
         }

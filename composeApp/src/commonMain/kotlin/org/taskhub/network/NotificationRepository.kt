@@ -64,18 +64,7 @@ class NotificationRepository(
             tryAuthOrApiKey()
         }.body()
 
-        response.documents.map { doc ->
-            val f = doc.fields
-            NotificationResponse(
-                id = extractDocId(doc.name, "getNotifications"),
-                memberId = f["memberId"]?.stringValue ?: "",
-                taskId = f["taskId"]?.stringValue ?: "",
-                title = f["title"]?.stringValue ?: "",
-                message = f["message"]?.stringValue ?: "",
-                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
-                read = f["read"]?.booleanValue ?: false
-            )
-        }
+        response.documents.map { doc -> FirestoreParsers.toNotificationResponse(doc) }
     }
 
     /** Mark a notification as read. */

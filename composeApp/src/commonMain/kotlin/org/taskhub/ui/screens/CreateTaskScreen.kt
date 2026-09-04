@@ -1,6 +1,8 @@
 package org.taskhub.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
@@ -41,11 +43,13 @@ import org.taskhub.ui.models.TaskTemplate
 import org.taskhub.ui.models.TaskTemplates
 import org.taskhub.ui.models.TemplateCategory
 import org.taskhub.ui.models.HouseholdScreenModel
+import org.taskhub.ui.components.ExpandableSectionHeader
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.RecurrenceNextPreview
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.filterChipCheckIcon
 import org.taskhub.ui.components.rememberHouseholdName
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 
@@ -939,6 +943,7 @@ private fun QuickTemplatesSection(
 ) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    val reduceMotion = shouldReduceMotion()
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -948,16 +953,13 @@ private fun QuickTemplatesSection(
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             // Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .clickable { onToggle() }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            ExpandableSectionHeader(
+                expanded = expanded,
+                onToggle = onToggle,
+                modifier = Modifier.padding(vertical = 4.dp),
+                chevronTint = MaterialTheme.colorScheme.primary
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ListIcon,
                         contentDescription = null,
@@ -971,18 +973,13 @@ private fun QuickTemplatesSection(
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-                Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) s("household_task_section_collapse") else s("household_task_section_expand"),
-                    tint = MaterialTheme.colorScheme.primary
-                )
             }
 
             // Content
             AnimatedVisibility(
                 visible = expanded,
-                enter = expandVertically(),
-                exit = shrinkVertically()
+                enter = if (reduceMotion) EnterTransition.None else expandVertically(),
+                exit = if (reduceMotion) ExitTransition.None else shrinkVertically()
             ) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp)

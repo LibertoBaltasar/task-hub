@@ -12,6 +12,8 @@ import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.NotificationResponse
+import org.taskhub.storage.SettingsStore
+import org.taskhub.ui.i18n.AppStrings
 
 sealed class NotificationUiState {
     data object Idle : NotificationUiState()
@@ -24,7 +26,8 @@ sealed class NotificationUiState {
 }
 
 class NotificationScreenModel(
-    private val repo: FirestoreRepository
+    private val repo: FirestoreRepository,
+    private val settingsStore: SettingsStore
 ) : ScreenModel {
 
     private val _uiState = MutableStateFlow<NotificationUiState>(NotificationUiState.Idle)
@@ -52,7 +55,7 @@ class NotificationScreenModel(
                 )
             } catch (e: Exception) {
                 _uiState.value = NotificationUiState.Error(
-                    e.message ?: "Error al cargar notificaciones"
+                    e.message ?: AppStrings.get("notification_error_loading", settingsStore.getLanguage())
                 )
             }
         }

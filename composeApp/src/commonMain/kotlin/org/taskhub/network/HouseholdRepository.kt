@@ -26,12 +26,16 @@ import org.taskhub.storage.TaskCache
  * que se queda en [FirestoreRepository] (`isMember`/`isCurrentUserMember` sí
  * se movieron a [MemberRepository] en la fase 2.5, al no tocar nada de
  * Household).
+ *
+ * `getLocalId` vive en [FirestoreClient] (no en [FirestoreRepository]) para
+ * que este repo pueda depender de [FirestoreClient] directamente y
+ * registrarse como `single` de Koin sin crear un ciclo hacia la fachada
+ * (panel v7, #16 — mismo motivo documentado en [MemberRepository]).
  */
 class HouseholdRepository(
     private val baseUrl: String,
     private val firestoreClient: FirestoreClient,
-    private val taskCache: TaskCache,
-    private val getLocalId: () -> String?
+    private val taskCache: TaskCache
 ) {
     private val client = firestoreClient.client
 
@@ -52,7 +56,7 @@ class HouseholdRepository(
         ensureAuth()
         val now = Clock.System.now().toEpochMilliseconds()
         val inviteCode = if (isPersonal) "PERSONAL" else generateInviteCode()
-        val ownerId = getLocalId() ?: throw IllegalStateException("No autenticado")
+        val ownerId = firestoreClient.getLocalId() ?: throw IllegalStateException("No autenticado")
 
         val fields = mapOf(
             "name" to FirestoreValue(stringValue = name),
@@ -100,7 +104,7 @@ class HouseholdRepository(
      */
     suspend fun getOrCreatePersonalHousehold(): HouseholdResponse {
         ensureAuth()
-        val uid = getLocalId() ?: throw IllegalStateException("No autenticado")
+        val uid = firestoreClient.getLocalId() ?: throw IllegalStateException("No autenticado")
         val personalId = personalHouseholdId(uid)
 
         // 1) Si ya existe (lo creó este u otro dispositivo con la misma cuenta),
@@ -333,16 +337,8 @@ class HouseholdRepository(
             tryAuthOrApiKey()
         }
 
-        return documents.map { doc ->
-            val f = doc.fields
-            MessageResponse(
-                id = extractDocId(doc.name, "getMessages"),
-                memberId = f["memberId"]?.stringValue ?: "",
-                authorName = f["authorName"]?.stringValue ?: "",
-                text = f["text"]?.stringValue ?: "",
-                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
-            )
-        }.sortedBy { it.createdAt }
+        return documents.map { doc -> FirestoreParsers.toMessageResponse(doc) }
+            .sortedBy { it.createdAt }
     }
 
     /**

@@ -18,10 +18,12 @@ import org.taskhub.storage.TaskCache
  * Experto 7 #1, y `HouseholdRepository` como precedente del mismo patrón).
  * Lógica movida tal cual, sin cambios de comportamiento.
  *
- * `getLocalId`/`currentUserIdentities` se inyectan como lambdas (en vez de
- * depender de [FirestoreRepository]) para evitar el ciclo
- * `MemberRepository` → `FirestoreRepository` → `MemberRepository` — mismo
- * motivo que `getLocalId` en [HouseholdRepository].
+ * `getLocalId`/`currentUserIdentities` viven en [FirestoreClient] (no en
+ * [FirestoreRepository]) precisamente para que este repo pueda depender de
+ * [FirestoreClient] directamente sin crear un ciclo
+ * `MemberRepository` → `FirestoreRepository` → `MemberRepository` — eso es lo
+ * que permite registrar este repo como `single` de Koin en vez de construirlo
+ * a mano con lambdas dentro de la fachada (panel v7, #16).
  *
  * NO incluye `completeTask`/`completeAssignment`/`reassignTaskCompletion`/
  * `redeemReward`: son flujos que orquestan Task+Member (o Reward+Member) a la
@@ -32,9 +34,7 @@ import org.taskhub.storage.TaskCache
 class MemberRepository(
     private val baseUrl: String,
     private val firestoreClient: FirestoreClient,
-    private val taskCache: TaskCache,
-    private val getLocalId: () -> String?,
-    private val currentUserIdentities: () -> List<String>
+    private val taskCache: TaskCache
 ) {
     private val client = firestoreClient.client
 
@@ -96,7 +96,7 @@ class MemberRepository(
 
     /** ¿El usuario actual (Google o anónimo) ya es miembro de este hogar? */
     suspend fun isCurrentUserMember(householdId: String): Boolean =
-        isMember(householdId, currentUserIdentities())
+        isMember(householdId, firestoreClient.currentUserIdentities())
 
     // ────────────────────────────────────────────────────────
     //  Members (subcollection under households/{id})
@@ -256,7 +256,7 @@ class MemberRepository(
         // Asegura autenticación para que getLocalId() devuelva el UID real
         // (persistido) y no null en el primer arranque.
         ensureAuth()
-        val localId = getLocalId()
+        val localId = firestoreClient.getLocalId()
         val members = try {
             getMembers(householdId)
         } catch (e: CancellationException) {
@@ -266,7 +266,7 @@ class MemberRepository(
         }
 
         // 1. Miembro vinculado a cualquiera de las identidades del usuario
-        val identities = currentUserIdentities()
+        val identities = firestoreClient.currentUserIdentities()
         members.firstOrNull { it.userId != null && it.userId in identities }?.let { return it.id }
 
         // 2. Fallback: primer miembro existente

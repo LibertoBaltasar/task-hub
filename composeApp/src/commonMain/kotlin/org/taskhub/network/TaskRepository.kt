@@ -335,17 +335,7 @@ class TaskRepository(
             tryAuthOrApiKey()
         }
 
-        documents.map { doc ->
-            val f = doc.fields
-            TaskHistoryResponse(
-                id = extractDocId(doc.name, "getTaskHistory"),
-                taskId = f["taskId"]?.stringValue ?: "",
-                memberId = f["memberId"]?.stringValue ?: "",
-                points = f["points"]?.integerValue?.toIntOrNull() ?: 0,
-                completedAt = f["completedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-                onTime = f["onTime"]?.booleanValue ?: true
-            )
-        }
+        documents.map { doc -> FirestoreParsers.toTaskHistoryResponse(doc) }
     }
 
     /** Assign a task to one or more members with a due date. */
@@ -492,8 +482,17 @@ class TaskRepository(
     }
 
     /** Get all assignments across all tasks for a household (peticiones en paralelo). */
-    suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> {
-        val tasks = getTasks(householdId)
+    suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> =
+        getAllAssignments(householdId, getTasks(householdId))
+
+    /**
+     * Igual que [getAllAssignments], pero recibiendo la lista de tareas ya
+     * cargada por el llamador — evita releer `getTasks(householdId)` cuando
+     * el caller ya la tiene (antes duplicaba esa lectura en 3 rutas
+     * calientes: `StatsScreenModel.loadStats`, `TaskScreenModel.loadTasks`,
+     * `CalendarSyncManager.reconcile`; panel v7, #18).
+     */
+    suspend fun getAllAssignments(householdId: String, tasks: List<TaskResponse>): List<TaskAssignmentResponse> {
         return coroutineScope {
             tasks.map { task ->
                 async {
@@ -688,69 +687,13 @@ class TaskRepository(
         taskCache.clearTasks(householdId)
     }
 
-    private fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse {
-        val f = doc.fields
-        return TaskResponse(
-            id = extractDocId(doc.name, "getTasks"),
-            householdId = f["householdId"]?.stringValue ?: householdId,
-            createdBy = f["createdBy"]?.stringValue ?: "",
-            title = f["title"]?.stringValue ?: "",
-            description = f["description"]?.stringValue ?: "",
-            points = f["points"]?.integerValue?.toIntOrNull() ?: 10,
-            frequency = f["frequency"]?.stringValue ?: "once",
-            recurrenceDays = f["recurrenceDays"]?.arrayValue?.values
-                ?.mapNotNull { it.integerValue?.toIntOrNull() } ?: emptyList(),
-            recurrenceDay = f["recurrenceDay"]?.integerValue?.toIntOrNull(),
-            tags = f["tags"]?.arrayValue?.values
-                ?.mapNotNull { it.stringValue } ?: emptyList(),
-            subtasks = f["subtasks"]?.arrayValue?.values
-                ?.mapNotNull { stValue ->
-                    val sf = stValue.mapValue?.fields ?: return@mapNotNull null
-                    val sid = sf["id"]?.stringValue ?: return@mapNotNull null
-                    val stext = sf["text"]?.stringValue ?: return@mapNotNull null
-                    val scompleted = sf["completed"]?.booleanValue ?: false
-                    Subtask(id = sid, text = stext, completed = scompleted)
-                } ?: emptyList(),
-            penaltyMode = f["penaltyMode"]?.stringValue,
-            penaltyValue = f["penaltyValue"]?.integerValue?.toIntOrNull() ?: 0,
-            penaltyInterval = f["penaltyInterval"]?.stringValue ?: "day",
-            penaltyMax = f["penaltyMax"]?.integerValue?.toIntOrNull() ?: 0,
-            dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
-            lastCompletedDate = f["lastCompletedDate"]?.integerValue?.toLongOrNull(),
-            completedBy = f["completedBy"]?.stringValue,
-            assignmentRotation = f["assignmentRotation"]?.arrayValue?.values
-                ?.mapNotNull { slotValue ->
-                    val sf = slotValue.mapValue?.fields ?: return@mapNotNull null
-                    val dow = sf["dayOfWeek"]?.integerValue?.toIntOrNull() ?: return@mapNotNull null
-                    val mid = sf["memberId"]?.stringValue ?: return@mapNotNull null
-                    AssignmentSlot(dayOfWeek = dow, memberId = mid)
-                } ?: emptyList(),
-            nextDueAt = f["nextDueAt"]?.integerValue?.toLongOrNull(),
-            createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L
-        )
-    }
+    private fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse =
+        FirestoreParsers.toTaskResponse(doc, householdId)
 
     private fun toTaskAssignmentResponse(
         doc: FirestoreDocumentResponse,
         taskId: String
-    ): TaskAssignmentResponse {
-        val f = doc.fields
-        return TaskAssignmentResponse(
-            id = extractDocId(doc.name, "getAssignments"),
-            taskId = f["taskId"]?.stringValue ?: taskId,
-            memberId = f["memberId"]?.stringValue ?: "",
-            mandatory = f["mandatory"]?.booleanValue ?: false,
-            dueDate = f["dueDate"]?.integerValue?.toLongOrNull() ?: 0L,
-            status = f["status"]?.stringValue ?: "assigned",
-            completedAt = f["completedAt"]?.integerValue?.toLongOrNull(),
-            pointsAwarded = f["pointsAwarded"]?.integerValue?.toIntOrNull(),
-            onTime = f["onTime"]?.booleanValue,
-            assignedAt = f["assignedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            googleEventId = f["googleEventId"]?.stringValue,
-            updateTime = doc.updateTime
-        )
-    }
+    ): TaskAssignmentResponse = FirestoreParsers.toTaskAssignmentResponse(doc, taskId)
 
     // ────────────────────────────────────────────────────────
     //  Comments (subcollection under households/{id}/tasks/{taskId})
@@ -798,16 +741,8 @@ class TaskRepository(
         return response.documents.map { doc -> toCommentResponse(doc) }
     }
 
-    private fun toCommentResponse(doc: FirestoreDocumentResponse): CommentResponse {
-        val f = doc.fields
-        return CommentResponse(
-            id = extractDocId(doc.name, "getComments"),
-            authorName = f["authorName"]?.stringValue ?: "",
-            text = f["text"]?.stringValue ?: "",
-            createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            memberId = f["memberId"]?.stringValue
-        )
-    }
+    private fun toCommentResponse(doc: FirestoreDocumentResponse): CommentResponse =
+        FirestoreParsers.toCommentResponse(doc)
 
     /**
      * Anonimiza `authorName` de los comentarios de tarea de los miembros en

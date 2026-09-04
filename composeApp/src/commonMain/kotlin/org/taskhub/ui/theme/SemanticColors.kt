@@ -48,7 +48,11 @@ val LightSemanticColors = SemanticColors(
 
 val DarkSemanticColors = SemanticColors(
     success = Color(0xFF81C784),
-    onSuccess = Color(0xFF1B5E20),
+    // onSuccess oscurecido de 0xFF1B5E20 (3.91:1, por debajo del umbral AA de
+    // 4.5:1) a 0xFF18521C (4.61:1) conservando el mismo tono verde — no se usa
+    // hoy como texto en ningún sitio (solo *Container), pero queda accesible
+    // por si se usa en el futuro (panel v7, #28).
+    onSuccess = Color(0xFF18521C),
     // successContainer más oscuro que en v1 (era 0xFF2E7D32, 3.81:1 con
     // onSuccessContainer — por debajo del umbral WCAG AA de 4.5:1). 0xFF1B5E20
     // da 5.85:1.
@@ -61,7 +65,10 @@ val DarkSemanticColors = SemanticColors(
     onWarningContainer = Color(0xFFFFECB3),
 
     info = Color(0xFF64B5F6),
-    onInfo = Color(0xFF0D47A1),
+    // onInfo oscurecido de 0xFF0D47A1 (3.90:1, por debajo del umbral AA de
+    // 4.5:1) a 0xFF0B3E8C (4.55:1) conservando el mismo tono azul — mismo
+    // motivo que onSuccess arriba (panel v7, #28).
+    onInfo = Color(0xFF0B3E8C),
     // infoContainer más oscuro que en v1 (era 0xFF1565C0, 4.09:1 con
     // onInfoContainer — por debajo del umbral WCAG AA de 4.5:1). 0xFF0D47A1
     // da 6.15:1.

@@ -17,6 +17,7 @@ import org.taskhub.platform.launchGoogleSignIn
 import org.taskhub.platform.revokeGoogleCalendarAccess
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
+import org.taskhub.ui.i18n.AppStrings
 
 /**
  * Estado del login del usuario.
@@ -308,7 +309,7 @@ class GoogleAuthManager(
             throw e
         } catch (e: Exception) {
             _state.value = GoogleAuthState.Error(
-                e.message ?: "Error al iniciar sesión con Google"
+                e.message ?: AppStrings.get("google_auth_error_sign_in", settingsStore.getLanguage())
             )
         }
     }

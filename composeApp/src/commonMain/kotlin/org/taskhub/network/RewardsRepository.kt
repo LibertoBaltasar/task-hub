@@ -40,19 +40,7 @@ class RewardsRepository(
             tryAuthOrApiKey()
         }.body()
 
-        response.documents.map { doc ->
-            val f = doc.fields
-            RewardResponse(
-                id = extractDocId(doc.name, "getRewards"),
-                householdId = f["householdId"]?.stringValue ?: householdId,
-                title = f["title"]?.stringValue ?: "",
-                description = f["description"]?.stringValue ?: "",
-                cost = f["cost"]?.integerValue?.toIntOrNull() ?: 0,
-                icon = f["icon"]?.stringValue ?: "🎁",
-                createdBy = f["createdBy"]?.stringValue ?: "",
-                createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L
-            )
-        }
+        response.documents.map { doc -> FirestoreParsers.toRewardResponse(doc, householdId) }
     }
 
     /** Create a reward. Requires auth (write). */
@@ -103,15 +91,39 @@ class RewardsRepository(
             tryAuthOrApiKey()
         }.body()
 
-        response.documents.map { doc ->
-            val f = doc.fields
-            RewardRedemption(
-                id = extractDocId(doc.name, "getRewardRedemptions"),
-                rewardId = f["rewardId"]?.stringValue ?: "",
-                memberId = f["memberId"]?.stringValue ?: "",
-                redeemedAt = f["redeemedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-                pointsSpent = f["pointsSpent"]?.integerValue?.toIntOrNull() ?: 0
-            )
-        }
+        response.documents.map { doc -> FirestoreParsers.toRewardRedemption(doc) }
+    }
+
+    /**
+     * Escribe el registro de canje (sin tocar puntos del miembro) — usado por
+     * [FirestoreRepository.redeemReward], que orquesta este escritura junto
+     * con `MemberRepository.addMemberPoints` (Reward+Member, se queda en la
+     * fachada por ese motivo, igual que `deleteHousehold`/`leaveHousehold` en
+     * [HouseholdRepository]). Requires auth (write).
+     */
+    suspend fun createRedemption(
+        householdId: String,
+        rewardId: String,
+        memberId: String,
+        pointsSpent: Int,
+        redeemedAt: Long
+    ): RewardRedemption {
+        val fields = mapOf(
+            "rewardId" to FirestoreValue(stringValue = rewardId),
+            "memberId" to FirestoreValue(stringValue = memberId),
+            "redeemedAt" to FirestoreValue(integerValue = redeemedAt.toString()),
+            "pointsSpent" to FirestoreValue(integerValue = pointsSpent.toString())
+        )
+
+        val response: FirestoreDocumentResponse = client.post(
+            "$baseUrl/households/$householdId/rewardRedemptions"
+        ) {
+            withAuth()
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(fields))
+        }.body()
+
+        val id = extractDocId(response.name, "redeemReward")
+        return RewardRedemption(id, rewardId, memberId, redeemedAt, pointsSpent)
     }
 }

@@ -4,6 +4,7 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,7 +17,6 @@ import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
-import org.taskhub.network.models.CommentResponse
 import org.taskhub.network.models.AssignmentSlot
 import org.taskhub.network.models.Subtask
 import org.taskhub.platform.NotificationScheduler
@@ -115,15 +115,6 @@ sealed class TaskActionState {
     data class Error(val message: String) : TaskActionState()
 }
 
-// ── Comments State ────────────────────────────────────────
-
-sealed class CommentsUiState {
-    data object Idle : CommentsUiState()
-    data object Loading : CommentsUiState()
-    data class Success(val comments: List<CommentResponse>) : CommentsUiState()
-    data class Error(val message: String) : CommentsUiState()
-}
-
 // ── Filter & Sort ─────────────────────────────────────────
 
 enum class TaskFilter {
@@ -153,6 +144,8 @@ class TaskScreenModel(
     private fun buzz(kind: HapticKind) {
         if (settingsStore.isVibrationEnabled()) vibrate(kind)
     }
+
+    private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())
 
     /** Ver [FirestoreRepository.isHouseholdOwner]. */
     suspend fun isHouseholdOwner(householdId: String): Boolean = repo.isHouseholdOwner(householdId)
@@ -229,9 +222,15 @@ class TaskScreenModel(
         loadTasksJob = screenModelScope.launch {
             _listState.value = TaskListUiState.Loading
             try {
+                // getAllAssignments(tasks) reutiliza la lista ya cargada en vez
+                // de volver a pedirla internamente, y las lecturas de
+                // asignaciones/miembros se lanzan en paralelo en vez de
+                // encadenarse en serie (panel v7, #18/#19).
                 val tasks = repo.getTasks(householdId)
-                val assignments = repo.getAllAssignments(householdId)
-                val members = repo.getMembers(householdId)
+                val assignmentsDeferred = async { repo.getAllAssignments(householdId, tasks) }
+                val membersDeferred = async { repo.getMembers(householdId) }
+                val assignments = assignmentsDeferred.await()
+                val members = membersDeferred.await()
 
                 // Check connectivity to update offline banner
                 _isOffline.value = !repo.isOnline()
@@ -282,7 +281,7 @@ class TaskScreenModel(
             } catch (e: Exception) {
                 _isOffline.value = true
                 _listState.value = TaskListUiState.Error(
-                    e.message ?: "Error al cargar tareas"
+                    e.message ?: s("task_error_loading")
                 )
             }
         }
@@ -386,7 +385,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
-                    e.message ?: "Error al crear tarea"
+                    e.message ?: s("task_error_creating")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -550,7 +549,7 @@ class TaskScreenModel(
                     loadTasks(householdId)
                 } else {
                     _actionState.value = TaskActionState.Error(
-                        e.message ?: "Error al completar tarea"
+                        e.message ?: s("task_error_completing")
                     )
                 }
                 buzz(HapticKind.ERROR)
@@ -651,7 +650,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _reassignState.value = TaskActionState.Error(
-                    e.message ?: "Error al cambiar quién hizo la tarea"
+                    e.message ?: s("task_error_reassigning")
                 )
             }
         }
@@ -730,7 +729,7 @@ class TaskScreenModel(
                     loadTaskDetail(householdId, taskId)
                 } else {
                     _actionState.value = TaskActionState.Error(
-                        e.message ?: "Error al completar tarea"
+                        e.message ?: s("task_error_completing")
                     )
                 }
                 buzz(HapticKind.ERROR)
@@ -785,7 +784,7 @@ class TaskScreenModel(
                 )
             } catch (e: Exception) {
                 _detailState.value = TaskDetailUiState.Error(
-                    e.message ?: "Error al cargar tarea"
+                    e.message ?: s("task_error_loading_single")
                 )
             }
         }
@@ -813,7 +812,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
-                    e.message ?: "Error al asignar tarea"
+                    e.message ?: s("task_error_assigning")
                 )
             }
         }
@@ -906,7 +905,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
-                    e.message ?: "Error al actualizar tarea"
+                    e.message ?: s("task_error_updating")
                 )
             }
         }
@@ -927,117 +926,17 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
-                    e.message ?: "Error al eliminar tarea"
+                    e.message ?: s("task_error_deleting")
                 )
                 buzz(HapticKind.ERROR)
             }
         }
     }
 
-    // ── Comments ────────────────────────────────────────────
-
-    private val _commentsState = MutableStateFlow<CommentsUiState>(CommentsUiState.Idle)
-    val commentsState: StateFlow<CommentsUiState> = _commentsState.asStateFlow()
-
-    private val _newCommentText = MutableStateFlow("")
-    val newCommentText: StateFlow<String> = _newCommentText.asStateFlow()
-
-    fun setNewCommentText(text: String) {
-        if (text.length <= 200) {
-            _newCommentText.value = text
-        }
-    }
-
-    fun loadComments(householdId: String, taskId: String) {
-        screenModelScope.launch {
-            _commentsState.value = CommentsUiState.Loading
-            try {
-                val comments = repo.getComments(householdId, taskId)
-                _commentsState.value = CommentsUiState.Success(comments)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _commentsState.value = CommentsUiState.Error(
-                    e.message ?: "Error al cargar comentarios"
-                )
-            }
-        }
-    }
-
-    fun addComment(householdId: String, taskId: String) {
-        val text = _newCommentText.value.trim()
-        if (text.isEmpty()) return
-        // Limpiar el campo de forma optimista, ANTES de la llamada de red: si no,
-        // un doble tap en "Enviar" antes de que la primera petición complete lee
-        // el mismo texto dos veces y envía el comentario duplicado.
-        _newCommentText.value = ""
-        screenModelScope.launch {
-            _commentsState.value = CommentsUiState.Loading
-            try {
-                val memberId = _currentMemberId.value ?: repo.resolveCurrentMember(householdId)
-                val authorName = resolveCurrentMemberName(householdId)
-                repo.addComment(householdId, taskId, memberId, authorName, text)
-                // Reload comments
-                loadComments(householdId, taskId)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _commentsState.value = CommentsUiState.Error(
-                    e.message ?: "Error al añadir comentario"
-                )
-            }
-        }
-    }
-
-    /** Resolves the display name of the current member, for use as comment author. */
-    private suspend fun resolveCurrentMemberName(householdId: String): String {
-        return try {
-            val memberId = _currentMemberId.value ?: repo.resolveCurrentMember(householdId)
-            val member = repo.getMembers(householdId).find { it.id == memberId }
-            member?.displayName?.takeIf { it.isNotBlank() } ?: "Miembro"
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            "Usuario"
-        }
-    }
-
     // ── CSV Export ─────────────────────────────────────────
 
-    fun generateCsv(tasks: List<TaskResponse>): String {
-        val sb = StringBuilder()
-        sb.appendLine("Nombre,Frecuencia,Puntos,Veces completada,Último completado")
-        for (task in tasks) {
-            val freq = when (task.frequency) {
-                "daily" -> "Diaria"
-                "weekly" -> "Semanal"
-                "monthly" -> "Mensual"
-                else -> "Una vez"
-            }
-            val completions = if (task.lastCompletedDate != null) "1" else "0"
-            val lastCompleted = if (task.lastCompletedDate != null) {
-                val instant = kotlinx.datetime.Instant.fromEpochMilliseconds(task.lastCompletedDate)
-                val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-                "${local.dayOfMonth}/${local.monthNumber}/${local.year}"
-            } else {
-                "Nunca"
-            }
-            val escapedTitle = escapeCsvField(task.title)
-            sb.appendLine("$escapedTitle,$freq,${task.points},$completions,$lastCompleted")
-        }
-        return sb.toString()
-    }
-
-    /**
-     * Escapa un campo CSV para exportar de forma segura. Antepone `'` si el
-     * valor empieza por `=`, `+`, `-`, `@`, tab o CR, para que Excel/Sheets no
-     * lo interprete como fórmula (CSV formula injection, CWE-1236) — el título
-     * de tarea es texto libre que cualquier miembro del hogar puede escribir.
-     */
-    private fun escapeCsvField(value: String): String {
-        val safeValue = if (value.isNotEmpty() && value[0] in "=+-@\t\r") "'$value" else value
-        return "\"${safeValue.replace("\"", "\"\"")}\""
-    }
+    /** Ver [TaskCsvExporter.generateCsv]. */
+    fun generateCsv(tasks: List<TaskResponse>): String = TaskCsvExporter.generateCsv(tasks)
 
     // ── Helpers ─────────────────────────────────────────────
 
@@ -1205,8 +1104,6 @@ class TaskScreenModel(
         _currentMemberId.value = null
         _isOffline.value = false
         _allTags.value = emptyList()
-        _commentsState.value = CommentsUiState.Idle
-        _newCommentText.value = ""
         _calendarActionState.value = CalendarActionState.Idle
     }
 
@@ -1261,7 +1158,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _calendarActionState.value = CalendarActionState.Error(
-                    e.message ?: "Error al sincronizar con Google Calendar"
+                    e.message ?: s("calendar_sync_error")
                 )
             }
             loadTaskDetail(householdId, task.id)

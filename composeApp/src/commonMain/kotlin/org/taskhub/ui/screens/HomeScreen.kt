@@ -1,6 +1,12 @@
 package org.taskhub.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,6 +38,7 @@ import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.SettingsCallbacks
 import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.ShimmerList
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
@@ -54,6 +61,8 @@ class HomeScreen : Screen {
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
         val model = koinScreenModel<HomeScreenModel>()
         val uiState by model.uiState.collectAsState()
+        val previewTasks by model.previewTasks.collectAsState()
+        val reduceMotion = shouldReduceMotion()
         val authManager = koinInject<GoogleAuthManager>()
         val authState by authManager.state.collectAsState()
 
@@ -200,7 +209,11 @@ class HomeScreen : Screen {
             },
             floatingActionButton = {
                 Column(horizontalAlignment = Alignment.End) {
-                    AnimatedVisibility(visible = showFabMenu) {
+                    AnimatedVisibility(
+                        visible = showFabMenu,
+                        enter = if (reduceMotion) EnterTransition.None else fadeIn() + expandVertically(),
+                        exit = if (reduceMotion) ExitTransition.None else fadeOut() + shrinkVertically()
+                    ) {
                         Column(horizontalAlignment = Alignment.End) {
                             ExtendedFloatingActionButton(
                                 onClick = {
@@ -303,8 +316,10 @@ class HomeScreen : Screen {
                     val personal = households.find { it.isPersonal }
                     if (personal != null) {
                         item(key = "personal") {
+                            LaunchedEffect(personal.id) { model.loadHouseholdPreview(personal.id) }
                             HouseholdTaskSection(
                                 household = personal,
+                                previewState = previewTasks[personal.id],
                                 onViewAll = { hid -> navigator.push(PersonalSpaceScreen(hid)) }
                             )
                         }
@@ -321,8 +336,11 @@ class HomeScreen : Screen {
                             )
                         }
                         items(shared.size, key = { shared[it].id }) { index ->
+                            val h = shared[index]
+                            LaunchedEffect(h.id) { model.loadHouseholdPreview(h.id) }
                             HouseholdTaskSection(
-                                household = shared[index],
+                                household = h,
+                                previewState = previewTasks[h.id],
                                 onViewAll = { hid -> navigator.push(HouseholdScreen(hid)) }
                             )
                         }

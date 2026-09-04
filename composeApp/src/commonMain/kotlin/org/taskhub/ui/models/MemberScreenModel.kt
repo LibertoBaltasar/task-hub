@@ -18,6 +18,7 @@ import org.taskhub.network.models.RewardRedemption
 import org.taskhub.platform.HapticKind
 import org.taskhub.platform.vibrate
 import org.taskhub.storage.SettingsStore
+import org.taskhub.ui.i18n.AppStrings
 
 sealed class MemberUiState {
     data object Idle : MemberUiState()
@@ -81,6 +82,8 @@ class MemberScreenModel(
         if (settingsStore.isVibrationEnabled()) vibrate(kind)
     }
 
+    private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())
+
     private val _uiState = MutableStateFlow<MemberUiState>(MemberUiState.Idle)
     val uiState: StateFlow<MemberUiState> = _uiState.asStateFlow()
 
@@ -116,7 +119,7 @@ class MemberScreenModel(
                 )
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
-                    e.message ?: "Error al cargar miembros"
+                    e.message ?: s("member_error_loading")
                 )
             }
         }
@@ -136,7 +139,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
-                    e.message ?: "Error al añadir miembro"
+                    e.message ?: s("member_error_adding")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -157,7 +160,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _memberActionState.value = MemberActionState.Error(
-                    e.message ?: "Error al eliminar miembro"
+                    e.message ?: s("member_error_removing")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -182,7 +185,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _memberActionState.value = MemberActionState.Error(
-                    e.message ?: "Error al cambiar el rol"
+                    e.message ?: s("member_error_role")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -215,7 +218,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _rewardState.value = RewardUiState.Error(
-                    e.message ?: "Error al cargar recompensas"
+                    e.message ?: s("reward_error_loading")
                 )
             }
         }
@@ -241,7 +244,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
-                    e.message ?: "Error al crear recompensa"
+                    e.message ?: s("reward_error_creating")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -258,7 +261,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
-                    e.message ?: "Error al eliminar recompensa"
+                    e.message ?: s("reward_error_deleting")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -284,7 +287,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
-                    e.message ?: "Error al canjear recompensa"
+                    e.message ?: s("reward_error_redeeming")
                 )
                 buzz(HapticKind.ERROR)
             }

@@ -6,8 +6,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,12 +43,10 @@ fun LazyListScope.householdMemberList(
 ) {
     // Members header (desplegable)
     item {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .clickable(onClick = onToggleExpanded),
-            verticalAlignment = Alignment.CenterVertically
+        ExpandableSectionHeader(
+            expanded = membersExpanded,
+            onToggle = onToggleExpanded,
+            chevronTint = MaterialTheme.colorScheme.primary
         ) {
             Text(
                 text = s("household_members"),
@@ -72,12 +68,6 @@ fun LazyListScope.householdMemberList(
 
                 else -> {}
             }
-
-            Icon(
-                imageVector = if (membersExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = if (membersExpanded) s("household_task_section_collapse") else s("household_task_section_expand"),
-                tint = MaterialTheme.colorScheme.primary
-            )
         }
     }
 

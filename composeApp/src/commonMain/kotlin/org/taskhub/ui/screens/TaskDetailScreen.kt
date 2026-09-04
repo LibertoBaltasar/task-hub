@@ -53,6 +53,7 @@ data class TaskDetailScreen(
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
+        val commentsModel = koinScreenModel<TaskCommentsScreenModel>()
         val authManager = koinInject<GoogleAuthManager>()
         val coroutineScope = rememberCoroutineScope()
         val appSettings = LocalAppSettings.current
@@ -63,8 +64,8 @@ data class TaskDetailScreen(
         val currentMemberId by model.currentMemberId.collectAsState()
         val calendarActionState by model.calendarActionState.collectAsState()
         val myAssignment by model.myAssignment.collectAsState()
-        val commentsState by model.commentsState.collectAsState()
-        val newCommentText by model.newCommentText.collectAsState()
+        val commentsState by commentsModel.commentsState.collectAsState()
+        val newCommentText by commentsModel.newCommentText.collectAsState()
 
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
@@ -87,7 +88,7 @@ data class TaskDetailScreen(
         LaunchedEffect(taskId) {
             model.resetActionState()
             model.loadTaskDetail(householdId, taskId)
-            model.loadComments(householdId, taskId)
+            commentsModel.loadComments(householdId, taskId)
         }
 
         // Delete confirmation dialog
@@ -174,9 +175,9 @@ data class TaskDetailScreen(
                             isCalendarSyncEnabled = isCalendarSyncEnabled,
                             isLinkingCalendar = isLinkingCalendar,
                             calendarActionState = calendarActionState,
-                            onCommentTextChange = { model.setNewCommentText(it) },
+                            onCommentTextChange = { commentsModel.setNewCommentText(it) },
                             onAddComment = {
-                                model.addComment(householdId, taskId)
+                                commentsModel.addComment(householdId, taskId, currentMemberId)
                             },
                             onCompleteTask = {
                                 model.completeTask(
