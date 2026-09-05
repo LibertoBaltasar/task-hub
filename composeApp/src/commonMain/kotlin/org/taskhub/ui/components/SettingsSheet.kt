@@ -3,6 +3,7 @@ package org.taskhub.ui.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -12,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -550,7 +552,12 @@ private fun RadioOptionRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(onClick = onClick)
+            // `selectable` (no `clickable` genérico): semántica correcta de
+            // grupo de radio-botones — expone `role = RadioButton` y el
+            // estado `selected` a TalkBack/VoiceOver, que antes solo se
+            // anunciaba a través del propio `RadioButton` hijo, no de toda la
+            // fila clicable (panel v7, Exp. 3, MENOR).
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .padding(vertical = 8.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

@@ -14,8 +14,10 @@ import org.taskhub.network.firestoreBaseUrl
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
+import org.taskhub.ui.i18n.NotificationText
 
 private const val TAG = "NotificationPoll"
+private const val NOTIFICATION_MAX_AGE_MILLIS = 90L * 24 * 60 * 60 * 1000
 
 /**
  * Sondeo periódico (WorkManager, ver [TaskHubApplication]) de
@@ -118,8 +120,16 @@ class NotificationPollWorker(
         val memberId = memberRepository.resolveCurrentMember(householdId)
         if (memberId.isBlank()) return
 
-        val mine = notificationRepository.getNotifications(householdId)
-            .filter { it.memberId == memberId }
+        val all = notificationRepository.getNotifications(householdId)
+
+        // Purga best-effort de notificaciones LEÍDAS con más de 90 días —
+        // reutiliza el `all` ya traído arriba (sin fetch extra) y solo se
+        // ejecuta para hogares donde ya se comprobó pertenencia real
+        // (mismo criterio que el resto de este Worker, panel de
+        // notificaciones 2026-09-05, IMPORTANTE).
+        notificationRepository.purgeOldRead(householdId, all, maxAgeMillis = NOTIFICATION_MAX_AGE_MILLIS)
+
+        val mine = all.filter { it.memberId == memberId }
         if (mine.isEmpty()) return
 
         val seenIds = settingsStore.getNotifiedNotificationIds(householdId)
@@ -146,8 +156,11 @@ class NotificationPollWorker(
             NotificationHelper.showUpdateNotification(
                 context = applicationContext,
                 notificationDocId = n.id,
-                title = n.title,
-                message = n.message,
+                // Idioma del LECTOR (este dispositivo, `lang` ya resuelto
+                // arriba), no el de quien la escribió — ver NotificationText
+                // KDoc (panel de notificaciones 2026-09-05, IMPORTANTE).
+                title = NotificationText.title(n, lang),
+                message = NotificationText.message(n, lang),
                 householdId = householdId,
                 taskId = n.taskId,
                 lang = lang

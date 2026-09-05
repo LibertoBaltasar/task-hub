@@ -76,9 +76,23 @@ data class CreateTaskScreen(
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
 
+        // [createdBy] puede llegar vacío si esta pantalla se empujó antes de
+        // que la pantalla de origen resolviera `currentMemberId` (arranca en
+        // "" y se resuelve de forma asíncrona) — sin este fallback, crear la
+        // tarea con `createdBy=""` deja un creador vacío y dispara una
+        // auto-notificación falsa al "asignarse" la tarea a sí mismo (panel
+        // de notificaciones 2026-09-05, QA, MENOR). Se resuelve aquí en vez
+        // de bloquear para siempre: `createdBy` es un valor fijo capturado al
+        // construir este `Screen`, no se actualiza solo aunque la pantalla de
+        // origen termine de resolverlo más tarde.
+        var effectiveCreatedBy by remember(createdBy) { mutableStateOf(createdBy) }
+
         LaunchedEffect(householdId) {
             taskModel.resetActionState()
             memberModel.loadMembers(householdId)
+            if (createdBy.isBlank()) {
+                effectiveCreatedBy = taskModel.resolveCurrentMemberId(householdId)
+            }
         }
 
         // Form state
@@ -173,7 +187,7 @@ data class CreateTaskScreen(
 
                                     taskModel.createTask(
                                         householdId = householdId,
-                                        createdBy = createdBy,
+                                        createdBy = effectiveCreatedBy,
                                         title = title,
                                         description = description,
                                         points = points,
@@ -192,6 +206,7 @@ data class CreateTaskScreen(
                                     )
                                 },
                                 enabled = actionState !is TaskActionState.Loading &&
+                                    effectiveCreatedBy.isNotBlank() &&
                                     title.isNotBlank() &&
                                     (pointsText.toIntOrNull() ?: -1) > 0 &&
                                     (!hasDeadline || deadlineTime.isValidTimeFormat()) &&
@@ -219,6 +234,36 @@ data class CreateTaskScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    // createdBy aún sin resolver (miembro actual no cargado todavía):
+                    // bloquea la creación en vez de guardar una tarea con createdBy=""
+                    // (creador vacío + auto-notificación falsa al asignarse a sí mismo).
+                    if (effectiveCreatedBy.isBlank()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = s("create_task_creator_not_resolved"),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Error state
                     if (actionState is TaskActionState.Error) {
                         item {

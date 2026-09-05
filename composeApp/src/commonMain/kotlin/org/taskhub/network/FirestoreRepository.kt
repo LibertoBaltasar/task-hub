@@ -1072,7 +1072,8 @@ class FirestoreRepository(
 
     /**
      * Revert a task completion — used by the undo feature.
-     * Restores the previous lastCompletedDate/completedBy on the task document.
+     * Restores the previous lastCompletedDate/completedBy/nextDueAt on the
+     * task document — ver KDoc de [TaskRepository.revertTaskCompletion].
      * No revierte puntos/racha/historial por sí sola — eso lo hace el caller
      * (ver [TaskScreenModel.undoCompleteTask]: `addMemberPoints`, `updateMemberStreak`
      * y [deleteTaskHistoryRecord]).
@@ -1081,8 +1082,9 @@ class FirestoreRepository(
         householdId: String,
         taskId: String,
         previousLastCompletedDate: Long?,
-        previousCompletedBy: String? = null
-    ) = taskRepository.revertTaskCompletion(householdId, taskId, previousLastCompletedDate, previousCompletedBy)
+        previousCompletedBy: String? = null,
+        previousNextDueAt: Long? = null
+    ) = taskRepository.revertTaskCompletion(householdId, taskId, previousLastCompletedDate, previousCompletedBy, previousNextDueAt)
 
     /**
      * Revierte los efectos de [completeTask] sobre las asignaciones —
@@ -1186,6 +1188,14 @@ class FirestoreRepository(
      * y el registro de historial correspondiente. Si la tarea no estaba
      * completada (completedBy null), solo fija el nuevo miembro sin transferir.
      *
+     * La cantidad transferida es la de [findTaskHistoryRecord] (los puntos
+     * REALMENTE otorgados en esa compleción, que pueden ser menores que
+     * [taskPoints] por penalización de retraso) — antes se transfería siempre
+     * [taskPoints] (la configuración ACTUAL de la tarea, que además pudo
+     * cambiar desde que se completó), pudiendo sobre/sub-compensar al
+     * reasignar (panel v7, Exp. 8, MENOR). [taskPoints] queda como fallback
+     * para compleciones legacy sin registro de historial.
+     *
      * NO es atómica de extremo a extremo (hasta 4 escrituras HTTP
      * secuenciales): ver la nota de atomicidad en [completeTask] y
      * `docs/atomicidad-commit-pendiente.md`.
@@ -1205,6 +1215,7 @@ class FirestoreRepository(
         }
         val oldMemberId = task.completedBy
         val completedAt = task.lastCompletedDate ?: Clock.System.now().toEpochMilliseconds()
+        val actualPoints = findTaskHistoryRecord(householdId, taskId, completedAt)?.points ?: taskPoints
 
         // 1. Actualizar completedBy en la tarea PRIMERO — con concurrencia
         //    optimista (panel de revisión 2026-09-03/04, Experto 12, MENOR:
@@ -1242,8 +1253,8 @@ class FirestoreRepository(
         //    completada antes de registrar quién), fijamos el nuevo sin tocar
         //    puntos para no duplicarlos.
         if (oldMemberId != null && oldMemberId != newMemberId) {
-            addMemberPoints(householdId, oldMemberId, -taskPoints)
-            addMemberPoints(householdId, newMemberId, taskPoints)
+            addMemberPoints(householdId, oldMemberId, -actualPoints)
+            addMemberPoints(householdId, newMemberId, actualPoints)
         }
 
         // 3. Reasignar el registro de historial de esa compleción para que las
@@ -1726,15 +1737,24 @@ class FirestoreRepository(
 
         try {
             val lang = settingsStore.getLanguage()
+            val messageKey = if (task.title.isNotEmpty())
+                "notification_task_assigned_body_prefix"
+            else
+                "notification_task_assigned_body_generic"
             notificationRepository.createNotification(
                 householdId = householdId,
                 memberId = decision.memberId,
                 taskId = taskId,
+                // title/message: fallback en el idioma de quien completó (que
+                // disparó la regeneración), ver KDoc de TaskRepository.assignTask.
                 title = AppStrings.get("notification_task_assigned_title", lang),
                 message = if (task.title.isNotEmpty())
                     AppStrings.get("notification_task_assigned_body_prefix", lang) + task.title
                 else
-                    AppStrings.get("notification_task_assigned_body_generic", lang)
+                    AppStrings.get("notification_task_assigned_body_generic", lang),
+                titleKey = "notification_task_assigned_title",
+                messageKey = messageKey,
+                messageParams = if (task.title.isNotEmpty()) mapOf("taskTitle" to task.title) else null
             )
         } catch (e: CancellationException) {
             throw e

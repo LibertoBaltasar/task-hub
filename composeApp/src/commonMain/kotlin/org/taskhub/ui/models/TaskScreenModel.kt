@@ -307,6 +307,17 @@ class TaskScreenModel(
         _currentMemberId.value = memberId
     }
 
+    /**
+     * Resuelve el miembro actual cuando el CALLER no pudo pasarlo ya resuelto
+     * — ver [org.taskhub.ui.screens.CreateTaskScreen], que puede empujarse
+     * antes de que `currentMemberId` esté disponible en la pantalla de
+     * origen (p. ej. justo tras entrar a un hogar) y necesita resolverlo por
+     * su cuenta en vez de crear la tarea con `createdBy=""` (panel de
+     * notificaciones 2026-09-05, QA, MENOR: creador vacío + auto-notificación
+     * falsa al asignarse la propia tarea).
+     */
+    suspend fun resolveCurrentMemberId(householdId: String): String = repo.resolveCurrentMember(householdId)
+
     // ── Create task ─────────────────────────────────────────
 
     fun createTask(
@@ -409,6 +420,8 @@ class TaskScreenModel(
         val memberId: String,
         val previousLastCompletedDate: Long?,
         val previousCompletedBy: String?,
+        /** `nextDueAt` de la tarea ANTES de completarla — ver KDoc de [FirestoreRepository.revertTaskCompletion]. */
+        val previousNextDueAt: Long?,
         val pointsAwarded: Int,
         val previousStreak: Int,
         val previousBestStreak: Int,
@@ -446,6 +459,7 @@ class TaskScreenModel(
                     memberId = memberId,
                     previousLastCompletedDate = task.lastCompletedDate,
                     previousCompletedBy = task.completedBy,
+                    previousNextDueAt = task.nextDueAt,
                     pointsAwarded = task.points,
                     previousStreak = memberBefore?.currentStreak ?: 0,
                     previousBestStreak = memberBefore?.bestStreak ?: 0,
@@ -591,7 +605,8 @@ class TaskScreenModel(
                     state.householdId,
                     state.taskId,
                     state.previousLastCompletedDate,
-                    state.previousCompletedBy
+                    state.previousCompletedBy,
+                    state.previousNextDueAt
                 )
                 // Revertir las asignaciones que completeTask marcó "completed"
                 // (propia + hermanas) y borrar la del siguiente ciclo si ya se
@@ -1013,22 +1028,12 @@ class TaskScreenModel(
         val now = Clock.System.now()
         val currentHour = now.toLocalDateTime(tz).hour
 
-        // Se cuenta desde `taskHistory`, no desde `assignments`: completeTask/
-        // completeAssignment escriben un registro de taskHistory UNA vez por
-        // compleción real (siempre por quien la completó, con los puntos que
-        // sea, incluido 0 por penalización) y NUNCA para las asignaciones
-        // hermanas que se cierran como "fantasma" al completar el ciclo para
-        // todos los miembros asignados (esas solo tocan `assignments`, ver
-        // AssignmentCompletionRules.siblingsToClose). Filtrar `assignments`
-        // por `pointsAwarded > 0` (como se hacía antes) evitaba los logros
-        // fantasma pero además undercontaba compleciones REALES penalizadas a
-        // 0 puntos por tardanza — un miembro que completa tarde y pierde
-        // todos los puntos nunca desbloqueaba logros de "N tareas completadas"
-        // (panel de revisión 2026-09-04, Experto 8, IMPORTANTE). `taskHistory`
-        // no tiene ninguno de los dos problemas: es un registro por-compleción
-        // real, sin entradas fantasma.
+        // Conteo desde `taskHistory` (no desde `assignments`) — ver KDoc de
+        // [AchievementChecker.countCompletedFromHistory] para el motivo
+        // (panel de revisión 2026-09-04, Experto 8, IMPORTANTE), extraído
+        // como función pura testeable sin mocks (panel v7, Exp. 13).
         val history = repo.getTaskHistory(householdId)
-        val completedCount = history.count { it.memberId == member.id }
+        val completedCount = AchievementChecker.countCompletedFromHistory(history, member.id)
 
         val alreadyUnlocked = repo.getMemberAchievements(householdId, member.id)
 

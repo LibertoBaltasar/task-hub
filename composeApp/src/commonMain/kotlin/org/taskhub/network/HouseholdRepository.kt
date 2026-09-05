@@ -222,6 +222,15 @@ class HouseholdRepository(
      * por un fallo transitorio, solo por una confirmación explícita de Firestore.
      *
      * Devuelve la lista de hogares que sobreviven la reconciliación.
+     *
+     * Poda con UNA sola escritura final ([HouseholdStore.replaceSavedHouseholds])
+     * en vez de un `removeHousehold` por hogar podado dentro de cada `async` —
+     * varias coroutines llamando a `removeHousehold` en paralelo hacían cada
+     * una su propio read-modify-write sobre la MISMA lista sin serializar
+     * (última escritura gana), pudiendo resucitar un hogar que otra coroutine
+     * del mismo lote ya había podado (panel v7, Exp. 6, MENOR, autocurable en
+     * la siguiente pasada pero real). Reescribir de golpe con la lista final
+     * de supervivientes es idempotente y no tiene esa carrera.
      */
     suspend fun reconcileHouseholds(store: HouseholdStore): List<SavedHousehold> {
         val saved = store.getSavedHouseholds()
@@ -233,8 +242,6 @@ class HouseholdRepository(
                         true
                     } catch (e: FirestoreException) {
                         if (e.statusCode == 404 || e.statusCode == 403) {
-                            store.removeHousehold(h.id)
-                            taskCache.clearHousehold(h.id)
                             false
                         } else {
                             true // 5xx u otro error tipado de Firestore: no es inequívoco, conservar
@@ -248,7 +255,18 @@ class HouseholdRepository(
                 }
             }.awaitAll()
         }
-        return survivors.filterNotNull()
+        val survivorList = survivors.filterNotNull()
+        // prunedIds se deriva por comparación DESPUÉS de awaitAll (no
+        // acumulado desde dentro de cada `async` — mutar una lista compartida
+        // desde coroutines potencialmente en paralelo sería la misma clase de
+        // carrera que este fix elimina) — sin condición de carrera posible.
+        val survivorIds = survivorList.map { it.id }.toSet()
+        val prunedIds = saved.filter { it.id !in survivorIds }.map { it.id }
+        if (prunedIds.isNotEmpty()) {
+            store.replaceSavedHouseholds(survivorList)
+            prunedIds.forEach { taskCache.clearHousehold(it) }
+        }
+        return survivorList
     }
 
     /** Batch-fetch multiple households by their document IDs (en paralelo). */
@@ -366,8 +384,14 @@ class HouseholdRepository(
                         householdId = householdId,
                         memberId = recipient.id,
                         taskId = "",
+                        // title: fallback en el idioma del autor. titleKey permite
+                        // que el LECTOR lo vea en SU idioma (panel de
+                        // notificaciones 2026-09-05, IMPORTANTE); messageKey
+                        // queda null a propósito — el cuerpo ("$authorName:
+                        // $preview") es contenido de usuario, no traducible.
                         title = title,
-                        message = body
+                        message = body,
+                        titleKey = "notification_new_message_title"
                     )
                 } catch (e: CancellationException) {
                     throw e

@@ -78,6 +78,21 @@ class HouseholdStore(private val settings: Settings) {
         settings.putString(KEY_SAVED_HOUSEHOLDS, json.encodeToString(current))
     }
 
+    /**
+     * Sustituye la lista completa de hogares guardados por [households] en UNA
+     * sola escritura — usado por [org.taskhub.network.HouseholdRepository.reconcileHouseholds]
+     * para podar varios hogares de golpe sin encadenar N llamadas a
+     * [removeHousehold] desde coroutines paralelas: cada una hace su propio
+     * read-modify-write sobre la MISMA lista sin serializar, así que la
+     * última en escribir "gana" y puede resucitar un hogar que otra
+     * coroutine del mismo lote ya había podado (panel v7, Exp. 6, MENOR).
+     * Idempotente: llamarla dos veces con la misma lista dejan el mismo
+     * resultado.
+     */
+    fun replaceSavedHouseholds(households: List<SavedHousehold>) {
+        settings.putString(KEY_SAVED_HOUSEHOLDS, json.encodeToString(households))
+    }
+
     // ── Personal space ─────────────────────────────────────
 
     /**

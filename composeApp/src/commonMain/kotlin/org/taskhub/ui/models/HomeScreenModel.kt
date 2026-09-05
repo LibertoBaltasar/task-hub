@@ -63,6 +63,15 @@ class HomeScreenModel(
      */
     private var loadAllTasksJob: Job? = null
 
+    /**
+     * Última lista CRUDA (sin filtrar por "pendiente") de tareas por hogar
+     * que trajo [loadAllTasks] — [loadHouseholdPreview] la reutiliza en vez
+     * de repetir su propio `getTasks(householdId)`, que con N hogares
+     * duplicaba a 2N las lecturas de la colección `tasks` al entrar en
+     * `HomeScreen` (panel v7, Exp. 11, CRÍTICO de rendimiento).
+     */
+    private var rawTasksByHousehold: Map<String, List<TaskResponse>> = emptyMap()
+
     fun loadAllTasks() {
         // Cancela la carga anterior: sin esto, dos loadAllTasks() solapadas
         // podrían resolverse fuera de orden y la más antigua sobrescribiría
@@ -74,13 +83,11 @@ class HomeScreenModel(
             try {
                 val households = householdStore.getSavedHouseholds()
 
-                val allTasks = coroutineScope {
+                val perHousehold = coroutineScope {
                     households.map { h ->
                         async {
-                            try {
+                            h.id to try {
                                 repo.getTasks(h.id)
-                                    .filter { isPending(it) }
-                                    .map { h.id to it }
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (_: Exception) {
@@ -88,7 +95,11 @@ class HomeScreenModel(
                                 emptyList()
                             }
                         }
-                    }.awaitAll().flatten()
+                    }.awaitAll()
+                }
+                rawTasksByHousehold = perHousehold.toMap()
+                val allTasks = perHousehold.flatMap { (hid, tasks) ->
+                    tasks.filter { isPending(it) }.map { hid to it }
                 }
 
                 // Sort: overdue first, then by due date, then no-due-date last
@@ -134,13 +145,30 @@ class HomeScreenModel(
      * su propio fetch en un `LaunchedEffect`, sin pasar por ningún ScreenModel
      * — el único sitio del árbol con ese patrón (panel v7, #15).
      */
+    private fun previewFilter(tasks: List<TaskResponse>): List<TaskResponse> =
+        tasks.filter { it.lastCompletedDate == null || it.lastCompletedDate == 0L }.take(5)
+
     fun loadHouseholdPreview(householdId: String) {
         screenModelScope.launch {
+            // Espera a que un loadAllTasks() en curso termine de traer los
+            // datos crudos (mismo Job que rellena [rawTasksByHousehold]) para
+            // reutilizarlos en vez de duplicar el fetch — ver KDoc de
+            // [rawTasksByHousehold]. `join()` es no-op si ya terminó o si
+            // nunca se llamó (job null).
+            loadAllTasksJob?.join()
+            val cached = rawTasksByHousehold[householdId]
+            if (cached != null) {
+                _previewTasks.value = _previewTasks.value + (householdId to HouseholdPreviewState.Success(previewFilter(cached)))
+                return@launch
+            }
+
+            // Fallback con fetch propio: no hay datos cacheados para este
+            // hogar (p. ej. loadAllTasks() aún no se ha llamado, o el hogar
+            // no estaba en la lista guardada al cargarlos) — mismo
+            // comportamiento que antes de este fix.
             _previewTasks.value = _previewTasks.value + (householdId to HouseholdPreviewState.Loading)
             try {
-                val tasks = repo.getTasks(householdId)
-                    .filter { it.lastCompletedDate == null || it.lastCompletedDate == 0L }
-                    .take(5)
+                val tasks = previewFilter(repo.getTasks(householdId))
                 _previewTasks.value = _previewTasks.value + (householdId to HouseholdPreviewState.Success(tasks))
             } catch (e: CancellationException) {
                 throw e

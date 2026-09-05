@@ -29,7 +29,7 @@ fun QrCodeImage(
     contentDescription: String,
     modifier: Modifier = Modifier,
     size: Dp = 200.dp,
-    onError: @Composable (String) -> Unit = { err -> }
+    onError: @Composable () -> Unit = {}
 ) {
     val matrix = remember(text) {
         try {
@@ -40,7 +40,7 @@ fun QrCodeImage(
     }
 
     if (matrix == null) {
-        onError("Error al generar QR")
+        onError()
         return
     }
 

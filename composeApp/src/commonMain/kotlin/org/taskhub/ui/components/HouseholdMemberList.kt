@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -207,7 +208,9 @@ private fun MemberCard(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable(enabled = member.userId != null) { onClick() }
+                        // role = Button: semántica estructurada para TalkBack/VoiceOver
+                        // (panel v7, Exp. 3, MENOR).
+                        .clickable(enabled = member.userId != null, role = Role.Button) { onClick() }
                 ) {
                     Text(
                         text = member.displayName,

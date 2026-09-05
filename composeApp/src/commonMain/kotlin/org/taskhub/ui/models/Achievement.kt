@@ -5,6 +5,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
+import org.taskhub.network.models.TaskHistoryResponse
 
 data class Achievement(
     val id: String,
@@ -73,4 +74,21 @@ object AchievementChecker {
             a.copy(isUnlocked = a.id in alreadyUnlocked)
         }
     }
+
+    /**
+     * Cuenta las tareas completadas por [memberId] desde [history]
+     * (`taskHistory`, un registro por-compleción REAL) — no desde
+     * `assignments`, que además de la compleción real crea entradas
+     * "fantasma" en las asignaciones HERMANAS al cerrar el ciclo para todos
+     * los miembros asignados. Filtrar `assignments` por `pointsAwarded > 0`
+     * (como hacía la versión anterior de [TaskScreenModel.checkAndAwardAchievements])
+     * evitaba esos fantasmas pero además undercontaba compleciones REALES
+     * penalizadas a 0 puntos por tardanza — un miembro que completa tarde y
+     * pierde todos los puntos nunca desbloqueaba logros de "N tareas
+     * completadas" (panel de revisión 2026-09-04, Experto 8, IMPORTANTE).
+     * Extraída como función PURA (sin I/O) para poder testear esta lógica
+     * sin mocks (panel v7, Exp. 13).
+     */
+    fun countCompletedFromHistory(history: List<TaskHistoryResponse>, memberId: String): Int =
+        history.count { it.memberId == memberId }
 }

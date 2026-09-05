@@ -270,6 +270,15 @@ data class TaskHistoryResponse(
 
 // ── Notification DTO ──────────────────────────────────────
 
+/**
+ * [titleKey]/[messageKey]/[messageParams] permiten renderizar el texto en el
+ * idioma del LECTOR en vez de quedar fijado al idioma de quien la escribió
+ * (panel de notificaciones 2026-09-05, IMPORTANTE) — ver
+ * `ui/i18n/NotificationText.kt`. `null` en notificaciones ANTIGUAS (creadas
+ * antes de este cambio) o en mensajes de chat (el cuerpo es contenido de
+ * usuario, no traducible: `"$authorName: $preview"`), donde se sigue usando
+ * [title]/[message] tal cual, igual que antes.
+ */
 @Serializable
 data class NotificationResponse(
     val id: String,
@@ -278,7 +287,10 @@ data class NotificationResponse(
     val title: String,
     val message: String,
     val createdAt: Long = 0,
-    val read: Boolean = false
+    val read: Boolean = false,
+    val titleKey: String? = null,
+    val messageKey: String? = null,
+    val messageParams: Map<String, String>? = null
 )
 
 // ── Reward DTOs ────────────────────────────────────────────

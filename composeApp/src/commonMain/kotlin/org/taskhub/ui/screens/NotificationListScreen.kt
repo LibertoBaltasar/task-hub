@@ -21,6 +21,7 @@ import org.taskhub.network.models.NotificationResponse
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.NotificationText
 import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.models.NotificationUiState
 import org.taskhub.ui.components.rememberHouseholdName
@@ -187,6 +188,14 @@ private fun NotificationCard(
     // tema/modo, mismo criterio aplicado a otras 6+ cards de la app.
     val titleColor = if (!notification.read) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
     val secondaryColor = if (!notification.read) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+    // Idioma del LECTOR (este dispositivo), no el de quien la escribió — ver
+    // NotificationText KDoc (panel de notificaciones 2026-09-05, IMPORTANTE).
+    val displayTitle = remember(notification, appSettings.currentLanguage) {
+        NotificationText.title(notification, appSettings.currentLanguage)
+    }
+    val displayMessage = remember(notification, appSettings.currentLanguage) {
+        NotificationText.message(notification, appSettings.currentLanguage)
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -223,7 +232,7 @@ private fun NotificationCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = notification.title,
+                        text = displayTitle,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = if (!notification.read) FontWeight.Bold else FontWeight.Normal,
                         color = titleColor
@@ -240,7 +249,7 @@ private fun NotificationCard(
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = notification.message,
+                    text = displayMessage,
                     style = MaterialTheme.typography.bodyMedium,
                     color = secondaryColor
                 )

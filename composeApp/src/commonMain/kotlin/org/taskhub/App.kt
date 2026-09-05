@@ -116,7 +116,13 @@ fun App(
                 val authManager = koinInject<GoogleAuthManager>()
                 val notificationScheduler = koinInject<NotificationScheduler>()
 
-                var initialScreen by remember { mutableStateOf<Screen?>(null) }
+                var initialScreens by remember { mutableStateOf<List<Screen>?>(null) }
+                // Deep link ya incorporado a la pila con la que se crea el
+                // Navigator (arranque en frío) — evita que el LaunchedEffect
+                // de más abajo lo "empuje" una segunda vez y deje una
+                // pantalla duplicada en la pila (panel de notificaciones
+                // 2026-09-05, UX, doble salto visual Home→destino).
+                var initialDeepLinkConsumedKey by remember { mutableStateOf<Pair<String?, String?>?>(null) }
 
                 LaunchedEffect(Unit) {
                     // ── Resolver/crear el espacio Personal (interdispositivo) ──
@@ -179,8 +185,34 @@ fun App(
                         // Offline/transitorio: se reintenta en el próximo arranque.
                     }
 
-                    // ── Ir siempre a HomeScreen ───────────────────────
-                    initialScreen = HomeScreen()
+                    // ── Ir siempre a HomeScreen, con el destino del deep link
+                    // (si lo hay) ya incluido en la pila inicial ───────────
+                    // En vez de crear el Navigator solo con HomeScreen y hacer
+                    // `push` al destino en un LaunchedEffect posterior (lo que
+                    // pintaba HomeScreen un frame antes de la transición), la
+                    // API `Navigator(screens: List<Screen>, ...)` de Voyager
+                    // 1.1.0-beta03 permite construir la pila `[HomeScreen(),
+                    // destino]` directamente, mostrando ya el destino en el
+                    // primer frame (con "atrás" volviendo a Home).
+                    val screens = mutableListOf<Screen>(HomeScreen())
+                    if (!deepLinkHouseholdId.isNullOrEmpty()) {
+                        screens += if (deepLinkTaskId.isNullOrEmpty()) {
+                            HouseholdScreen(deepLinkHouseholdId)
+                        } else {
+                            TaskDetailScreen(deepLinkHouseholdId, deepLinkTaskId)
+                        }
+                        initialDeepLinkConsumedKey = deepLinkHouseholdId to deepLinkTaskId
+                        if (!deepLinkNotificationId.isNullOrEmpty()) {
+                            try {
+                                repo.markNotificationRead(deepLinkHouseholdId, deepLinkNotificationId)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                // No crítico: solo afecta al estado "leída" in-app.
+                            }
+                        }
+                    }
+                    initialScreens = screens
                 }
 
                 // Surface paints the background behind system bars (edge-to-edge)
@@ -195,7 +227,7 @@ fun App(
                             .statusBarsPadding()
                             .navigationBarsPadding()
                     ) {
-                        when (val screen = initialScreen) {
+                        when (val screens = initialScreens) {
                             null -> {
                                 // Still loading
                                 Box(
@@ -207,16 +239,19 @@ fun App(
                             }
                             else -> {
                                 val reduceMotion = shouldReduceMotion()
-                                Navigator(screen = screen) { navigator ->
+                                Navigator(screens = screens) { navigator ->
                                     // Se ejecuta una vez por (navigator, deep
-                                    // link): en frío, cuando el Navigator se
-                                    // crea con HomeScreen ya en la pila (así
-                                    // "atrás" vuelve a Home); si la Activity ya
-                                    // estaba viva y llega un deep link nuevo
-                                    // (onNewIntent), este mismo efecto se
-                                    // vuelve a disparar porque las claves cambian.
+                                    // link). El deep link con el que se creó la
+                                    // pila inicial (arranque en frío) ya quedó
+                                    // resuelto arriba — este efecto solo debe
+                                    // actuar cuando llega uno DISTINTO mientras
+                                    // la Activity ya estaba viva (onNewIntent),
+                                    // que sí dispara un `push` con transición
+                                    // normal (aquí no hay "doble salto" porque
+                                    // la app ya se estaba mostrando).
                                     LaunchedEffect(navigator, deepLinkHouseholdId, deepLinkTaskId) {
                                         val hid = deepLinkHouseholdId ?: return@LaunchedEffect
+                                        if ((hid to deepLinkTaskId) == initialDeepLinkConsumedKey) return@LaunchedEffect
                                         if (deepLinkTaskId.isNullOrEmpty()) {
                                             navigator.push(HouseholdScreen(hid))
                                         } else {

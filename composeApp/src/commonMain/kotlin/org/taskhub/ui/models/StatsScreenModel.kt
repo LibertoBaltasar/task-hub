@@ -61,13 +61,17 @@ class StatsScreenModel(
             try {
                 // Load all data — including taskHistory for accurate stats.
                 // getAllAssignments(tasks) reutiliza la lista ya cargada en vez
-                // de volver a pedirla internamente, y las 3 lecturas
-                // independientes de las tareas se lanzan en paralelo en vez de
-                // encadenarse en serie (panel v7, #18/#19).
+                // de volver a pedirla internamente, y las 4 lecturas
+                // independientes (incluida getMemberAchievements, que no
+                // depende de ninguna de las otras 3 ni de computeStats — solo
+                // de householdId/memberId, ya conocidos — panel v7, Exp. 11,
+                // MENOR) se lanzan en paralelo en vez de encadenarse en serie
+                // (panel v7, #18/#19).
                 val tasks = repo.getTasks(householdId)
                 val assignmentsDeferred = async { repo.getAllAssignments(householdId, tasks) }
                 val historyDeferred = async { repo.getTaskHistory(householdId) }
                 val membersDeferred = async { repo.getMembers(householdId) }
+                val achievementsDeferred = async { repo.getMemberAchievements(householdId, memberId) }
                 val assignments = assignmentsDeferred.await()
                 val history = historyDeferred.await()
                 val members = membersDeferred.await()
@@ -75,10 +79,13 @@ class StatsScreenModel(
 
                 if (member != null) {
                     val data = computeStats(tasks, assignments, history, member, lang)
-                    val unlocked = repo.getMemberAchievements(householdId, memberId)
+                    val unlocked = achievementsDeferred.await()
                     val achievements = AchievementChecker.getAchievementsWithStatus(unlocked)
                     _uiState.value = StatsUiState.Success(data, achievements)
                 } else {
+                    // Miembro no encontrado: el resultado de achievementsDeferred no se
+                    // necesita — se cancela para no dejarlo corriendo de fondo sin motivo.
+                    achievementsDeferred.cancel()
                     // Sin esto, la pantalla se quedaba completamente en blanco (ni error, ni
                     // reintento) cuando memberId aún no se había resuelto (currentMemberId
                     // arranca en "" y se resuelve de forma asíncrona vía red) — el usuario no

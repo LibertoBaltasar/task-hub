@@ -269,7 +269,15 @@ class TaskRepository(
 
     /**
      * Revert a task completion — used by the undo feature.
-     * Restores the previous lastCompletedDate/completedBy on the task document.
+     * Restores the previous lastCompletedDate/completedBy/nextDueAt on the
+     * task document. [previousNextDueAt] es el `nextDueAt` que tenía la tarea
+     * ANTES de completarla (capturado por el caller antes de llamar a
+     * `completeTask`) — sin restaurarlo, deshacer una compleción recurrente
+     * dejaba el `nextDueAt` que `completeTask` ya había avanzado, afectando al
+     * cálculo de puntualidad de la siguiente compleción REAL (panel v7, Exp.
+     * 8, IMPORTANTE). `null` (tarea "once", o recurrente que nunca llegó a
+     * tener uno) limpia el campo con `NULL_VALUE`, igual que
+     * [nextDueAtField].
      * No revierte puntos/racha/historial por sí sola — eso lo hace el caller
      * (ver `TaskScreenModel.undoCompleteTask`: `addMemberPoints`, `updateMemberStreak`
      * y `deleteTaskHistoryRecord`).
@@ -278,7 +286,8 @@ class TaskRepository(
         householdId: String,
         taskId: String,
         previousLastCompletedDate: Long?,
-        previousCompletedBy: String? = null
+        previousCompletedBy: String? = null,
+        previousNextDueAt: Long? = null
     ) {
         val lcdValue = if (previousLastCompletedDate != null) {
             FirestoreValue(integerValue = previousLastCompletedDate.toString())
@@ -292,11 +301,12 @@ class TaskRepository(
         }
         val fields = mapOf(
             "lastCompletedDate" to lcdValue,
-            "completedBy" to cbValue
+            "completedBy" to cbValue,
+            "nextDueAt" to nextDueAtField(previousNextDueAt)
         )
         client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
-            updateMaskFieldPaths("lastCompletedDate", "completedBy")
+            updateMaskFieldPaths("lastCompletedDate", "completedBy", "nextDueAt")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -391,15 +401,25 @@ class TaskRepository(
             if (memberId != assignedByMemberId) {
                 try {
                     val lang = settingsStore.getLanguage()
+                    val messageKey = if (taskTitle.isNotEmpty())
+                        "notification_task_assigned_body_prefix"
+                    else
+                        "notification_task_assigned_body_generic"
                     notificationRepository.createNotification(
                         householdId = householdId,
                         memberId = memberId,
                         taskId = taskId,
+                        // title/message: fallback en el idioma de quien asigna,
+                        // para notificaciones leídas por una versión antigua de
+                        // la app o si titleKey/messageKey no se pueden resolver.
                         title = AppStrings.get("notification_task_assigned_title", lang),
                         message = if (taskTitle.isNotEmpty())
                             AppStrings.get("notification_task_assigned_body_prefix", lang) + taskTitle
                         else
-                            AppStrings.get("notification_task_assigned_body_generic", lang)
+                            AppStrings.get("notification_task_assigned_body_generic", lang),
+                        titleKey = "notification_task_assigned_title",
+                        messageKey = messageKey,
+                        messageParams = if (taskTitle.isNotEmpty()) mapOf("taskTitle" to taskTitle) else null
                     )
                 } catch (e: CancellationException) {
                     throw e

@@ -14,6 +14,8 @@ object AppStrings {
             "common_retry" to "Reintentar",
             "common_collapse" to "Colapsar",
             "common_expand" to "Expandir",
+            "state_expanded" to "Expandido",
+            "state_collapsed" to "Colapsado",
             "error_icon_content_desc" to "Error",
 
             // Settings
@@ -511,6 +513,7 @@ object AppStrings {
             "create_task_section_basic_info" to "📝 Información básica",
             "create_task_title_field" to "Título de la tarea *",
             "create_task_title_required" to "El título es obligatorio",
+            "create_task_creator_not_resolved" to "Espera un momento: aún se está identificando quién crea la tarea",
             "create_task_section_checklist" to "✅ Checklist",
             "create_task_add_item" to "Añadir ítem",
             "create_task_description_label" to "Descripción",
@@ -627,6 +630,8 @@ object AppStrings {
             "common_retry" to "Retry",
             "common_collapse" to "Collapse",
             "common_expand" to "Expand",
+            "state_expanded" to "Expanded",
+            "state_collapsed" to "Collapsed",
             "error_icon_content_desc" to "Error",
 
             // Settings
@@ -1110,6 +1115,7 @@ object AppStrings {
             "create_task_section_basic_info" to "📝 Basic info",
             "create_task_title_field" to "Task title *",
             "create_task_title_required" to "Title is required",
+            "create_task_creator_not_resolved" to "Please wait a moment: still identifying who is creating the task",
             "create_task_section_checklist" to "✅ Checklist",
             "create_task_add_item" to "Add item",
             "create_task_description_label" to "Description",

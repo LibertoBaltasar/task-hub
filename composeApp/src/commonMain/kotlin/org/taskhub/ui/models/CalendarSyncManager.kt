@@ -1,6 +1,8 @@
 package org.taskhub.ui.models
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.network.models.TaskAssignmentResponse
@@ -32,6 +34,19 @@ class CalendarSyncManager(
     private fun calendarName(householdName: String, isPersonal: Boolean): String =
         if (isPersonal) "Tareas personal" else "Tareas $householdName"
 
+    /**
+     * Serializa la creación del calendario: [GoogleCalendarRepository.ensureCalendar]
+     * hace "buscar por nombre, si no existe crear" pero esas dos llamadas HTTP
+     * no son atómicas en la API de Google — dos coroutines de este MISMO
+     * dispositivo llamando a [ensureCalendarId] casi a la vez (p. ej.
+     * [onTaskAssigned] y [reconcile] disparados juntos al abrir la app) podían
+     * buscar antes de que ninguna hubiera creado todavía, y las dos acababan
+     * creando un calendario duplicado (panel v7, Exp. 12, MENOR). No cubre
+     * carreras entre DISTINTOS dispositivos con la misma cuenta (fuera de
+     * alcance de un `Mutex` en memoria de proceso).
+     */
+    private val ensureCalendarMutex = Mutex()
+
     /** Devuelve el calendarId cacheado localmente, o lo crea/busca y lo cachea. */
     private suspend fun ensureCalendarId(
         householdId: String,
@@ -40,14 +55,20 @@ class CalendarSyncManager(
         accessToken: String
     ): String? {
         settingsStore.getCalendarId(householdId)?.let { return it }
-        return try {
-            val id = calendarRepo.ensureCalendar(accessToken, calendarName(householdName, isPersonal))
-            settingsStore.setCalendarId(householdId, id)
-            id
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
+        return ensureCalendarMutex.withLock {
+            // Re-comprobar tras adquirir el lock (double-checked locking):
+            // otra coroutine pudo haber terminado de crear y cachear el
+            // calendario mientras esta esperaba, ver KDoc de [ensureCalendarMutex].
+            settingsStore.getCalendarId(householdId)?.let { return@withLock it }
+            try {
+                val id = calendarRepo.ensureCalendar(accessToken, calendarName(householdName, isPersonal))
+                settingsStore.setCalendarId(householdId, id)
+                id
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 

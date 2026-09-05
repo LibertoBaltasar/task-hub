@@ -184,7 +184,14 @@ object FirestoreParsers {
             title = f["title"]?.stringValue ?: "",
             message = f["message"]?.stringValue ?: "",
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            read = f["read"]?.booleanValue ?: false
+            read = f["read"]?.booleanValue ?: false,
+            // Ausentes en notificaciones ANTIGUAS (creadas antes del rediseño
+            // de idioma por-lector) — null hace que el render use title/message
+            // tal cual, igual que antes (retrocompatible).
+            titleKey = f["titleKey"]?.stringValue,
+            messageKey = f["messageKey"]?.stringValue,
+            messageParams = f["messageParams"]?.mapValue?.fields
+                ?.mapValues { it.value.stringValue ?: "" }
         )
     }
 

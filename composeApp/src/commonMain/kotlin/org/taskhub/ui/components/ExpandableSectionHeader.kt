@@ -15,6 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Row
@@ -42,7 +45,14 @@ fun ExpandableSectionHeader(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(onClick = onToggle)
+            .clickable(role = Role.Button, onClick = onToggle)
+            // Semántica estructurada de "botón" + estado expandido/colapsado
+            // (antes solo el contentDescription del icono chevron daba alguna
+            // pista, y únicamente a quien explorara ese hijo por separado) —
+            // panel v7, Exp. 3, MENOR.
+            .semantics {
+                stateDescription = AppStrings.get(if (expanded) "state_expanded" else "state_collapsed", lang)
+            }
             .then(modifier),
         verticalAlignment = Alignment.CenterVertically
     ) {

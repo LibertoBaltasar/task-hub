@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -157,7 +158,9 @@ private fun TaskRow(task: TaskResponse, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .clickable(onClick = onClick),
+            // role = Button: semántica estructurada para TalkBack/VoiceOver
+            // (panel v7, Exp. 3, MENOR).
+            .clickable(role = Role.Button, onClick = onClick),
         color = MaterialTheme.colorScheme.surface
     ) {
         Row(
