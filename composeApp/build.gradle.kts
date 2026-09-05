@@ -133,16 +133,16 @@ kotlin {
 
 android {
     namespace = "org.taskhub"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "org.taskhub"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
 
         // ── Version — overridable via -P flags for CI/CD ──────
-        versionCode = (project.findProperty("versionCodeOverride") as? String)?.toInt() ?: 132
-        versionName = (project.findProperty("versionNameOverride") as? String) ?: "0.7.26"
+        versionCode = (project.findProperty("versionCodeOverride") as? String)?.toInt() ?: 133
+        versionName = (project.findProperty("versionNameOverride") as? String) ?: "0.7.27"
     }
 
     // ── Release signing ──────────────────────────────────────
