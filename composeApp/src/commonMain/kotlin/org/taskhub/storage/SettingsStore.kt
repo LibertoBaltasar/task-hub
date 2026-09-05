@@ -234,6 +234,54 @@ class SettingsStore(
         }
     }
 
+    // ── Sondeo de notificaciones (IDs ya notificados por hogar) ──────────
+    //
+    // El polling periódico en Android (`NotificationPollWorker`) usa este
+    // conjunto de IDs para saber qué notificaciones de
+    // `households/{id}/notifications` son nuevas desde la última pasada.
+    //
+    // Se probó primero un marcador de tiempo (`createdAt` más reciente
+    // visto), pero `createdAt` lo genera el RELOJ LOCAL del dispositivo que
+    // crea la notificación (asignador o autor del mensaje, no el del
+    // destinatario) — un dispositivo con el reloj adelantado podía "inflar"
+    // el marcador del destinatario y ocultar PARA SIEMPRE una notificación
+    // genuinamente posterior creada desde otro dispositivo con
+    // `createdAt` menor (panel de notificaciones 2026-09-05, Experto
+    // Notificaciones/Push, CRÍTICO). Un conjunto de IDs ya vistos no depende
+    // en absoluto del orden temporal para decidir "es nueva", solo de si ya
+    // se mostró antes — inmune al desfase de reloj entre dispositivos.
+
+    fun getNotifiedNotificationIds(householdId: String): Set<String> =
+        getNotifiedNotificationIdsMap()[householdId]?.toSet() ?: emptySet()
+
+    fun setNotifiedNotificationIds(householdId: String, ids: Set<String>) {
+        val map = getNotifiedNotificationIdsMap().toMutableMap()
+        map[householdId] = ids.toList()
+        settings.putString(KEY_NOTIFICATION_POLL_MARKERS, json.encodeToString(map))
+    }
+
+    /**
+     * Borra todo el estado de sondeo (todos los hogares). Llamado en
+     * [org.taskhub.ui.models.GoogleAuthManager.signOut] — sin esto, en un
+     * dispositivo familiar compartido, tras cambiar de cuenta el estado de la
+     * cuenta anterior podría ocultar notificaciones nuevas legítimas de la
+     * cuenta entrante (mismo householdId, p.ej. el espacio Personal) o, al
+     * revés, filtrar datos de la cuenta saliente si el proceso no se reinicia.
+     */
+    fun clearNotificationPollState() {
+        settings.remove(KEY_NOTIFICATION_POLL_MARKERS)
+    }
+
+    private fun getNotifiedNotificationIdsMap(): Map<String, List<String>> {
+        val raw = settings.getString(KEY_NOTIFICATION_POLL_MARKERS, "")
+        if (raw.isEmpty()) return emptyMap()
+        return try {
+            json.decodeFromString(raw)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
     companion object {
         private const val KEY_NOTIFICATIONS = "taskhub_notifications"
         private const val KEY_LANGUAGE = "taskhub_language"
@@ -250,5 +298,6 @@ class SettingsStore(
         private const val KEY_ANON_REFRESH_TOKEN = "taskhub_anon_refresh_token"
         private const val KEY_ANON_UID = "taskhub_anon_uid"
         private const val KEY_CALENDAR_IDS = "taskhub_calendar_ids"
+        private const val KEY_NOTIFICATION_POLL_MARKERS = "taskhub_notification_poll_markers"
     }
 }

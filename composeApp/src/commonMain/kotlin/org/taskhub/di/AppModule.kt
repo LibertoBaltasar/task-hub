@@ -60,9 +60,18 @@ val appModule: Module = module {
     single { FirestoreClient(apiKey = FirestoreRepository.DEFAULT_API_KEY, settingsStore = get()) }
     single { NotificationRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get()) }
     single { RewardsRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get()) }
-    single { TaskRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get(), notificationRepository = get()) }
-    single { HouseholdRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
+    single { TaskRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get(), notificationRepository = get(), settingsStore = get()) }
     single { MemberRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
+    single {
+        HouseholdRepository(
+            baseUrl = firestoreBaseUrl(),
+            firestoreClient = get(),
+            taskCache = get(),
+            memberRepository = get(),
+            notificationRepository = get(),
+            settingsStore = get()
+        )
+    }
     single {
         FirestoreRepository(
             taskCache = get(),

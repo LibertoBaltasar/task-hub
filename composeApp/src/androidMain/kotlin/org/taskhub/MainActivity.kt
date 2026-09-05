@@ -2,6 +2,7 @@ package org.taskhub
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -10,6 +11,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
@@ -31,6 +35,24 @@ class MainActivity : ComponentActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* Permissions result — notifications will work or skip */ }
+
+    // Deep link de tocar una notificación local (tarea asignada, mensaje
+    // nuevo, recordatorio de tarea) — ver `NotificationHelper`/
+    // `NotificationPollWorker`/`TaskReminderScheduler`, todos ponen
+    // "householdId"/"taskId" como extras del mismo Intent hacia esta
+    // Activity. `mutableStateOf` (no un simple `var`) porque `onNewIntent`
+    // puede llegar con la Activity ya compuesta (FLAG_ACTIVITY_CLEAR_TOP con
+    // launchMode "standard" reutiliza la instancia en vez de recrearla) — el
+    // árbol de Compose necesita observar el cambio para volver a navegar.
+    private var deepLinkHouseholdId by mutableStateOf<String?>(null)
+    private var deepLinkTaskId by mutableStateOf<String?>(null)
+    private var deepLinkNotificationId by mutableStateOf<String?>(null)
+
+    private fun consumeDeepLink(intent: Intent?) {
+        deepLinkHouseholdId = intent?.getStringExtra("householdId")?.ifBlank { null }
+        deepLinkTaskId = intent?.getStringExtra("taskId")
+        deepLinkNotificationId = intent?.getStringExtra("notificationId")
+    }
 
     /**
      * Launcher para el flujo de actualización in-app (Play Core).
@@ -107,9 +129,21 @@ class MainActivity : ComponentActivity() {
         // sideload no reporta actualización (esperado) y NO bloquea la ejecución.
         checkForInAppUpdate()
 
+        consumeDeepLink(intent)
+
         setContent {
-            App()
+            App(
+                deepLinkHouseholdId = deepLinkHouseholdId,
+                deepLinkTaskId = deepLinkTaskId,
+                deepLinkNotificationId = deepLinkNotificationId
+            )
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        consumeDeepLink(intent)
     }
 
     override fun onDestroy() {

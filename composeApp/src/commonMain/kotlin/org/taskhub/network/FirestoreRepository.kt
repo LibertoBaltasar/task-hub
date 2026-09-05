@@ -82,8 +82,16 @@ class FirestoreRepository(
     // de construir esta clase fuera de Koin (tests, previews).
     private val notificationRepository: NotificationRepository = NotificationRepository(firestoreBaseUrl(projectId), firestoreClient),
     private val rewardsRepository: RewardsRepository = RewardsRepository(firestoreBaseUrl(projectId), firestoreClient),
-    private val taskRepository: TaskRepository = TaskRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache, notificationRepository),
-    private val householdRepository: HouseholdRepository = HouseholdRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache),
+    private val taskRepository: TaskRepository = TaskRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache, notificationRepository, settingsStore),
+    // MemberRepository propio (no el parámetro de abajo): un default solo se
+    // puede referenciar a sí mismo o a parámetros ANTERIORES en la lista, y
+    // `memberRepository` se declara después — esta ruta solo se usa fuera de
+    // Koin (tests/previews), así que una segunda instancia aquí es inocua.
+    private val householdRepository: HouseholdRepository = HouseholdRepository(
+        firestoreBaseUrl(projectId), firestoreClient, taskCache,
+        MemberRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache),
+        notificationRepository, settingsStore
+    ),
     private val memberRepository: MemberRepository = MemberRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache)
 ) {
     private val baseUrl = firestoreBaseUrl(projectId)
@@ -1362,8 +1370,10 @@ class FirestoreRepository(
         memberIds: List<String>,
         mandatory: Boolean,
         dueDate: Long,
-        taskTitle: String = ""
-    ): List<TaskAssignmentResponse> = taskRepository.assignTask(householdId, taskId, memberIds, mandatory, dueDate, taskTitle)
+        taskTitle: String = "",
+        assignedByMemberId: String? = null
+    ): List<TaskAssignmentResponse> =
+        taskRepository.assignTask(householdId, taskId, memberIds, mandatory, dueDate, taskTitle, assignedByMemberId)
 
     /** Get all assignments for a specific task. */
     suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> =
@@ -1715,12 +1725,16 @@ class FirestoreRepository(
         }
 
         try {
+            val lang = settingsStore.getLanguage()
             notificationRepository.createNotification(
                 householdId = householdId,
                 memberId = decision.memberId,
                 taskId = taskId,
-                title = "📋 Tarea asignada",
-                message = if (task.title.isNotEmpty()) "Se te ha asignado: ${task.title}" else "Se te ha asignado una nueva tarea"
+                title = AppStrings.get("notification_task_assigned_title", lang),
+                message = if (task.title.isNotEmpty())
+                    AppStrings.get("notification_task_assigned_body_prefix", lang) + task.title
+                else
+                    AppStrings.get("notification_task_assigned_body_generic", lang)
             )
         } catch (e: CancellationException) {
             throw e

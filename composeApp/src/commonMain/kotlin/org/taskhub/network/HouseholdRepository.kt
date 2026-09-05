@@ -13,7 +13,9 @@ import org.taskhub.network.models.MessageResponse
 import org.taskhub.platform.secureRandomInt
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
+import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
+import org.taskhub.ui.i18n.AppStrings
 
 /**
  * Hogares (colección `households`, subcolección `messages`) e invites.
@@ -31,11 +33,19 @@ import org.taskhub.storage.TaskCache
  * que este repo pueda depender de [FirestoreClient] directamente y
  * registrarse como `single` de Koin sin crear un ciclo hacia la fachada
  * (panel v7, #16 — mismo motivo documentado en [MemberRepository]).
+ *
+ * Depende también de [MemberRepository] (para listar destinatarios) y
+ * [NotificationRepository] (para crearles una notificación) desde
+ * `sendMessage` — sin ciclo, ninguno de los dos depende de este repo (panel
+ * de notificaciones 2026-09-05, gap A).
  */
 class HouseholdRepository(
     private val baseUrl: String,
     private val firestoreClient: FirestoreClient,
-    private val taskCache: TaskCache
+    private val taskCache: TaskCache,
+    private val memberRepository: MemberRepository,
+    private val notificationRepository: NotificationRepository,
+    private val settingsStore: SettingsStore
 ) {
     private val client = firestoreClient.client
 
@@ -302,7 +312,16 @@ class HouseholdRepository(
     //  Messages (subcollection under households/{id})
     // ────────────────────────────────────────────────────────
 
-    /** Send a chat message to a household. */
+    /**
+     * Send a chat message to a household.
+     *
+     * Tras guardar el mensaje, crea una notificación (`households/{id}/notifications`,
+     * mismo mecanismo que `TaskRepository.assignTask`) para cada miembro del
+     * hogar EXCEPTO el autor — antes nadie más se enteraba de un mensaje
+     * nuevo salvo que tuviera la pantalla del chat abierta (panel de
+     * notificaciones 2026-09-05, gap A). Best-effort: si falla, el mensaje ya
+     * se envió correctamente; la notificación es un efecto secundario.
+     */
     suspend fun sendMessage(
         householdId: String,
         memberId: String,
@@ -326,6 +345,42 @@ class HouseholdRepository(
         }.body()
 
         val id = extractDocId(response.name, "sendMessage")
+
+        try {
+            val title = AppStrings.get("notification_new_message_title", settingsStore.getLanguage())
+            val preview = if (text.length > 80) text.take(80) + "…" else text
+            val body = "$authorName: $preview"
+            val recipients = memberRepository.getMembers(householdId).filter { it.id != memberId }
+            // try/catch POR destinatario (no uno solo envolviendo el `forEach`):
+            // un fallo puntual creando la notificación de UN miembro no debe
+            // dejar sin notificar al resto de la lista (panel de notificaciones
+            // 2026-09-05, Programador senior — mismo patrón que
+            // TaskRepository.assignTask, que sí lo hacía bien por miembro).
+            recipients.forEach { recipient ->
+                try {
+                    // taskId="" es el centinela usado por el resto del sistema
+                    // (NotificationListScreen, NotificationPollWorker) para
+                    // distinguir "notificación de chat" de "notificación de
+                    // tarea" y decidir a dónde navegar al tocarla.
+                    notificationRepository.createNotification(
+                        householdId = householdId,
+                        memberId = recipient.id,
+                        taskId = "",
+                        title = title,
+                        message = body
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // No crítico: el mensaje ya se envió, la notificación es un efecto secundario.
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No crítico: fallo listando miembros — el mensaje ya se envió.
+        }
+
         return MessageResponse(id, memberId, authorName, text, now)
     }
 

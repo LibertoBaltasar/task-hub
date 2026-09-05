@@ -364,7 +364,9 @@ class TaskScreenModel(
                         taskId = task.id,
                         memberIds = membersToAssign,
                         mandatory = mandatory,
-                        dueDate = dueDate
+                        dueDate = dueDate,
+                        taskTitle = title,
+                        assignedByMemberId = createdBy
                     )
                     syncCalendarOnAssigned(householdId, created)
                 }
@@ -803,7 +805,14 @@ class TaskScreenModel(
         screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
-                repo.assignTask(householdId, taskId, memberIds, mandatory, dueDate)
+                repo.assignTask(
+                    householdId = householdId,
+                    taskId = taskId,
+                    memberIds = memberIds,
+                    mandatory = mandatory,
+                    dueDate = dueDate,
+                    assignedByMemberId = _currentMemberId.value
+                )
                 _actionState.value = TaskActionState.Success
 
                 // Refresh detail

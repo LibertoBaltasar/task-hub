@@ -14,7 +14,9 @@ import org.taskhub.network.models.Subtask
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
+import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
+import org.taskhub.ui.i18n.AppStrings
 
 /**
  * Tareas de un hogar (subcolecciones `households/{id}/tasks`, `taskHistory`,
@@ -37,7 +39,8 @@ class TaskRepository(
     private val baseUrl: String,
     private val firestoreClient: FirestoreClient,
     private val taskCache: TaskCache,
-    private val notificationRepository: NotificationRepository
+    private val notificationRepository: NotificationRepository,
+    private val settingsStore: SettingsStore
 ) {
     private val client = firestoreClient.client
 
@@ -338,14 +341,21 @@ class TaskRepository(
         documents.map { doc -> FirestoreParsers.toTaskHistoryResponse(doc) }
     }
 
-    /** Assign a task to one or more members with a due date. */
+    /**
+     * Assign a task to one or more members with a due date.
+     *
+     * [assignedByMemberId], si se indica, no recibe notificación de su propia
+     * asignación (p.ej. alguien que se auto-asigna una tarea) — panel de
+     * notificaciones 2026-09-05, gap B.
+     */
     suspend fun assignTask(
         householdId: String,
         taskId: String,
         memberIds: List<String>,
         mandatory: Boolean,
         dueDate: Long,
-        taskTitle: String = ""
+        taskTitle: String = "",
+        assignedByMemberId: String? = null
     ): List<TaskAssignmentResponse> {
         val now = Clock.System.now().toEpochMilliseconds()
         val results = mutableListOf<TaskAssignmentResponse>()
@@ -375,14 +385,28 @@ class TaskRepository(
                 assignedAt = now
             ))
 
-            // Create notification for the assigned member
-            notificationRepository.createNotification(
-                householdId = householdId,
-                memberId = memberId,
-                taskId = taskId,
-                title = "📋 Tarea asignada",
-                message = if (taskTitle.isNotEmpty()) "Se te ha asignado: $taskTitle" else "Se te ha asignado una nueva tarea"
-            )
+            // Create notification for the assigned member (salvo que se esté
+            // auto-asignando la tarea a sí mismo — no tiene sentido notificarle
+            // algo que acaba de hacer él mismo).
+            if (memberId != assignedByMemberId) {
+                try {
+                    val lang = settingsStore.getLanguage()
+                    notificationRepository.createNotification(
+                        householdId = householdId,
+                        memberId = memberId,
+                        taskId = taskId,
+                        title = AppStrings.get("notification_task_assigned_title", lang),
+                        message = if (taskTitle.isNotEmpty())
+                            AppStrings.get("notification_task_assigned_body_prefix", lang) + taskTitle
+                        else
+                            AppStrings.get("notification_task_assigned_body_generic", lang)
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // No crítico: la asignación ya se creó, la notificación es un efecto secundario.
+                }
+            }
         }
 
         return results

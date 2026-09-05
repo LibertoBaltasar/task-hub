@@ -27,13 +27,33 @@ import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.screens.HomeScreen
+import org.taskhub.ui.screens.HouseholdScreen
 import org.taskhub.ui.screens.SplashScreen
+import org.taskhub.ui.screens.TaskDetailScreen
 import org.taskhub.ui.theme.TaskHubTheme
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.ui.theme.Teal600
 
+/**
+ * [deepLinkHouseholdId]/[deepLinkTaskId] llegan de tocar una notificación
+ * local del sistema (Android: [org.taskhub.NotificationHelper.showUpdateNotification]
+ * o el recordatorio de tarea) — `null` en el arranque normal e ignorados en
+ * iOS/JVM (no producen notificaciones del sistema hoy, ver
+ * docs/review-panel-expertos-notificaciones-2026-09-05.md, gap B).
+ * [deepLinkTaskId] vacío (no null) es el centinela de "es un mensaje de chat,
+ * no una tarea" — abre [HouseholdScreen] en vez de [TaskDetailScreen].
+ * [deepLinkNotificationId], si llega, se marca como leída en Firestore al
+ * consumir el deep link — sin esto, tocar la notificación del sistema no
+ * tenía ningún efecto sobre su estado "no leída" en la lista in-app,
+ * inconsistente con tocar la card desde `NotificationListScreen` (panel de
+ * notificaciones 2026-09-05, UX).
+ */
 @Composable
-fun App() {
+fun App(
+    deepLinkHouseholdId: String? = null,
+    deepLinkTaskId: String? = null,
+    deepLinkNotificationId: String? = null
+) {
     // ── Fase 1: Splash screen (1.5 segundos) ─────────────────
     var showSplash by remember { mutableStateOf(true) }
 
@@ -188,6 +208,30 @@ fun App() {
                             else -> {
                                 val reduceMotion = shouldReduceMotion()
                                 Navigator(screen = screen) { navigator ->
+                                    // Se ejecuta una vez por (navigator, deep
+                                    // link): en frío, cuando el Navigator se
+                                    // crea con HomeScreen ya en la pila (así
+                                    // "atrás" vuelve a Home); si la Activity ya
+                                    // estaba viva y llega un deep link nuevo
+                                    // (onNewIntent), este mismo efecto se
+                                    // vuelve a disparar porque las claves cambian.
+                                    LaunchedEffect(navigator, deepLinkHouseholdId, deepLinkTaskId) {
+                                        val hid = deepLinkHouseholdId ?: return@LaunchedEffect
+                                        if (deepLinkTaskId.isNullOrEmpty()) {
+                                            navigator.push(HouseholdScreen(hid))
+                                        } else {
+                                            navigator.push(TaskDetailScreen(hid, deepLinkTaskId))
+                                        }
+                                        if (!deepLinkNotificationId.isNullOrEmpty()) {
+                                            try {
+                                                repo.markNotificationRead(hid, deepLinkNotificationId)
+                                            } catch (e: CancellationException) {
+                                                throw e
+                                            } catch (_: Exception) {
+                                                // No crítico: solo afecta al estado "leída" in-app.
+                                            }
+                                        }
+                                    }
                                     if (reduceMotion) {
                                         FadeTransition(navigator)
                                     } else {

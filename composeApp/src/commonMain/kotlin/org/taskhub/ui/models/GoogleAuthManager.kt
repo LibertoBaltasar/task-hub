@@ -126,6 +126,12 @@ class GoogleAuthManager(
     fun signOut() {
         val uidBeingSignedOut = settingsStore.getGoogleUid()
         settingsStore.clearGoogleAuth()
+        // Sin esto, en un dispositivo familiar compartido el marcador de
+        // sondeo de notificaciones (NotificationPollWorker) de la cuenta
+        // saliente podría ocultar/filtrar datos frente a la cuenta entrante
+        // (panel de notificaciones 2026-09-05, QA — mismo riesgo ya cubierto
+        // para currentMemberCache y fcmToken en esta misma función).
+        settingsStore.clearNotificationPollState()
         _state.value = GoogleAuthState.Anonymous
         scope.launch {
             try {

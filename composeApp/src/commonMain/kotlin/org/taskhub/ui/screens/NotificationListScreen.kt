@@ -117,6 +117,19 @@ data class NotificationListScreen(
                                         notification = notification,
                                         onMarkRead = {
                                             model.markAsRead(householdId, notification.id)
+                                        },
+                                        onClick = {
+                                            if (!notification.read) {
+                                                model.markAsRead(householdId, notification.id)
+                                            }
+                                            // taskId vacío = notificación de un mensaje de chat
+                                            // (ver HouseholdRepository.sendMessage) → abre el chat
+                                            // del hogar en vez del detalle de una tarea.
+                                            if (notification.taskId.isEmpty()) {
+                                                navigator.push(HouseholdScreen(householdId))
+                                            } else {
+                                                navigator.push(TaskDetailScreen(householdId, notification.taskId))
+                                            }
                                         }
                                     )
                                 }
@@ -163,7 +176,8 @@ data class NotificationListScreen(
 @Composable
 private fun NotificationCard(
     notification: NotificationResponse,
-    onMarkRead: () -> Unit
+    onMarkRead: () -> Unit,
+    onClick: () -> Unit
 ) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -175,7 +189,7 @@ private fun NotificationCard(
     val secondaryColor = if (!notification.read) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (!notification.read)
                 MaterialTheme.colorScheme.primaryContainer

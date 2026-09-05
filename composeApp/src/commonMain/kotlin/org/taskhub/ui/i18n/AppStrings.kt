@@ -19,7 +19,7 @@ object AppStrings {
             // Settings
             "settings_title" to "⚙️ Ajustes",
             "settings_notifications" to "🔔 Notificaciones",
-            "settings_notifications_desc" to "Activar recordatorios de tareas",
+            "settings_notifications_desc" to "Recordatorios, tareas asignadas y mensajes nuevos",
             "settings_theme" to "🎨 Tema",
             "settings_language" to "🌐 Idioma",
             "settings_export_csv" to "📥 Exportar tareas como CSV",
@@ -336,6 +336,19 @@ object AppStrings {
             "notifications_empty" to "No tienes notificaciones pendientes",
             "notifications_unread_count" to "%d sin leer",
             "notifications_mark_read" to "✓ Marcar como leída",
+
+            // Textos de notificaciones creadas por el backend (asignación de
+            // tarea, mensaje nuevo en el chat del hogar) — usados tanto al
+            // guardar el documento en Firestore (network/TaskRepository,
+            // HouseholdRepository, FirestoreRepository) como al mostrar la
+            // notificación local del sistema (NotificationPollWorker, Android).
+            "notification_task_assigned_title" to "📋 Tarea asignada",
+            "notification_task_assigned_body_prefix" to "Se te ha asignado: ",
+            "notification_task_assigned_body_generic" to "Se te ha asignado una nueva tarea",
+            "notification_new_message_title" to "💬 Nuevo mensaje",
+            "notification_channel_updates_name" to "Actualizaciones",
+            "notification_channel_updates_desc" to "Tareas asignadas y mensajes nuevos en tus hogares",
+
             "time_ago_now" to "Ahora",
             "time_ago_minutes" to "Hace %dm",
             "time_ago_hours" to "Hace %dh",
@@ -619,7 +632,7 @@ object AppStrings {
             // Settings
             "settings_title" to "⚙️ Settings",
             "settings_notifications" to "🔔 Notifications",
-            "settings_notifications_desc" to "Enable task reminders",
+            "settings_notifications_desc" to "Reminders, assigned tasks and new messages",
             "settings_theme" to "🎨 Theme",
             "settings_language" to "🌐 Language",
             "settings_export_csv" to "📥 Export tasks as CSV",
@@ -927,6 +940,14 @@ object AppStrings {
             "notifications_empty" to "You have no pending notifications",
             "notifications_unread_count" to "%d unread",
             "notifications_mark_read" to "✓ Mark as read",
+
+            "notification_task_assigned_title" to "📋 Task assigned",
+            "notification_task_assigned_body_prefix" to "You've been assigned: ",
+            "notification_task_assigned_body_generic" to "You've been assigned a new task",
+            "notification_new_message_title" to "💬 New message",
+            "notification_channel_updates_name" to "Updates",
+            "notification_channel_updates_desc" to "Assigned tasks and new messages in your households",
+
             "time_ago_now" to "Now",
             "time_ago_minutes" to "%dm ago",
             "time_ago_hours" to "%dh ago",

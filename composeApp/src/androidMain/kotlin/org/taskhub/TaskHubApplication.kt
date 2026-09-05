@@ -1,9 +1,15 @@
 package org.taskhub
 
 import android.app.Application
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.RequestConfiguration
 import com.google.firebase.FirebaseApp
+import java.util.concurrent.TimeUnit
 
 /**
  * Application principal de Task Hub.
@@ -46,5 +52,36 @@ class TaskHubApplication : Application() {
         // ningún anuncio; solo deja el SDK listo para el interstitial (tras
         // completar tarea) y el banner (preparado, deshabilitado de momento).
         MobileAds.initialize(this)
+
+        scheduleNotificationPolling()
+    }
+
+    /**
+     * Sondeo periódico de "tarea asignada"/"mensaje nuevo" (ver
+     * [NotificationPollWorker]) — sin backend propio ni Cloud Functions no
+     * hay forma de un push FCM dirigido real, así que esto es lo que entrega
+     * la notificación al dispositivo cuando la app no está en primer plano
+     * (panel de notificaciones 2026-09-05, gap B).
+     *
+     * `enqueueUniquePeriodicWork` + `KEEP`: se registra una única vez por
+     * instalación (cada arranque del proceso vuelve a llamar a esto, pero
+     * KEEP no reemplaza el trabajo ya en cola, solo lo crea si falta). 30 min
+     * balancea batería vs. frescura — WorkManager no permite menos de 15 min
+     * para trabajo periódico.
+     */
+    private fun scheduleNotificationPolling() {
+        val request = PeriodicWorkRequestBuilder<NotificationPollWorker>(30, TimeUnit.MINUTES)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            "notification_poll",
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
     }
 }
