@@ -1,3 +1,6 @@
+// Diálogo de confirmación genérico para acciones destructivas o de alto
+// impacto, reutilizado por los diálogos de hogar, miembros, tareas y
+// recompensas en vez de duplicar el mismo AlertDialog en cada dominio.
 package org.taskhub.ui.components
 
 import androidx.compose.material3.AlertDialog

@@ -1,3 +1,5 @@
+// SnackbarHost con soporte de estilo de error (icono + colores de
+// errorContainer) sin depender de emojis embebidos en el texto del mensaje.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.layout.Row

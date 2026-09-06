@@ -1,3 +1,6 @@
+// Colores compartidos de OutlinedTextField, usados por todos los
+// formularios de la app (crear/editar tarea, perfil, etc.) para que el
+// campo siga el color primario del tema activo en vez de un literal fijo.
 package org.taskhub.ui.components
 
 import androidx.compose.material3.MaterialTheme
@@ -13,6 +16,7 @@ import androidx.compose.runtime.Composable
  * — con esto, además de deduplicar, el color sigue al tema activo
  * (Naturaleza/Minimal), no solo al Default.
  */
+/** [TextFieldColors] estándar para `OutlinedTextField` en toda la app; ver KDoc de cabecera. */
 @Composable
 fun taskHubTextFieldColors(): TextFieldColors = OutlinedTextFieldDefaults.colors(
     focusedBorderColor = MaterialTheme.colorScheme.primary,

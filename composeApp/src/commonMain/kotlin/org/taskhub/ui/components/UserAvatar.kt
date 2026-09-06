@@ -1,3 +1,6 @@
+// Avatar de usuario reutilizable con fallback en cascada (foto > emoji >
+// inicial > icono), usado en Ranking, HouseholdScreen, TaskDetailScreen,
+// EditProfileScreen, ProfileScreen y PublicProfileScreen.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.background

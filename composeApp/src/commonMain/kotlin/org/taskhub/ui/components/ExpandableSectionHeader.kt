@@ -1,3 +1,7 @@
+// Componente compartido de cabecera para secciones colapsables (contenido +
+// chevron). Usado por HouseholdTaskSection, HouseholdMemberList y por
+// pantallas de creación/edición de tareas y lista de tareas para no repetir
+// el mismo patrón de Row + Icon + semántica de expandido/colapsado.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.clickable
@@ -30,6 +34,21 @@ import org.taskhub.ui.i18n.AppStrings
  * `CreateTaskScreen#QuickTemplatesSection`, `TaskListScreen#GroupHeader`),
  * 3 de los cuales reutilizaban las claves i18n `household_task_section_*`
  * fuera de su dominio original (panel v7, #25).
+ */
+/**
+ * Cabecera clicable y accesible para una sección colapsable.
+ *
+ * Uso típico: pasar como [content] el texto/etiqueta de la sección (y
+ * cualquier badge auxiliar); el propio composable añade el chevron
+ * arriba/abajo a la derecha y gestiona la semántica de "botón" +
+ * expandido/colapsado para TalkBack/VoiceOver.
+ *
+ * @param expanded estado actual (expandido/colapsado); lo gestiona el caller.
+ * @param onToggle callback invocado al pulsar toda la fila (no solo el icono).
+ * @param modifier modificador adicional aplicado a la fila raíz.
+ * @param chevronTint color del icono de chevron.
+ * @param chevronSize tamaño del icono de chevron.
+ * @param content contenido a la izquierda del chevron (título, contador, etc.).
  */
 @Composable
 fun ExpandableSectionHeader(

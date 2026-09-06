@@ -1,3 +1,6 @@
+// Logo vectorial de la app dibujado a mano con Canvas (sin assets externos).
+// Usado en la pantalla de splash/onboarding y en cualquier sitio que necesite
+// el isotipo de Task Hub a un tamaño arbitrario.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.Canvas
@@ -16,6 +19,15 @@ import org.taskhub.ui.theme.Teal800
  * Isotipo de Task Hub: un checkmark (tarea completada) inscrito en un anillo
  * teal, con un punto coral que marca el "hub" — sin depender de assets/fuentes,
  * para poder escalarse a cualquier tamaño (splash, top bar, favicon futuro).
+ */
+/**
+ * Dibuja el isotipo de Task Hub (anillo + checkmark + punto "hub") en un [Canvas].
+ *
+ * @param modifier modificador adicional del [Canvas].
+ * @param size lado del cuadrado en el que se inscribe el logo.
+ * @param ringColor color del anillo exterior.
+ * @param checkColor color del checkmark central.
+ * @param dotColor color del punto "hub" en la esquina superior derecha del anillo.
  */
 @Composable
 fun AppLogo(

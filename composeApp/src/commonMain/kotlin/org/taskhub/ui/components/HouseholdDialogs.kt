@@ -1,3 +1,7 @@
+// Diálogos específicos del dominio "hogar": compartir invitación (QR),
+// confirmaciones de borrar/salir de un hogar, ajustes del hogar y las
+// transferencias de puntos (Agradecer/Donar) entre miembros. Usados desde
+// HouseholdScreen y pantallas relacionadas.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.layout.*
@@ -23,6 +27,11 @@ import org.taskhub.ui.models.DonateActionState
 
 /**
  * Diálogo con el código QR / texto de invitación al hogar, con botón para compartir.
+ *
+ * @param inviteCode código de invitación del hogar (se codifica en el QR y se
+ *   muestra también como texto).
+ * @param s resolutor de claves i18n ya fijado al idioma actual (`AppStrings.get(key, lang)`).
+ * @param onDismiss callback al cerrar el diálogo.
  */
 @Composable
 fun QrShareDialog(
@@ -153,6 +162,12 @@ fun LeaveHouseholdDialog(
 
 /**
  * Hoja de ajustes de la app, mostrada como diálogo a pantalla casi completa.
+ *
+ * Envuelve [SettingsSheet] con `showExportCsv = false`: la exportación CSV
+ * solo está disponible desde la lista de tareas, que sí tiene los datos.
+ *
+ * @param onDismiss callback al cerrar el diálogo.
+ * @param onEditProfile callback al pulsar "Editar perfil" (cierra este diálogo primero).
  */
 @Composable
 fun HouseholdSettingsDialog(
@@ -184,6 +199,11 @@ fun HouseholdSettingsDialog(
 
 /**
  * Diálogo para agradecer (transferir puntos del presupuesto semanal) a un miembro.
+ *
+ * @param target miembro destinatario de la transferencia.
+ * @param remaining presupuesto semanal restante disponible para agradecer (tope del importe).
+ * @param state estado de la acción de agradecer (idle/loading/error), controla el spinner y el mensaje de error.
+ * @param onConfirm callback con el importe introducido al confirmar.
  */
 @Composable
 fun AppreciateDialog(
@@ -212,6 +232,11 @@ fun AppreciateDialog(
 
 /**
  * Diálogo para donar puntos del saldo propio a un miembro.
+ *
+ * @param target miembro destinatario de la transferencia.
+ * @param balance saldo propio disponible para donar (tope del importe).
+ * @param state estado de la acción de donar (idle/loading/error), controla el spinner y el mensaje de error.
+ * @param onConfirm callback con el importe introducido al confirmar.
  */
 @Composable
 fun DonateDialog(

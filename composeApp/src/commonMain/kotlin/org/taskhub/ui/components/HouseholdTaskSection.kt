@@ -1,3 +1,6 @@
+// Tarjeta de resumen de tareas pendientes de un hogar, usada en la pantalla
+// principal (Home) para dar una vista previa de cada hogar del usuario sin
+// tener que entrar a su lista de tareas completa.
 package org.taskhub.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
@@ -33,6 +36,14 @@ import org.taskhub.ui.screens.TaskDetailScreen
  * composable inyectaba `FirestoreRepository` directamente y hacía su propio
  * fetch en un `LaunchedEffect`, el único sitio del árbol que no pasaba por
  * un ScreenModel (panel v7, #15).
+ */
+/**
+ * Tarjeta desplegable de un hogar con sus tareas pendientes.
+ *
+ * @param household hogar a mostrar (nombre + si es el espacio Personal).
+ * @param previewState estado de carga de las tareas pendientes (ya resuelto
+ *   por el ScreenModel llamante); `null` se trata igual que `Loading`.
+ * @param onViewAll callback al pulsar "ver todas", recibe el id del hogar.
  */
 @Composable
 fun HouseholdTaskSection(
@@ -151,6 +162,7 @@ fun HouseholdTaskSection(
     }
 }
 
+/** Fila compacta de una tarea pendiente dentro de [HouseholdTaskSection]: puntos + título/tags + fecha límite formateada. */
 @Composable
 private fun TaskRow(task: TaskResponse, onClick: () -> Unit) {
     val lang = LocalAppSettings.current.currentLanguage
@@ -207,6 +219,7 @@ private fun TaskRow(task: TaskResponse, onClick: () -> Unit) {
     }
 }
 
+/** "Hoy"/"Mañana"/"Vencida" para fechas cercanas; "dd/mm" en el resto de casos. */
 private fun formatDueDate(epochMillis: Long, lang: String): String {
     val now = Clock.System.now().toEpochMilliseconds()
     val diffDays = (epochMillis - now) / (24 * 60 * 60 * 1000)

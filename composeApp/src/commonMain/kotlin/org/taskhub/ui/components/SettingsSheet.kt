@@ -1,3 +1,7 @@
+// Hoja de ajustes de la app: cuenta de Google, Google Calendar, notificaciones,
+// tema, idioma, tema del widget, sonido/vibración, exportar CSV, privacidad y
+// eliminar cuenta. Se muestra desde HouseholdSettingsDialog y desde el resto
+// de pantallas con acceso a ajustes.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.clickable
@@ -31,7 +35,11 @@ import org.taskhub.platform.saveWidgetThemeToCache
 private const val PRIVACY_POLICY_URL = "https://libertobaltasar.github.io/task-hub/privacy.html"
 
 /**
- * Callbacks that the settings sheet needs from its host screen.
+ * Callbacks que [SettingsSheet] necesita de la pantalla que la aloja.
+ *
+ * @param onExportCsv acción de exportar tareas a CSV (solo se invoca si [showExportCsv] es `true`).
+ * @param onDismiss cierra la hoja de ajustes.
+ * @param onEditProfile navega a la pantalla de editar perfil (la hoja se cierra antes).
  */
 data class SettingsCallbacks(
     val onExportCsv: () -> Unit,
@@ -45,10 +53,16 @@ data class SettingsCallbacks(
 )
 
 /**
- * A full-screen dialog-like settings sheet.
- * Shows: notifications toggle, theme selector, language selector, CSV export.
- * Reads/writes preferences via [SettingsStore]. Changes are applied immediately.
- * Theme and language changes bubble through [LocalAppSettings].
+ * Hoja de ajustes a pantalla casi completa (se muestra dentro de un `Dialog`,
+ * ver [HouseholdSettingsDialog]).
+ *
+ * Secciones: cuenta de Google, Google Calendar, notificaciones, tema, idioma,
+ * tema del widget, sonido/vibración, exportar CSV (opcional) y privacidad/RGPD.
+ * Lee y escribe preferencias vía [SettingsStore]; los cambios se aplican de
+ * inmediato (sin botón "Guardar"). Los cambios de tema/idioma se propagan al
+ * resto de la app a través de [LocalAppSettings].
+ *
+ * @param callbacks acciones que debe resolver la pantalla anfitriona (cerrar, exportar, editar perfil).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -520,6 +534,7 @@ fun SettingsSheet(
     }
 }
 
+/** Bloque de sección con título en `primary` + contenido, reutilizado por todas las secciones de [SettingsSheet]. */
 @Composable
 private fun SettingsSection(
     title: String,

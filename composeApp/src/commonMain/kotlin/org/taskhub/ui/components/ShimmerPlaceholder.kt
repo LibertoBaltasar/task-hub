@@ -1,3 +1,7 @@
+// Placeholders "shimmer" (esqueleto animado) para pantallas que cargan datos
+// de red: sustituyen a spinners genéricos con una forma más parecida al
+// contenido final. Usados en pantallas de lista/detalle mientras el
+// ScreenModel correspondiente resuelve su estado de carga.
 package org.taskhub.ui.components
 
 import androidx.compose.animation.core.LinearEasing
