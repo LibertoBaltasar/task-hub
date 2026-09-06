@@ -1,111 +1,77 @@
 # Task Hub
 
-**Gamified shared household task manager** — Compose Multiplatform (Android + iOS + Desktop) + Ktor Server (PostgreSQL).
+**Gestor de tareas del hogar con gamificación** — Compose Multiplatform para Android, iOS y escritorio (JVM).
 
-## Concepto
+## Qué es Task Hub
 
-Task Hub convierte las tareas del hogar en un sistema gamificado donde los miembros ganan puntos, mantienen rachas y desbloquean logros. Pensado para parejas, pisos de estudiantes y familias.
+Task Hub organiza las tareas del hogar entre los miembros de un "household" (hogar/piso compartido): cada tarea completada suma puntos, esos puntos se canjean por recompensas, y se llevan rachas y logros para mantener la motivación. Los datos se sincronizan en tiempo real vía Firestore (Google Firebase, proyecto `task-hub-62f98`), con autenticación por Google Sign-In o de forma anónima.
 
-## Stack Tecnológico
+## Características principales
 
-| Capa         | Tecnología                     |
-|-------------|-------------------------------|
-| UI          | Compose Multiplatform (Material 3) |
-| Navegación  | Voyager                       |
-| DI          | Koin                          |
-| Red (cliente) | Ktor Client                  |
-| Red (servidor) | Ktor Server + Netty         |
-| Base de datos | PostgreSQL                   |
-| Migraciones | Flyway                        |
-| i18n        | compose-resources (ES/EN)     |
-| CI/CD       | GitHub Actions                |
+Basado en las pantallas reales de `composeApp/src/commonMain/kotlin/org/taskhub/ui/screens/`:
 
-## Estructura del proyecto
+- **Hogares (households)**: crear, unirse por código/QR y gestionar miembros.
+- **Tareas**: creación, edición, plantillas, recurrencia y reglas de finalización/asignación.
+- **Puntos y recompensas**: catálogo de recompensas canjeables por puntos acumulados.
+- **Rachas y logros (achievements)**: seguimiento de constancia (p. ej. racha de 5 días).
+- **Ranking**: clasificación de miembros del hogar por puntos.
+- **Estadísticas**: resumen de actividad y rendimiento por miembro.
+- **Chat del hogar**: mensajería entre miembros de un mismo household.
+- **Calendario**: vista de tareas programadas con sincronización a Google Calendar.
+- **Espacio personal**: sección de tareas/ajustes propios del usuario, fuera del hogar compartido.
+- **Perfil público y perfil editable**, con avatar.
+- **Notificaciones**: lista de notificaciones in-app y notificaciones locales (tarea asignada, mensaje nuevo, etc.).
+- **Exportación**: exportación de tareas a CSV.
+- i18n en español e inglés, tema propio (Teal/Coral) y anuncios (AdMob) en Android.
+
+## Plataformas y stack
+
+- **Plataformas**: Android (minSdk 26, target 36), iOS y escritorio (JVM/Desktop).
+- **Stack**: Kotlin 2.1 + Compose Multiplatform 1.7.3, Voyager (navegación), Koin (DI), Firestore vía REST con Ktor (sin el SDK de Firestore), multiplatform-settings para persistencia local, Firebase Analytics y AdMob (solo Android).
+- Detalle completo de la arquitectura, capas y decisiones técnicas en **[docs/ARQUITECTURA.md](docs/ARQUITECTURA.md)**.
+- Modelo de datos de Firestore (colecciones, documentos, reglas) en **[docs/MODELO-DATOS.md](docs/MODELO-DATOS.md)**.
+
+## Estructura del repo
 
 ```
 task-hub/
 ├── composeApp/
-│   ├── commonMain/         ← Código compartido (~85%)
-│   │   ├── kotlin/org/taskhub/
-│   │   │   ├── App.kt
-│   │   │   ├── di/AppModule.kt
-│   │   │   └── ui/
-│   │   │       ├── screens/HomeScreen.kt
-│   │   │       └── theme/Theme.kt
-│   │   └── composeResources/
-│   │       ├── values/strings.xml        (ES — default)
-│   │       ├── values-es/strings.xml     (ES)
-│   │       ├── values-en/strings.xml     (EN)
-│   │       └── drawable/ic_task.xml
-│   ├── androidMain/        ← Android specifics
-│   ├── iosMain/            ← iOS specifics
-│   └── desktopMain/        ← Desktop specifics
-├── server/
-│   └── src/main/kotlin/org/taskhub/server/
-│       ├── Application.kt
-│       ├── plugins/
-│       └── routes/HealthRoutes.kt
-├── docs/specs.md           ← Especificación completa
-├── gradle/libs.versions.toml
-└── .github/workflows/ci.yml
+│   └── src/
+│       ├── commonMain/kotlin/org/taskhub/   ← código compartido (App.kt, di/, ui/, network/, platform/, storage/)
+│       ├── androidMain/                     ← específico de Android
+│       ├── iosMain/                         ← específico de iOS
+│       ├── desktopMain/                     ← específico de escritorio (JVM)
+│       ├── commonTest/ y jvmTest/           ← tests
+├── docs/                                    ← documentación del proyecto
+├── scripts/                                 ← utilidades (reglas de Firestore, migraciones)
+├── firestore.rules, firebase.json
+└── gradlew
 ```
 
-## Requisitos
+Desglose módulo a módulo (qué hay en `ui/screens`, `ui/models`, `network/`, `platform/`, `storage/`, etc.) en **[docs/ARQUITECTURA.md](docs/ARQUITECTURA.md)**.
 
-- **JDK 21** (OpenJDK o Temurin)
-- **Android Studio** (para build de Android)
-- **Xcode 16+** (para build de iOS, solo macOS)
-- **PostgreSQL 16+** (para el backend)
-
-## Build
-
-### ComposeApp
+## Compilar, ejecutar y probar
 
 ```bash
-# Desktop (JVM)
-./gradlew :composeApp:desktopJar
+# Compilar Android (debug, commonMain + androidMain)
+./gradlew :composeApp:compileDebugKotlinAndroid --console=plain
 
-# Android (requiere Android SDK)
-./gradlew :composeApp:assembleDebug
+# Ejecutar la app de escritorio (JVM)
+./gradlew :composeApp:run
 
-# iOS (solo macOS)
-./gradlew :composeApp:iosSimulatorArm64Binaries
+# Tests (commonTest + jvmTest)
+./gradlew :composeApp:allTests
 ```
 
-### Server
+`BUILD SUCCESSFUL` en el primer comando confirma que compila el código compartido y Android. El bundle de release (con R8) tarda unos 5 minutos.
 
-```bash
-# Build
-./gradlew :server:build
+Guía paso a paso para dejar el entorno listo (JDK, Android Studio, Xcode para iOS, credenciales de Firebase, primer build) en **[docs/PRIMEROS-PASOS.md](docs/PRIMEROS-PASOS.md)**.
 
-# Ejecutar (local)
-./gradlew :server:run
+## Documentación
 
-# Verificar health-check
-curl http://localhost:8080/health
-# → {"status":"ok"}
-```
+El mapa completo de la documentación del proyecto está en **[docs/INDICE.md](docs/INDICE.md)**. Documentos clave para empezar:
 
-### Build completo
-
-```bash
-./gradlew build
-```
-
-## Base de datos
-
-El servidor espera PostgreSQL corriendo en `localhost:5432`. Variables de entorno:
-
-- `DATABASE_URL` — JDBC URL (default: `jdbc:postgresql://localhost:5432/taskhub`)
-- `DATABASE_USER` — Usuario (default: `taskhub`)
-- `DATABASE_PASSWORD` — Contraseña (default: `taskhub`)
-
-Flyway ejecuta las migraciones automáticamente al arrancar.
-
-## CI
-
-GitHub Actions ejecuta build + lint en cada push a `main`. Ver `.github/workflows/ci.yml`.
-
-## Fase actual
-
-🚧 **Fase 0 — Setup** — Proyecto compilable con pantalla "Hello Task Hub" y backend con health-check.
+- **[docs/ARQUITECTURA.md](docs/ARQUITECTURA.md)** — stack, capas y estructura del código en detalle.
+- **[docs/MODELO-DATOS.md](docs/MODELO-DATOS.md)** — modelo de datos en Firestore.
+- **[docs/PRIMEROS-PASOS.md](docs/PRIMEROS-PASOS.md)** — cómo montar el entorno de desarrollo y compilar por primera vez.
+- **[docs/FLUJOS-PRINCIPALES.md](docs/FLUJOS-PRINCIPALES.md)** — flujos de usuario principales (alta de hogar, ciclo de una tarea, canje de recompensas, etc.).
