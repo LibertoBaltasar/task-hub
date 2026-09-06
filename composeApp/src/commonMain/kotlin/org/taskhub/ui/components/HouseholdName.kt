@@ -1,3 +1,5 @@
+// Hook de UI para obtener el nombre de un hogar sin parpadeo de carga, usado
+// como subtítulo de TaskHubTopBar en las pantallas anidadas de un hogar.
 package org.taskhub.ui.components
 
 import androidx.compose.runtime.Composable

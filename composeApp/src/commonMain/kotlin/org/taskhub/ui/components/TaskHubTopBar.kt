@@ -1,3 +1,5 @@
+// Barra superior estándar de la app: usada por (casi) todas las pantallas
+// que no son la raíz, en vez de cada una montar su propia TopAppBar.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.layout.Column

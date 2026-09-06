@@ -1,3 +1,5 @@
+// Preview de "próxima vez" para tareas recurrentes. Usado por las pantallas
+// de crear/editar tarea junto al selector de frecuencia/días.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.layout.Row
@@ -27,6 +29,16 @@ import org.taskhub.ui.i18n.AppStrings
  * de mes o la rotación de días de la semana.
  *
  * No se muestra para "once" (no tiene "próxima vez", solo una fecha límite).
+ */
+/**
+ * Fila con icono de calendario y el texto "próxima vez: dd/mm/aaaa" para la
+ * configuración de recurrencia actual. No renderiza nada si [frequency] es
+ * `"once"`.
+ *
+ * @param frequency frecuencia de recurrencia ("once"/"daily"/"weekly"/"monthly").
+ * @param recurrenceDays días de la semana seleccionados (solo relevante si `frequency == "weekly"`).
+ * @param recurrenceDay día del mes seleccionado (solo relevante si `frequency == "monthly"`).
+ * @param lang idioma actual, para resolver el texto vía [AppStrings.get].
  */
 @Composable
 fun RecurrenceNextPreview(

@@ -1,3 +1,5 @@
+// Helper de accesibilidad para FilterChip seleccionados: usado en los
+// FilterChip de frecuencia/días/penalización de crear/editar tarea.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.layout.size
@@ -15,6 +17,10 @@ import androidx.compose.ui.Modifier
  * solo del color (WCAG 1.4.1), en los FilterChip de frecuencia/días de
  * recurrencia/penalización de `CreateTaskScreen`/`EditTaskScreen` (panel v4,
  * Accesibilidad #2).
+ *
+ * @param selected estado actual del `FilterChip`.
+ * @return lambda que dibuja el icono de check (para `leadingIcon`), o `null`
+ *   si [selected] es `false` (sin icono).
  */
 fun filterChipCheckIcon(selected: Boolean): (@Composable () -> Unit)? =
     if (selected) {

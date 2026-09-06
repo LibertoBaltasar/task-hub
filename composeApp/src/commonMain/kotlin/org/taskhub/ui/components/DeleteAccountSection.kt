@@ -1,3 +1,4 @@
+// Flujo de eliminación de cuenta (RGPD), usado dentro de SettingsSheet.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,14 @@ import org.taskhub.ui.screens.HomeScreen
  * UI/Componentes #5) para que el flujo de borrado de cuenta tenga su propio
  * componente con su propio estado, en vez de vivir mezclado con el resto de
  * ajustes.
+ */
+/**
+ * Flujo completo de "eliminar cuenta" (RGPD); ver KDoc de cabecera.
+ *
+ * @param s resolutor de claves i18n ya fijado al idioma actual.
+ * @param authManager gestiona la reautenticación reciente y el borrado real de la cuenta.
+ * @param navigator usado para volver a [HomeScreen] tras un borrado exitoso.
+ * @param onDismiss cierra la hoja de ajustes que aloja esta sección (se invoca tras borrar con éxito).
  */
 @Composable
 fun DeleteAccountSection(

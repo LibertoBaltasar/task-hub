@@ -1,3 +1,5 @@
+// Lista de miembros del hogar (extensión de LazyListScope), usada dentro del
+// LazyColumn principal de HouseholdScreen.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.clickable
@@ -23,8 +25,24 @@ import org.taskhub.ui.models.MemberUiState
 
 /**
  * Sección desplegable de miembros del hogar: cabecera con contador + lista
- * de tarjetas de miembro. Se añade directamente como items de un [LazyColumn]
- * anfitrión para conservar el scroll compartido con el resto de la pantalla.
+ * de tarjetas de miembro. Se añade directamente como items de un `LazyColumn`
+ * anfitrión (extensión de [LazyListScope]) para conservar el scroll compartido
+ * con el resto de la pantalla, en vez de anidar otro `LazyColumn` propio.
+ *
+ * @param membersExpanded si la lista de miembros está visible bajo la cabecera.
+ * @param onToggleExpanded callback al pulsar la cabecera desplegable.
+ * @param memberState estado de carga de los miembros del hogar.
+ * @param isMemberActionPending si hay una acción de miembro en curso (deshabilita botones para evitar dobles envíos).
+ * @param isAdmin si el usuario actual es admin del hogar (habilita cambiar rol / eliminar miembro).
+ * @param myMember el miembro correspondiente al usuario actual, o `null` si aún no se resolvió.
+ * @param s resolutor de claves i18n ya fijado al idioma actual.
+ * @param onAppreciateClick callback al pulsar "Agradecer" sobre un miembro.
+ * @param onDonateClick callback al pulsar "Donar" sobre un miembro.
+ * @param onRoleChange callback tras confirmar un cambio de rol (miembro, nuevo rol).
+ * @param onRemoveMember callback tras confirmar la eliminación de un miembro.
+ * @param onCreateTask callback al pulsar "crear tarea" preasignada a un miembro.
+ * @param onMemberClick callback al pulsar el nombre/avatar de un miembro (ver perfil público).
+ * @param onInviteClick callback del CTA de invitar cuando la lista está vacía.
  */
 fun LazyListScope.householdMemberList(
     membersExpanded: Boolean,
@@ -165,6 +183,7 @@ fun LazyListScope.householdMemberList(
     }
 }
 
+/** Tarjeta de un miembro: avatar, nombre/rol, puntos, y acciones (rol/eliminar/crear tarea/agradecer/donar). */
 @Composable
 private fun MemberCard(
     member: MemberResponse,

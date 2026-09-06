@@ -1,3 +1,5 @@
+// Chips reutilizables para mostrar puntos/estadísticas con color accesible
+// según tema, usados en tareas, ranking, perfil y estadísticas.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.layout.Column

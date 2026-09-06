@@ -1,3 +1,8 @@
+// Punto de entrada `expect` para la señal de accesibilidad "reducir
+// movimiento". Cada plataforma (Android/iOS/Desktop) aporta su `actual`
+// (lee el ajuste del sistema operativo correspondiente); lo consumen
+// composables con animaciones decorativas como ShimmerPlaceholder o las
+// transiciones de secciones desplegables (ExpandableSectionHeader + AnimatedVisibility).
 package org.taskhub.ui.components
 
 import androidx.compose.runtime.Composable

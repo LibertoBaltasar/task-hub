@@ -1,3 +1,5 @@
+// Sección de chat del hogar (lista de mensajes + campo de envío), usada
+// dentro de HouseholdScreen.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.layout.*
@@ -24,6 +26,17 @@ import org.taskhub.ui.models.MessagesUiState
 
 /**
  * Chat de mensajes del hogar: lista de mensajes + campo de envío.
+ *
+ * Puramente presentacional: recibe el estado ya resuelto en [messagesState]
+ * y delega en callbacks cualquier acción (escribir, enviar, refrescar); no
+ * conoce el repositorio ni el ScreenModel del host.
+ *
+ * @param s resolutor de claves i18n ya fijado al idioma actual.
+ * @param messagesState estado de carga de los mensajes del hogar.
+ * @param newMessageText texto actual del campo de envío (controlado por el caller).
+ * @param onTextChange callback al escribir en el campo de envío.
+ * @param onSend callback al pulsar enviar (con [newMessageText] ya validado como no vacío).
+ * @param onRefresh callback al pulsar el icono de refrescar.
  */
 @Composable
 fun HouseholdChatSection(
@@ -139,6 +152,7 @@ fun HouseholdChatSection(
     }
 }
 
+/** Una entrada de la lista de chat: autor + hora, y el texto del mensaje. */
 @Composable
 private fun MessageBubble(message: MessageResponse) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -165,6 +179,7 @@ private fun MessageBubble(message: MessageResponse) {
     }
 }
 
+/** "dd/mm hh:mm" en la zona horaria local; cadena vacía si no hay timestamp (0). */
 private fun formatMessageTime(epochMillis: Long): String {
     if (epochMillis == 0L) return ""
     val local = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())

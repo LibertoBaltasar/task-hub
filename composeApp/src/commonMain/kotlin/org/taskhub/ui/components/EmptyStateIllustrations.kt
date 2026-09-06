@@ -1,3 +1,5 @@
+// Ilustraciones geométricas dibujadas con Canvas para estados vacíos
+// (sin tareas / sin hogares), sin depender de imágenes/assets.
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.Canvas
