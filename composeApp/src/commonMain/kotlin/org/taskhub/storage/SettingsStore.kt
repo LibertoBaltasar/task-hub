@@ -1,3 +1,7 @@
+// Capa de persistencia (storage/): preferencias de usuario y credenciales
+// de sesión. Combina [com.russhwolf.settings.Settings] (texto plano, para
+// datos no sensibles) con [SecureStore] (cifrado, solo para tokens).
+
 package org.taskhub.storage
 
 import com.russhwolf.settings.Settings
@@ -30,6 +34,7 @@ class SettingsStore(
 
     // ── Notifications ─────────────────────────────────────
 
+    /** Interruptor global de notificaciones del usuario (activado por defecto). */
     fun isNotificationsEnabled(): Boolean =
         settings.getBoolean(KEY_NOTIFICATIONS, true)
 
@@ -38,6 +43,7 @@ class SettingsStore(
 
     // ── Language ──────────────────────────────────────────
 
+    /** Idioma preferido de la UI ("es"/"en"). Español por defecto si no se ha elegido ninguno. */
     fun getLanguage(): String =
         settings.getString(KEY_LANGUAGE, "es")
 
@@ -46,6 +52,7 @@ class SettingsStore(
 
     // ── Theme ─────────────────────────────────────────────
 
+    /** Nombre del tema visual elegido ("DEFAULT"/"NATURALEZA"/"MINIMAL" — ver [org.taskhub.ui.theme.TaskHubThemeType]). */
     fun getTheme(): String =
         settings.getString(KEY_THEME, "DEFAULT")
 
@@ -54,6 +61,7 @@ class SettingsStore(
 
     // ── Widget Theme ──────────────────────────────────────
 
+    /** Tema del widget de escritorio/pantalla de inicio (independiente del tema de la app). */
     fun getWidgetTheme(): String =
         settings.getString(KEY_WIDGET_THEME, "system")
 
@@ -62,12 +70,14 @@ class SettingsStore(
 
     // ── Sound & Haptics ─────────────────────────────────
 
+    /** Si se reproducen sonidos al completar acciones (activado por defecto). */
     fun isSoundEnabled(): Boolean =
         settings.getBoolean(KEY_SOUND_ENABLED, true)
 
     fun setSoundEnabled(enabled: Boolean) =
         settings.putBoolean(KEY_SOUND_ENABLED, enabled)
 
+    /** Si se usa vibración háptica al completar acciones (activado por defecto). */
     fun isVibrationEnabled(): Boolean =
         settings.getBoolean(KEY_VIBRATION_ENABLED, true)
 
@@ -76,6 +86,7 @@ class SettingsStore(
 
     // ── Google Calendar ──────────────────────────────────
 
+    /** True si hay un token de acceso de Google Calendar guardado (cuenta vinculada). */
     fun hasGoogleLinked(): Boolean =
         getGoogleAccessToken() != null
 
@@ -91,6 +102,7 @@ class SettingsStore(
     fun getGoogleAccessToken(): String? =
         secureStore.getString(KEY_GOOGLE_ACCESS_TOKEN) ?: migrateLegacyToken(KEY_GOOGLE_ACCESS_TOKEN)
 
+    /** Guarda (o borra, si [token] es `null`) el access token de Google Calendar. */
     fun setGoogleAccessToken(token: String?) {
         if (token != null) {
             secureStore.putString(KEY_GOOGLE_ACCESS_TOKEN, token)
@@ -117,6 +129,7 @@ class SettingsStore(
 
     // ── Google Auth (login) ──────────────────────────────
 
+    /** True si hay una sesión de Google guardada localmente (UID no nulo). */
     fun isGoogleLoggedIn(): Boolean =
         settings.getStringOrNull(KEY_GOOGLE_UID) != null
 
@@ -126,6 +139,7 @@ class SettingsStore(
     fun getGoogleEmail(): String? =
         settings.getStringOrNull(KEY_GOOGLE_EMAIL)
 
+    /** Guarda (o borra, si algún parámetro es `null`) el UID/email de la sesión de Google. */
     fun setGoogleAuth(uid: String?, email: String?) {
         if (uid != null) {
             settings.putString(KEY_GOOGLE_UID, uid)
@@ -147,6 +161,7 @@ class SettingsStore(
     fun getGoogleRefreshToken(): String? =
         secureStore.getString(KEY_GOOGLE_REFRESH_TOKEN) ?: migrateLegacyToken(KEY_GOOGLE_REFRESH_TOKEN)
 
+    /** Guarda (o borra, si [token] es `null`) el refresh token de Google en [secureStore]. */
     fun setGoogleRefreshToken(token: String?) {
         if (token != null) {
             secureStore.putString(KEY_GOOGLE_REFRESH_TOKEN, token)
@@ -156,6 +171,7 @@ class SettingsStore(
         settings.remove(KEY_GOOGLE_REFRESH_TOKEN) // por si quedaba el valor legado sin cifrar
     }
 
+    /** Borra toda la sesión de Google (UID, email y refresh token cifrado/legado). */
     fun clearGoogleAuth() {
         settings.remove(KEY_GOOGLE_UID)
         settings.remove(KEY_GOOGLE_EMAIL)
@@ -184,12 +200,14 @@ class SettingsStore(
     fun getAnonymousUid(): String? =
         settings.getStringOrNull(KEY_ANON_UID)
 
+    /** Guarda el refresh token (cifrado) y el UID de la identidad anónima persistente. */
     fun saveAnonymousAuth(refreshToken: String, uid: String) {
         secureStore.putString(KEY_ANON_REFRESH_TOKEN, refreshToken)
         settings.remove(KEY_ANON_REFRESH_TOKEN) // por si quedaba el valor legado sin cifrar
         settings.putString(KEY_ANON_UID, uid)
     }
 
+    /** Borra la identidad anónima persistente (refresh token cifrado/legado + UID). */
     fun clearAnonymousAuth() {
         secureStore.remove(KEY_ANON_REFRESH_TOKEN)
         settings.remove(KEY_ANON_REFRESH_TOKEN)
@@ -216,14 +234,17 @@ class SettingsStore(
     // conocida: un segundo dispositivo crearía su propio calendario — aceptado
     // para el MVP.
 
+    /** Calendario de Google ya vinculado a [householdId] en este dispositivo, o `null` si no hay ninguno. */
     fun getCalendarId(householdId: String): String? = getCalendarIdMap()[householdId]
 
+    /** Asocia (o reemplaza) el calendario de Google de [householdId] en este dispositivo. */
     fun setCalendarId(householdId: String, calendarId: String) {
         val map = getCalendarIdMap().toMutableMap()
         map[householdId] = calendarId
         settings.putString(KEY_CALENDAR_IDS, json.encodeToString(map))
     }
 
+    /** Deserializa el mapa householdId→calendarId; mapa vacío si no hay datos o están corruptos. */
     private fun getCalendarIdMap(): Map<String, String> {
         val raw = settings.getString(KEY_CALENDAR_IDS, "")
         if (raw.isEmpty()) return emptyMap()
@@ -251,9 +272,11 @@ class SettingsStore(
     // en absoluto del orden temporal para decidir "es nueva", solo de si ya
     // se mostró antes — inmune al desfase de reloj entre dispositivos.
 
+    /** IDs de `notifications` de [householdId] ya mostrados por el polling en este dispositivo. */
     fun getNotifiedNotificationIds(householdId: String): Set<String> =
         getNotifiedNotificationIdsMap()[householdId]?.toSet() ?: emptySet()
 
+    /** Reemplaza el conjunto completo de IDs ya notificados de [householdId] (tras una pasada del polling). */
     fun setNotifiedNotificationIds(householdId: String, ids: Set<String>) {
         val map = getNotifiedNotificationIdsMap().toMutableMap()
         map[householdId] = ids.toList()
@@ -272,6 +295,7 @@ class SettingsStore(
         settings.remove(KEY_NOTIFICATION_POLL_MARKERS)
     }
 
+    /** Deserializa el mapa householdId→IDs notificados; mapa vacío si no hay datos o están corruptos. */
     private fun getNotifiedNotificationIdsMap(): Map<String, List<String>> {
         val raw = settings.getString(KEY_NOTIFICATION_POLL_MARKERS, "")
         if (raw.isEmpty()) return emptyMap()

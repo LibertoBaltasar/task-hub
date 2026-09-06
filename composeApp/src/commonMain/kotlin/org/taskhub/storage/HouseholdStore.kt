@@ -1,3 +1,8 @@
+// Capa de persistencia (storage/): referencia local a los hogares del
+// usuario (IDs, no los datos completos — ver [TaskCache] para eso).
+// Es la fuente de verdad de "a qué hogares pertenezco" entre reinicios,
+// necesaria porque el auth anónimo no ofrece un UID estable por sí solo.
+
 package org.taskhub.storage
 
 import com.russhwolf.settings.Settings

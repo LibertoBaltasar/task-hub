@@ -1,3 +1,6 @@
+// Capa de persistencia (storage/), implementación JVM/desktop del contrato
+// [SecureStore] (`actual` de la `expect fun createSecureStore()` común).
+
 package org.taskhub.storage
 
 import java.io.File
@@ -46,6 +49,7 @@ private class JvmSecureStore : SecureStore {
         prefs.remove(key)
     }
 
+    /** Cifra [plain] con AES-256-GCM; el IV aleatorio va concatenado delante del ciphertext, todo en Base64. */
     private fun encrypt(plain: String): String {
         val iv = ByteArray(GCM_IV_BYTES).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -54,6 +58,7 @@ private class JvmSecureStore : SecureStore {
         return Base64.getEncoder().encodeToString(iv + encrypted)
     }
 
+    /** Inverso de [encrypt]: separa el IV del ciphertext y descifra. Lanza si el ciphertext es inválido/corrupto. */
     private fun decrypt(encoded: String): String {
         val bytes = Base64.getDecoder().decode(encoded)
         val iv = bytes.copyOfRange(0, GCM_IV_BYTES)
@@ -63,6 +68,7 @@ private class JvmSecureStore : SecureStore {
         return String(cipher.doFinal(cipherText), Charsets.UTF_8)
     }
 
+    /** Lee la clave AES-256 persistida en `~/.taskhub/.taskhub_secure_key`, generándola si es la primera vez. */
     private fun loadOrCreateKey(): SecretKeySpec {
         val dir = File(System.getProperty("user.home"), ".taskhub")
         if (!dir.exists()) dir.mkdirs()

@@ -1,3 +1,7 @@
+// Capa de persistencia (storage/): caché offline de las respuestas de
+// Firestore (tareas/hogar/miembros), usada como fallback cache-first cuando
+// no hay conexión. Ver [HouseholdStore] para la lista de hogares conocidos.
+
 package org.taskhub.storage
 
 import com.russhwolf.settings.Settings
@@ -25,28 +29,34 @@ class TaskCache(private val settings: Settings) {
 
     // ── Tasks ───────────────────────────────────────────────
 
+    /** Sobrescribe la caché de tareas de [householdId] con [tasks] (llamado tras cada lectura exitosa de red). */
     fun cacheTasks(householdId: String, tasks: List<TaskResponse>) {
         val key = "cache_tasks_$householdId"
         settings.putString(key, json.encodeToString(tasks))
     }
 
+    /** Tareas cacheadas de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
     fun getCachedTasks(householdId: String): List<TaskResponse>? {
         val key = "cache_tasks_$householdId"
         val raw = settings.getStringOrNull(key) ?: return null
         return try {
             json.decodeFromString<List<TaskResponse>>(raw)
         } catch (_: Exception) {
+            // JSON corrupto/incompatible (p.ej. escrito por una versión anterior):
+            // se trata como "sin caché" en vez de propagar la excepción.
             null
         }
     }
 
     // ── Household ───────────────────────────────────────────
 
+    /** Sobrescribe la caché del documento de hogar (llamado tras cada lectura exitosa de red). */
     fun cacheHousehold(household: HouseholdResponse) {
         val key = "cache_household_${household.id}"
         settings.putString(key, json.encodeToString(household))
     }
 
+    /** Documento de hogar cacheado, o `null` si no hay caché o el JSON guardado está corrupto. */
     fun getCachedHousehold(householdId: String): HouseholdResponse? {
         val key = "cache_household_$householdId"
         val raw = settings.getStringOrNull(key) ?: return null
@@ -59,11 +69,13 @@ class TaskCache(private val settings: Settings) {
 
     // ── Members ─────────────────────────────────────────────
 
+    /** Sobrescribe la caché de miembros de [householdId] con [members] (llamado tras cada lectura exitosa de red). */
     fun cacheMembers(householdId: String, members: List<MemberResponse>) {
         val key = "cache_members_$householdId"
         settings.putString(key, json.encodeToString(members))
     }
 
+    /** Miembros cacheados de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
     fun getCachedMembers(householdId: String): List<MemberResponse>? {
         val key = "cache_members_$householdId"
         val raw = settings.getStringOrNull(key) ?: return null

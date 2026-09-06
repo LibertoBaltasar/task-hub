@@ -1,3 +1,7 @@
+// Capa de persistencia (storage/): contrato multiplataforma para el
+// almacén CIFRADO de credenciales sensibles. Cada plataforma (android/ios/
+// jvm) aporta su propia implementación vía `expect`/`actual`.
+
 package org.taskhub.storage
 
 /**
@@ -15,8 +19,13 @@ package org.taskhub.storage
  * sistema accesible sin una dependencia nativa adicional).
  */
 interface SecureStore {
+    /** Devuelve el valor cifrado guardado bajo [key], o `null` si no existe o no se puede descifrar. */
     fun getString(key: String): String?
+
+    /** Cifra [value] y lo guarda bajo [key] (sobrescribe cualquier valor previo). */
     fun putString(key: String, value: String)
+
+    /** Borra el valor guardado bajo [key]. No falla si no existía. */
     fun remove(key: String)
 }
 
