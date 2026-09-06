@@ -1,3 +1,11 @@
+/**
+ * Cliente HTTP + autenticación de bajo nivel para la capa REST de
+ * Firestore/Firebase Auth: construcción de URLs, ciclo de vida del token
+ * (alta anónima, refresco, vinculación con Google), validación de errores
+ * HTTP y paginación de colecciones. Es la base sobre la que se construyen
+ * [FirestoreRepository] y todos los repos de dominio (`MemberRepository`,
+ * `TaskRepository`, etc.), inyectada por composición vía Koin.
+ */
 package org.taskhub.network
 
 import io.ktor.client.*
@@ -41,15 +49,15 @@ class FirestoreClient(
     private val authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
     private val secureTokenUrl = "https://securetoken.googleapis.com/v1/token"
 
-    // ── Auth state (in-memory, regenerated on app restart — fine for anonymous) ──
+    // ── Estado de auth (en memoria, se regenera al reiniciar la app — vale para anónimo) ──
     @Volatile
     var bearerToken: String? = null
         private set
     @Volatile
-    var tokenExpiry: Long = 0L  // epoch millis when token expires (minus safety margin)
+    var tokenExpiry: Long = 0L  // epoch millis en que caduca el token (con margen de seguridad restado)
         private set
     @Volatile
-    var cachedLocalId: String? = null  // anonymous user ID — persists across sessions via settings
+    var cachedLocalId: String? = null  // UID del usuario — persiste entre sesiones vía settingsStore
         private set
     // Serializa ensureAuth(): sin esto, ráfagas de llamadas paralelas (varias
     // pantallas cargando datos a la vez tras un cold start) pasan todas el
@@ -130,9 +138,10 @@ class FirestoreClient(
         ).distinct()
 
     /**
-     * Ensures we have a valid anonymous auth token, signing up anonymously if needed.
-     * Called lazily on first request. Token is cached in memory and refreshed
-     * when within 5 minutes of expiry.
+     * Asegura que hay un token de auth válido, dando de alta una sesión
+     * anónima si hace falta. Se llama de forma perezosa en la primera
+     * petición. El token se cachea en memoria y se refresca cuando está a
+     * menos de 5 minutos de caducar.
      *
      * POST https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=API_KEY
      * Body: {"returnSecureToken":true}
@@ -207,7 +216,7 @@ class FirestoreClient(
 
         bearerToken = idToken
         cachedLocalId = localId
-        // expiresIn is in seconds. Refresh 5 minutes before actual expiry.
+        // expiresIn viene en segundos. Se refresca 5 minutos antes de la caducidad real.
         tokenExpiry = now + (expiresIn * 1000) - 300_000
         settingsStore.saveAnonymousAuth(refreshToken, localId)
         bearerToken
@@ -246,6 +255,7 @@ class FirestoreClient(
         )
     }
 
+    /** Resultado de renovar un token vía [refreshFirebaseToken]. */
     private data class RefreshedAuth(
         val idToken: String,
         val userId: String,
@@ -266,8 +276,9 @@ class FirestoreClient(
     }
 
     /**
-     * Adds Authorization header to a request builder if we already have a token.
-     * Calls [ensureAuth] first so the token is always fresh.
+     * Añade la cabecera Authorization a la petición si ya hay token. Llama
+     * primero a [ensureAuth] para garantizar que el token esté vigente —
+     * usado en operaciones de escritura, que SIEMPRE requieren auth.
      */
     suspend fun HttpRequestBuilder.withAuth() {
         val token = ensureAuth()
@@ -275,8 +286,11 @@ class FirestoreClient(
     }
 
     /**
-     * Tries Bearer auth first; falls back to API key parameter.
-     * Used for read operations where API key alone might suffice.
+     * Intenta primero auth Bearer; si falla, cae a pasar la API key como
+     * parámetro de query. Usado en operaciones de LECTURA, donde las reglas
+     * de Firestore permiten acceso solo con API key (sin usuario
+     * autenticado) — así una lectura no falla solo porque `ensureAuth()`
+     * (alta/refresco de sesión) tuviera un problema puntual de red.
      */
     suspend fun HttpRequestBuilder.tryAuthOrApiKey() {
         try {
@@ -301,6 +315,7 @@ class FirestoreClient(
         fields.forEach { parameter("updateMask.fieldPaths", it) }
     }
 
+    /** Igual que la sobrecarga vararg, para cuando los campos ya vienen en una colección. */
     fun HttpRequestBuilder.updateMaskFieldPaths(fields: Collection<String>) {
         fields.forEach { parameter("updateMask.fieldPaths", it) }
     }
