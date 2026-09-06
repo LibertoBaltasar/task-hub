@@ -1,3 +1,9 @@
+// Worker de WorkManager, programado por [TaskHubApplication], que sondea
+// periódicamente `households/{id}/notifications` en Firestore para entregar
+// como notificación del sistema las tareas asignadas y los mensajes nuevos
+// de cada hogar guardado en este dispositivo. Ver el KDoc de la clase para
+// el porqué de este mecanismo (no hay push FCM dirigido real) y los
+// cuidados de privacidad frente a miembros expulsados del hogar.
 package org.taskhub
 
 import android.content.Context
@@ -41,6 +47,14 @@ class NotificationPollWorker(
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
 
+    /**
+     * Punto de entrada invocado por WorkManager en cada ciclo (~30 min, ver
+     * [TaskHubApplication.scheduleNotificationPolling]). Recorre todos los
+     * hogares guardados localmente y delega en [pollHousehold] para cada
+     * uno; los fallos de un hogar concreto no interrumpen el resto. Siempre
+     * devuelve [Result.success] (no hay reintento inmediato: el propio
+     * ciclo periódico ya actúa como reintento).
+     */
     override suspend fun doWork(): Result {
         val settings = Settings()
         val settingsStore = SettingsStore(settings)
@@ -86,6 +100,13 @@ class NotificationPollWorker(
         return Result.success()
     }
 
+    /**
+     * Sondea un único hogar: valida pertenencia real (privacidad frente a
+     * miembros expulsados, ver comentario más abajo), purga notificaciones
+     * leídas antiguas, calcula cuáles son nuevas desde el último sondeo y
+     * dispara una notificación del sistema por cada una vía
+     * [NotificationHelper.showUpdateNotification].
+     */
     private suspend fun pollHousehold(
         householdId: String,
         firestoreClient: FirestoreClient,
@@ -132,6 +153,17 @@ class NotificationPollWorker(
         val mine = all.filter { it.memberId == memberId }
         if (mine.isEmpty()) return
 
+        // El marcador de "ya notificadas" se guarda como CONJUNTO DE IDs de
+        // documento (Set<String>, en SettingsStore), nunca como un timestamp
+        // de corte: un cursor tipo "createdAt > último visto" se rompería
+        // con desfases de reloj entre dispositivos/escrituras o con
+        // notificaciones cuyo `createdAt` llega ligeramente desordenado, y
+        // perdería ese aviso para siempre sin que nada lo detecte. Además,
+        // aquí se REEMPLAZA el set entero por los ids de `mine` en cada
+        // sondeo (no se acumula) — permanece acotado porque `mine` refleja
+        // solo las notificaciones de este miembro que siguen existiendo, y
+        // `purgeOldRead` (arriba) va retirando las leídas antiguas de
+        // Firestore con el tiempo.
         val seenIds = settingsStore.getNotifiedNotificationIds(householdId)
         if (seenIds.isEmpty()) {
             // Primer sondeo de este hogar (o el primero con datos reales):
