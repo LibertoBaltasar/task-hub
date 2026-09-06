@@ -1,3 +1,14 @@
+/**
+ * Pantalla "hub" de un hogar: tarjeta de invitación (QR/código), accesos a
+ * Tareas/Calendario/Explorar (estadísticas+ranking+recompensas), lista de
+ * miembros con acciones de admin (agradecer, donar puntos, cambiar rol,
+ * expulsar) y el chat del hogar. Se llega aquí tras crear/unirse a un hogar
+ * o desde [ProfileScreen]/[HomeScreen]. Combina
+ * [org.taskhub.ui.models.HouseholdScreenModel] (datos del hogar, chat,
+ * borrar/salir), [org.taskhub.ui.models.MemberScreenModel] (miembros,
+ * agradecer/donar) y [org.taskhub.ui.models.NotificationScreenModel]
+ * (contador de no leídas).
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -48,6 +59,12 @@ import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.theme.*
 
+/**
+ * Contenedor de todo el estado de un hogar en pantalla: identidad del
+ * miembro actual, permisos de admin, diálogos modales (agradecer, donar,
+ * borrar, salir, QR, ajustes) y la lista de miembros/chat en un único
+ * [androidx.compose.foundation.lazy.LazyColumn].
+ */
 data class HouseholdScreen(val householdId: String) : Screen {
 
     @Composable

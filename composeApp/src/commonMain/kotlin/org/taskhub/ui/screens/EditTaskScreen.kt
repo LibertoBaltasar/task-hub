@@ -1,3 +1,13 @@
+/**
+ * Formulario de edición de una tarea existente: se navega aquí desde
+ * [TaskDetailScreen] o [TaskListScreen] (acción "Editar"). Precarga todos
+ * los campos desde el [TaskResponse] recibido y, además, desde las
+ * asignaciones ya guardadas en Firestore (vía
+ * [org.taskhub.ui.models.TaskScreenModel.getAssignments], recargable si
+ * falla). Reutiliza las mismas validaciones y helpers de formato de fecha/hora
+ * que [CreateTaskScreen] (definidos en ese archivo, mismo paquete). También
+ * permite configurar la rotación de asignación por día de la semana.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -47,6 +57,11 @@ import org.taskhub.ui.theme.*
 //  EditTaskScreen
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Igual que [CreateTaskScreen] pero pre-rellenado y con `updateTask` en vez
+ * de `createTask`. Añade además la rotación de asignación por día de la
+ * semana ([rotationSlots]), no presente en la creación.
+ */
 data class EditTaskScreen(
     val householdId: String,
     val task: TaskResponse

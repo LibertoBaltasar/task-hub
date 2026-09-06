@@ -1,3 +1,11 @@
+/**
+ * Pantalla de listado de hogares del usuario (espacio Personal + hogares
+ * compartidos), accesible desde la barra inferior/navegación principal.
+ * No tiene ScreenModel propio: recibe la lista de [SavedHousehold] ya
+ * cargada por el llamador (leída de [org.taskhub.storage.HouseholdStore]);
+ * navega a [HouseholdScreen], [CreateHouseholdScreen], [JoinHouseholdScreen]
+ * o [EditProfileScreen] (vía el diálogo de ajustes).
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -170,7 +178,9 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
 }
 
 /**
- * Tarjeta de hogar en el perfil.
+ * Tarjeta de hogar en el listado de perfil. Si [onNavigate] es `null` la
+ * tarjeta no es interactiva (sin flecha ni `clickable`); el llamador solo lo
+ * pasa para hogares compartidos, no para el espacio Personal.
  */
 @Composable
 private fun HouseholdProfileCard(

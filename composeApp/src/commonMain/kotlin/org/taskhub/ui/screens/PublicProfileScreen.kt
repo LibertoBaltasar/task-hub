@@ -1,3 +1,11 @@
+/**
+ * Pantalla de solo lectura con el perfil público de un miembro de un hogar.
+ * Se navega aquí al pulsar el nombre/avatar de un miembro en
+ * [HouseholdScreen] (lista de miembros) y en el ranking. Usa
+ * [org.taskhub.ui.models.ProfileScreenModel] para cargar el `UserProfile`
+ * global; si falla, cae a mostrar solo los datos ya disponibles del
+ * `MemberResponse` de ese hogar.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*

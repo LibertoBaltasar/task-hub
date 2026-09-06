@@ -1,3 +1,10 @@
+/**
+ * Pantalla de edición del perfil global (no por hogar) del usuario. Se
+ * navega desde el panel de Ajustes ([org.taskhub.ui.components.SettingsSheet],
+ * botón "Editar perfil") en varias pantallas (Home, Welcome, TaskList,
+ * Profile, Household). Usa [org.taskhub.ui.models.ProfileScreenModel] tanto
+ * para cargar el perfil actual como para persistir los cambios.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable

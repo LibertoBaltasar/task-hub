@@ -1,3 +1,10 @@
+/**
+ * Pantalla inicial de la app: se muestra desde [org.taskhub.App] durante la
+ * "Fase 1" (antes de inyectar el resto de dependencias vía Koin), mientras
+ * dura la animación de 1.5s. No usa ScreenModel: lee el idioma directamente
+ * de [org.taskhub.storage.SettingsStore] porque `LocalAppSettings` todavía
+ * no está disponible en este punto del arranque.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.animation.core.animateFloatAsState
