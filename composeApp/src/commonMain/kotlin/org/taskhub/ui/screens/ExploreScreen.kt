@@ -1,3 +1,11 @@
+/**
+ * Pantalla con pestañas (Estadísticas/Ranking/Recompensas) de un hogar.
+ * Se navega aquí desde [HouseholdScreen] (accesos "Explorar"). Cada pestaña
+ * delega en el `*Body` correspondiente definido en su propio archivo
+ * (StatsScreen.kt, RankingScreen.kt, RewardListScreen.kt), inyectando el
+ * [org.taskhub.ui.models.StatsScreenModel] / [org.taskhub.ui.models.MemberScreenModel]
+ * compartido para evitar cargas duplicadas.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.Box

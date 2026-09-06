@@ -1,3 +1,9 @@
+/**
+ * Contenido del ranking de puntos de un hogar (pestaña "Ranking" de
+ * [ExploreScreen]; este archivo NO define un [cafe.adriel.voyager.core.screen.Screen]
+ * propio, solo los composables que renderiza esa pestaña). Se apoya en
+ * [org.taskhub.ui.models.MemberScreenModel] para la lista de miembros.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.background
@@ -121,6 +127,7 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
     }
 }
 
+/** Fila individual del ranking: medalla/posición, avatar, nombre/rol y puntos+racha. */
 @Composable
 private fun RankingRow(
     position: Int,

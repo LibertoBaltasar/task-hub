@@ -1,3 +1,11 @@
+/**
+ * Bandeja de notificaciones de un hogar (tareas asignadas, mensajes nuevos
+ * del chat, etc.). Se navega aquí desde el icono de campana en las pantallas
+ * del hogar (Home/TaskList/Household) y desde deep links push. Usa
+ * [org.taskhub.ui.models.NotificationScreenModel] para cargar/marcar como
+ * leídas, y [org.taskhub.ui.i18n.NotificationText] para traducir el
+ * título/mensaje al idioma del lector (no al de quien la generó).
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -32,6 +40,11 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
+/**
+ * Muestra la lista de notificaciones del [memberId] indicado dentro del
+ * hogar [householdId], con estados de carga/vacío/error y contador de no
+ * leídas.
+ */
 data class NotificationListScreen(
     val householdId: String,
     val memberId: String
@@ -174,6 +187,7 @@ data class NotificationListScreen(
     }
 }
 
+/** Tarjeta de una notificación individual; resalta si no está leída y ofrece marcarla como leída. */
 @Composable
 private fun NotificationCard(
     notification: NotificationResponse,
@@ -274,7 +288,8 @@ private fun NotificationCard(
 }
 
 /**
- * Simple "time ago" formatter.
+ * Formatea la fecha de una notificación como texto relativo ("hace X min/h/días")
+ * y cae a fecha absoluta dd/mm/aaaa pasada una semana.
  */
 private fun formatTimeAgo(epochMs: Long, lang: String): String {
     if (epochMs == 0L) return ""
