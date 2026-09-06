@@ -1,3 +1,6 @@
+// Capa de persistencia (storage/), implementación iOS del contrato
+// [SecureStore] (`actual` de la `expect fun createSecureStore()` común).
+
 package org.taskhub.storage
 
 import kotlinx.cinterop.ExperimentalForeignApi
