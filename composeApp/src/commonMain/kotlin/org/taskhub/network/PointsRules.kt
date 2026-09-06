@@ -1,3 +1,9 @@
+/**
+ * Reglas puras (sin I/O) del sistema de puntos entre miembros: agradecimientos
+ * (con tope semanal) y donaciones (transferencia de saldo). Usado por
+ * [FirestoreRepository]/[MemberRepository] para validar antes de escribir en
+ * Firestore y por `commonTest` para testear la lógica sin red.
+ */
 package org.taskhub.network
 
 import kotlinx.datetime.DateTimeUnit
@@ -18,9 +24,16 @@ object PointsRules {
     const val WEEKLY_APPRECIATION_BUDGET = 50
     private const val WEEK_MILLIS = 7L * 24 * 60 * 60 * 1000
 
+    /** Motivos por los que un agradecimiento no es válido. */
     enum class AppreciateError { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED }
+
+    /** Motivos por los que una donación no es válida. */
     enum class DonateError { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE }
 
+    /**
+     * Estado del presupuesto semanal de agradecimiento de un miembro, ya
+     * normalizado a la semana vigente en el momento de la consulta.
+     */
     data class AppreciationBudget(val given: Int, val weekStart: Long, val remaining: Int)
 
     /** Epoch millis del lunes 00:00 hora local de la semana que contiene [epochMs]. */

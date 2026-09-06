@@ -1,3 +1,9 @@
+/**
+ * Excepciones y helpers de error de la capa REST de Firestore. Usado por
+ * [FirestoreClient] (validación de respuesta HTTP) y por todos los
+ * repositorios ([FirestoreRepository], [HouseholdRepository], etc.) para
+ * distinguir errores reales de casos "esperados" (recurso borrado/sin acceso).
+ */
 package org.taskhub.network
 
 /**
