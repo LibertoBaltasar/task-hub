@@ -1,3 +1,12 @@
+/**
+ * Formulario de creación de tarea: se navega aquí desde [HouseholdScreen]
+ * (botón crear tarea directa para un miembro) o desde [TaskListScreen].
+ * Concentra las reglas de negocio del modelo de tarea (recurrencia
+ * diaria/semanal/mensual, fecha límite, penalización fija/porcentual,
+ * checklist de subtareas, asignación a uno o varios miembros) que persiste
+ * vía [org.taskhub.ui.models.TaskScreenModel]; también usa
+ * [org.taskhub.ui.models.MemberScreenModel] para listar a quién asignar.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
@@ -55,6 +64,13 @@ import org.taskhub.ui.theme.*
 //  CreateTaskScreen
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Formulario largo en [LazyColumn] con secciones: info básica, checklist,
+ * frecuencia/recurrencia, etiquetas, asignación de miembros, fecha límite y
+ * penalización. El botón "Crear" (en la topbar) solo se habilita cuando
+ * pasan todas las validaciones de cada sección (ver `enabled = ...` en el
+ * `TextButton` de creación).
+ */
 data class CreateTaskScreen(
     val householdId: String,
     val createdBy: String,
@@ -977,6 +993,11 @@ data class CreateTaskScreen(
 //  Quick Templates Section
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Sección plegable de plantillas rápidas: al elegir una plantilla,
+ * sobrescribe título/descripción/etiquetas/frecuencia/puntos del formulario
+ * (no añade, reemplaza los valores actuales).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QuickTemplatesSection(
@@ -1079,9 +1100,11 @@ private fun QuickTemplatesSection(
 //  Helpers
 // ────────────────────────────────────────────────────────────
 
+/** Comprueba el formato literal aaaa-mm-dd (no valida que la fecha exista). */
 internal fun String.isValidDateFormat(): Boolean =
     Regex("""\d{4}-\d{2}-\d{2}""").matches(this)
 
+/** Valida formato HH:mm y rango real de hora/minuto (evita crash de LocalDateTime, ver comentario abajo). */
 internal fun String.isValidTimeFormat(): Boolean {
     // No basta con el formato (dos dígitos:dos dígitos): "99:99" también lo
     // cumple pero LocalDateTime(...) en parseDeadline() lanza
@@ -1094,6 +1117,7 @@ internal fun String.isValidTimeFormat(): Boolean {
     return hour in 0..23 && minute in 0..59
 }
 
+/** Combina fecha (aaaa-mm-dd) + hora (HH:mm) en un epoch-millis en la zona horaria local. */
 internal fun parseDeadline(dateStr: String, timeStr: String): Long {
     val parts = dateStr.split("-")
     val year = parts.getOrNull(0)?.toIntOrNull() ?: return 0L
