@@ -1,3 +1,12 @@
+/**
+ * Listado principal de tareas de un hogar: agrupa por Vencidas/Hoy/Completadas
+ * hoy, con filtros (estado, etiqueta, búsqueda), orden y deshacer al
+ * completar. Se navega aquí desde [HouseholdScreen] ("Ver tareas"). Usa
+ * [org.taskhub.ui.models.TaskScreenModel] como única fuente de estado
+ * (lista, filtros, acciones); no hay "instancias" de tareas recurrentes en
+ * Firestore — el estado due/completado se recalcula en cliente a partir de
+ * `frequency` + `lastCompletedDate` (ver [isTaskDueToday]).
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.animation.core.Animatable
