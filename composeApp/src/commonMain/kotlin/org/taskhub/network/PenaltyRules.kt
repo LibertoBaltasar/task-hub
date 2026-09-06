@@ -1,3 +1,8 @@
+/**
+ * Reglas puras (sin I/O) de puntuación al completar tareas: puntualidad y
+ * penalización por retraso. Usado por [FirestoreRepository]/[TaskRepository]
+ * al resolver los puntos a otorgar en `completeAssignment`.
+ */
 package org.taskhub.network
 
 import org.taskhub.network.models.TaskResponse
@@ -36,11 +41,12 @@ object PenaltyRules {
     }
 
     /**
-     * Calculate penalty points for an overdue task.
+     * Calcula los puntos de penalización de una tarea vencida.
      *
-     * - fixed mode: subtracts `penaltyValue` per interval
-     * - percentage mode: subtracts `penaltyValue`% of task.points per interval
-     * - Capped at `penaltyMax` (which should not exceed task.points)
+     * - modo `fixed`: resta `penaltyValue` por cada intervalo vencido.
+     * - modo `percentage`: resta `penaltyValue`% de `task.points` por cada intervalo vencido.
+     * - el resultado se limita a `penaltyMax` (si está fijado; no debería superar `task.points`)
+     *   y nunca supera `task.points` (la penalización nunca deja el resultado en negativo).
      */
     fun calculatePenalty(task: TaskResponse, dueDate: Long, now: Long): Int {
         val mode = task.penaltyMode ?: return 0
@@ -50,10 +56,12 @@ object PenaltyRules {
         val intervalMs = when (task.penaltyInterval) {
             "week" -> 7L * 24 * 60 * 60 * 1000
             "month" -> 30L * 24 * 60 * 60 * 1000
-            else -> 24L * 60 * 60 * 1000 // day
+            else -> 24L * 60 * 60 * 1000 // día
         }
 
-        val intervals = (overdueMs / intervalMs).toInt() + 1 // +1 because first interval starts immediately
+        // +1 porque el primer intervalo de penalización empieza en cuanto se vence,
+        // no hay que esperar a que transcurra un intervalo completo para penalizar.
+        val intervals = (overdueMs / intervalMs).toInt() + 1
 
         val penalty = when (mode) {
             "fixed" -> task.penaltyValue * intervals
@@ -61,7 +69,7 @@ object PenaltyRules {
             else -> 0
         }
 
-        // Cap at penaltyMax (if set) and never go below 0
+        // Se limita a penaltyMax (si está fijado) y nunca por debajo de 0 ni por encima de task.points.
         val capped = if (task.penaltyMax > 0) minOf(penalty, task.penaltyMax) else penalty
         return minOf(capped, task.points)
     }

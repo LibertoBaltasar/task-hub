@@ -1,3 +1,8 @@
+/**
+ * Regla pura (sin I/O) sobre asignaciones "hermanas" de una misma tarea
+ * recurrente/compartida. Consumida por [FirestoreRepository.completeAssignment]
+ * para decidir qué otras asignaciones del mismo ciclo cerrar sin puntos.
+ */
 package org.taskhub.network
 
 import org.taskhub.network.models.TaskAssignmentResponse

@@ -1,3 +1,8 @@
+/**
+ * Capa REST de Firestore para notificaciones de un hogar. Consumida por el
+ * sondeo periódico de la UI (badge de notificaciones) y por los repositorios
+ * que las generan (asignaciones, mensajes de chat, etc.).
+ */
 package org.taskhub.network
 
 import io.ktor.client.call.*
@@ -27,7 +32,7 @@ class NotificationRepository(
         firestoreClient.extractDocId(resourceName, operation)
 
     /**
-     * Create a notification document for a member.
+     * Crea un documento de notificación para un miembro. Requiere auth (escritura).
      *
      * [title]/[message] siguen guardándose YA traducidos al idioma de quien
      * ESCRIBE — se mantienen como fallback para notificaciones sin
@@ -86,7 +91,7 @@ class NotificationRepository(
         )
     }
 
-    /** Get all notifications for a household. */
+    /** Lista todas las notificaciones de un hogar. Lectura pública (auth opcional vía API key). */
     suspend fun getNotifications(householdId: String): List<NotificationResponse> = orDefault(emptyList()) {
         val response: FirestoreListResponse = client.get(
             "$baseUrl/households/$householdId/notifications"
@@ -97,7 +102,11 @@ class NotificationRepository(
         response.documents.map { doc -> FirestoreParsers.toNotificationResponse(doc) }
     }
 
-    /** Mark a notification as read. */
+    /**
+     * Marca una notificación como leída. Requiere auth (escritura).
+     * Usa `updateMask` con solo el campo `read` — PATCH parcial: no sobreescribe
+     * el resto de campos del documento (ver [FirestoreClient.updateMaskFieldPaths]).
+     */
     suspend fun markNotificationRead(householdId: String, notificationId: String) {
         val fields = mapOf(
             "read" to FirestoreValue(booleanValue = true)

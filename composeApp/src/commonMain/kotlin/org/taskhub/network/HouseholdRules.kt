@@ -1,3 +1,8 @@
+/**
+ * Reglas puras (sin I/O) de gobierno del hogar: quién hereda el rol de owner
+ * cuando el propietario actual desaparece. Usado por [FirestoreRepository]
+ * y/o [HouseholdRepository] antes de escribir el nuevo owner en Firestore.
+ */
 package org.taskhub.network
 
 import org.taskhub.network.models.MemberResponse

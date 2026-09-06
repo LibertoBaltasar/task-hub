@@ -1,3 +1,10 @@
+/**
+ * Integración con la API REST de Google Calendar (independiente de Firestore).
+ * Usado por la UI/ScreenModels de tareas para sincronizar eventos de tareas
+ * con el calendario de Google del usuario, reutilizando el access token OAuth
+ * obtenido al vincular la cuenta con Google Sign-In (el refresco del token en
+ * sí vive fuera de este archivo; aquí solo se consume).
+ */
 package org.taskhub.network
 
 import io.ktor.client.*
@@ -15,12 +22,15 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * Google Calendar REST API integration.
+ * Cliente REST de Google Calendar API v3.
  *
- * Creates calendar events for tasks — so they show up on the user's Google Calendar.
- * Uses the OAuth access token obtained via Google Sign-In linking.
+ * Crea/actualiza/borra eventos de calendario para que las tareas aparezcan en
+ * el Google Calendar del usuario. Usa el access token OAuth obtenido al
+ * vincular la cuenta con Google Sign-In (con el scope de Calendar); este
+ * repositorio no gestiona el ciclo de vida del token (obtención/refresco),
+ * solo lo recibe ya válido en cada llamada.
  *
- * Google Calendar API v3 docs:
+ * Documentación de la API:
  *   https://developers.google.com/calendar/api/v3/reference/events/insert
  */
 class GoogleCalendarRepository {
@@ -41,13 +51,13 @@ class GoogleCalendarRepository {
     }
 
     /**
-     * Finds a calendar owned/subscribed by the user whose `summary` (display
-     * name) matches, or creates one if none exists. Idempotent — safe to call
-     * every time a task needs to be synced.
+     * Busca un calendario propio/suscrito del usuario cuyo `summary` (nombre
+     * visible) coincida, o lo crea si no existe. Idempotente — seguro de
+     * llamar cada vez que haga falta sincronizar una tarea.
      *
-     * @param accessToken OAuth Bearer access token (Calendar scope).
-     * @param summary Calendar display name (e.g. "Task Hub").
-     * @return the `calendarId` to use with [createEvent]/[updateEvent]/[deleteEvent].
+     * @param accessToken Token OAuth Bearer (scope de Calendar).
+     * @param summary Nombre visible del calendario (p. ej. "Task Hub").
+     * @return el `calendarId` a usar con [createEvent]/[updateEvent]/[deleteEvent].
      */
     suspend fun ensureCalendar(accessToken: String, summary: String): String {
         val existingId = findCalendarIdByName(accessToken, summary)
@@ -62,6 +72,7 @@ class GoogleCalendarRepository {
         return response.id
     }
 
+    /** Busca por nombre en la lista de calendarios del usuario; null si ninguno coincide. */
     private suspend fun findCalendarIdByName(accessToken: String, summary: String): String? {
         val response: CalendarListResponse = client.get("$calendarBaseUrl/users/me/calendarList") {
             header("Authorization", "Bearer $accessToken")
@@ -72,15 +83,16 @@ class GoogleCalendarRepository {
     }
 
     /**
-     * Creates an event on the given calendar.
+     * Crea un evento en el calendario indicado.
      *
-     * @param accessToken OAuth Bearer access token (Calendar scope).
-     * @param calendarId Target calendar, e.g. from [ensureCalendar] (or "primary").
-     * @param summary Event title.
-     * @param description Event description (task notes).
-     * @param dueDateEpochMs Deadline epoch millis. Used as the event date for
-     *                       "once" tasks. For recurring tasks, today's date is used.
-     * @return the created Google Calendar event, or throws on error.
+     * @param accessToken Token OAuth Bearer (scope de Calendar).
+     * @param calendarId Calendario destino, p. ej. de [ensureCalendar] (o "primary").
+     * @param summary Título del evento.
+     * @param description Descripción del evento (notas de la tarea).
+     * @param dueDateEpochMs Fecha límite en epoch millis. Se usa como fecha del
+     *                       evento para tareas "once"; para tareas recurrentes
+     *                       se usa la fecha de hoy (ver [buildEventRequest]).
+     * @return el evento de Google Calendar creado, o lanza excepción en caso de error.
      */
     suspend fun createEvent(
         accessToken: String,
@@ -101,10 +113,10 @@ class GoogleCalendarRepository {
     }
 
     /**
-     * Updates an existing event (e.g. its title or due date changed).
+     * Actualiza un evento existente (p. ej. cambió su título o fecha límite).
      *
-     * @param calendarId Calendar the event lives in.
-     * @param eventId Event to update, as returned by [createEvent].
+     * @param calendarId Calendario donde vive el evento.
+     * @param eventId Evento a actualizar, tal como lo devolvió [createEvent].
      */
     suspend fun updateEvent(
         accessToken: String,
@@ -125,7 +137,7 @@ class GoogleCalendarRepository {
         return response
     }
 
-    /** Deletes an event, e.g. when the task is deleted or unlinked from Calendar. */
+    /** Borra un evento, p. ej. cuando se borra la tarea o se desvincula de Calendar. */
     suspend fun deleteEvent(accessToken: String, calendarId: String, eventId: String) {
         client.delete("$calendarBaseUrl/calendars/$calendarId/events/$eventId") {
             header("Authorization", "Bearer $accessToken")
@@ -133,8 +145,11 @@ class GoogleCalendarRepository {
     }
 
     /**
-     * Checks whether the given access token is valid by making a lightweight
-     * request to the Calendar API.
+     * Comprueba si el access token dado sigue siendo válido, con una petición
+     * ligera a la API de Calendar (pide solo el campo `id`). Cualquier error
+     * HTTP (401 por token expirado/revocado, etc.) se traduce a `false` en
+     * vez de propagar la excepción — el llamador solo necesita saber
+     * válido/inválido, no la causa concreta.
      */
     suspend fun validateToken(accessToken: String): Boolean {
         return try {
@@ -150,16 +165,21 @@ class GoogleCalendarRepository {
         }
     }
 
+    /**
+     * Construye el body de creación/actualización de evento. Los eventos se
+     * mandan como "todo el día" (`date`, sin hora) — un único día, sin fecha
+     * de fin distinta ([CalendarEventDateTime.date] igual en `start`/`end`).
+     */
     private fun buildEventRequest(
         summary: String,
         description: String,
         dueDateEpochMs: Long
     ): CalendarEventRequest {
-        // Determine event date string (YYYY-MM-DD)
+        // Determina la fecha del evento (YYYY-MM-DD).
         val dateString = if (dueDateEpochMs > 0) {
             epochMillisToDateString(dueDateEpochMs)
         } else {
-            // No due date — use today
+            // Sin fecha límite — se usa hoy.
             val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
             epochMillisToDateString(now)
         }
@@ -172,6 +192,7 @@ class GoogleCalendarRepository {
         )
     }
 
+    /** Epoch millis → fecha en formato `YYYY-MM-DD` en la zona horaria local, para eventos "todo el día". */
     private fun epochMillisToDateString(epochMillis: Long): String {
         val instant = Instant.fromEpochMilliseconds(epochMillis)
         val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
@@ -183,6 +204,7 @@ class GoogleCalendarRepository {
 
 // ── Google Calendar API DTOs ─────────────────────────────
 
+/** Cuerpo de creación/actualización de un evento (`POST`/`PUT .../events`). */
 @Serializable
 data class CalendarEventRequest(
     val summary: String,
@@ -191,11 +213,13 @@ data class CalendarEventRequest(
     val end: CalendarEventDateTime
 )
 
+/** Fecha de inicio/fin de un evento "todo el día" (sin hora, formato `YYYY-MM-DD`). */
 @Serializable
 data class CalendarEventDateTime(
     val date: String
 )
 
+/** Respuesta al crear/actualizar un evento. */
 @Serializable
 data class CalendarEventResponse(
     val id: String,
@@ -203,22 +227,26 @@ data class CalendarEventResponse(
     val status: String? = null
 )
 
+/** Respuesta de `GET users/me/calendarList` (lista de calendarios del usuario). */
 @Serializable
 data class CalendarListResponse(
     val items: List<CalendarListItem>? = null
 )
 
+/** Entrada de la lista de calendarios del usuario. */
 @Serializable
 data class CalendarListItem(
     val id: String,
     val summary: String? = null
 )
 
+/** Cuerpo de `POST calendars` para crear un calendario nuevo. */
 @Serializable
 data class CalendarInsertRequest(
     val summary: String
 )
 
+/** Respuesta al crear un calendario. */
 @Serializable
 data class CalendarInsertResponse(
     val id: String,

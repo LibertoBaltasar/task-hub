@@ -1,3 +1,8 @@
+/**
+ * Capa REST de Firestore para hogares, invitaciones y el chat de grupo.
+ * Usado por [FirestoreRepository] (fachada) y directamente por los
+ * `ScreenModel`s de hogar/onboarding/chat registrados vía Koin.
+ */
 package org.taskhub.network
 
 import io.ktor.client.call.*
@@ -61,7 +66,7 @@ class HouseholdRepository(
     //  Households
     // ────────────────────────────────────────────────────────
 
-    /** Create a household (auto-generated doc ID). Requires auth (write). */
+    /** Crea un hogar (ID de documento autogenerado). Requiere auth (escritura). */
     suspend fun createHousehold(name: String, isPersonal: Boolean = false): HouseholdResponse {
         ensureAuth()
         val now = Clock.System.now().toEpochMilliseconds()
@@ -97,7 +102,7 @@ class HouseholdRepository(
         }
 
         val household = HouseholdResponse(id, name, inviteCode, now, now, isPersonal, ownerId)
-        // Cache immediately so getHousehold has it on first load
+        // Se cachea de inmediato para que getHousehold ya lo tenga en la primera carga.
         taskCache.cacheHousehold(household)
         return household
     }
@@ -188,12 +193,13 @@ class HouseholdRepository(
     }
 
     /**
-     * Get a household by id. Falls back to local cache on network/5xx failures.
+     * Obtiene un hogar por su ID. Ante fallos de red/5xx, cae a la caché local.
      *
-     * A 404/403 from Firestore is a DEFINITIVE signal — the household was deleted
-     * or we lost access to it — so it must NOT fall back to the stale cache (that
-     * would keep showing a "ghost" household forever). Callers that need to prune
-     * local state should catch [FirestoreException] and check [FirestoreException.statusCode].
+     * Un 404/403 de Firestore es una señal DEFINITIVA — el hogar se borró o se
+     * perdió el acceso a él — así que NO debe caer a la caché (eso mantendría
+     * mostrando un hogar "fantasma" para siempre). Los llamadores que
+     * necesiten podar estado local deben capturar [FirestoreException] y
+     * comprobar [FirestoreException.statusCode].
      */
     suspend fun getHousehold(id: String): HouseholdResponse {
         return try {
