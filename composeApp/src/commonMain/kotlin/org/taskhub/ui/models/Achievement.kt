@@ -1,3 +1,9 @@
+// Modelo de logros (achievements) y lógica pura para calcular cuáles se
+// desbloquean según las estadísticas de un miembro. No es un ScreenModel:
+// no expone StateFlow ni depende de repositorios; [TaskScreenModel] es quien
+// invoca [AchievementChecker] tras completar una tarea y persiste el
+// resultado. Se usa desde `ui/screens/` para pintar la lista de logros del
+// miembro (bloqueados/desbloqueados).
 package org.taskhub.ui.models
 
 import kotlinx.datetime.Clock
@@ -7,6 +13,18 @@ import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskHistoryResponse
 
+/**
+ * Representa un logro desbloqueable por un miembro del hogar.
+ *
+ * @param id identificador estable del logro (se persiste en Firestore dentro
+ *   del set de logros desbloqueados del miembro; no debe cambiarse una vez
+ *   publicado o los usuarios "perderían" logros ya obtenidos).
+ * @param title título corto mostrado en la UI.
+ * @param description explicación de qué hay que hacer para desbloquearlo.
+ * @param emoji icono textual del logro.
+ * @param isUnlocked estado calculado en tiempo de presentación (no se guarda
+ *   en este modelo; ver [AchievementChecker.getAchievementsWithStatus]).
+ */
 data class Achievement(
     val id: String,
     val title: String,
@@ -16,13 +34,15 @@ data class Achievement(
 )
 
 /**
- * Verifies achievements based on member stats and the latest completed task.
- * Returns a set of newly unlocked achievement IDs.
+ * Lógica pura (sin I/O ni dependencias de Firestore) para decidir qué logros
+ * se desbloquean a partir de las estadísticas de un miembro. Se mantiene
+ * deliberadamente separada de [TaskScreenModel] para poder testearla sin
+ * mocks de red (ver nota en [countCompletedFromHistory]).
  */
 object AchievementChecker {
 
-    // ── Achievement definitions ──
-
+    // ── Catálogo fijo de logros disponibles en la app. ──
+    // El orden aquí es el orden en el que se muestran en la UI.
     val ALL_ACHIEVEMENTS = listOf(
         Achievement("first_task", "Primera tarea", "Completaste tu primera tarea", "🎯"),
         Achievement("streak_5", "5 días seguidos", "Mantuviste una racha de 5 días", "🔥"),

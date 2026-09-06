@@ -1,7 +1,13 @@
+// Catálogo estático (en memoria, sin repositorio ni red) de plantillas de
+// tareas predefinidas, usado por la pantalla de creación de tareas
+// (`ui/screens/`) para rellenar rápido el formulario en lugar de partir de
+// cero. No es un ScreenModel: no tiene estado mutable ni StateFlow.
 package org.taskhub.ui.models
 
 /**
- * Plantillas de tareas predefinidas para relleno rápido del formulario.
+ * Plantilla de tarea predefinida para relleno rápido del formulario de
+ * creación. Los valores (`frequency`, `points`, ...) son solo sugerencias
+ * iniciales; el usuario puede editarlos todos antes de guardar la tarea real.
  */
 data class TaskTemplate(
     val title: String,
@@ -12,6 +18,7 @@ data class TaskTemplate(
     val category: TemplateCategory
 )
 
+/** Categoría temática de una [TaskTemplate], con emoji y etiqueta para agrupar en la UI. */
 enum class TemplateCategory(val emoji: String, val label: String) {
     LIMPIEZA("\uD83E\uDDF9", "Limpieza"),
     COCINA("\uD83C\uDF73", "Cocina"),
@@ -19,8 +26,10 @@ enum class TemplateCategory(val emoji: String, val label: String) {
     GENERAL("\uD83C\uDFE0", "General")
 }
 
+/** Catálogo fijo de plantillas de tareas incluidas con la app. */
 object TaskTemplates {
 
+    /** Todas las plantillas disponibles, en el orden en que se muestran agrupadas por categoría. */
     val all: List<TaskTemplate> = listOf(
         // ── Limpieza ──
         TaskTemplate(
@@ -159,6 +168,6 @@ object TaskTemplates {
         )
     )
 
-    /** Templates agrupados por categoría */
+    /** [all] agrupadas por [TemplateCategory], para las pestañas/secciones del selector de plantillas. */
     val byCategory: Map<TemplateCategory, List<TaskTemplate>> = all.groupBy { it.category }
 }

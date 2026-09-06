@@ -1,3 +1,7 @@
+// Utilidad de exportación de tareas a formato CSV, usada desde las pantallas
+// de tareas/estadísticas (`ui/screens/`) para generar el fichero que el
+// usuario comparte o descarga. No es un ScreenModel ni depende de
+// repositorios: opera solo sobre los [TaskResponse] que ya tiene la UI.
 package org.taskhub.ui.models
 
 import kotlinx.datetime.Instant
@@ -13,6 +17,11 @@ import org.taskhub.network.models.TaskResponse
  */
 object TaskCsvExporter {
 
+    /**
+     * Genera el contenido CSV (con cabecera) para la lista de tareas dada.
+     * Una fila por tarea. No hace I/O: quien llama decide si lo comparte,
+     * lo guarda en disco, etc.
+     */
     fun generateCsv(tasks: List<TaskResponse>): String {
         val sb = StringBuilder()
         sb.appendLine("Nombre,Frecuencia,Puntos,Veces completada,Último completado")
@@ -23,6 +32,10 @@ object TaskCsvExporter {
                 "monthly" -> "Mensual"
                 else -> "Una vez"
             }
+            // Nota: TaskResponse no guarda un contador histórico de
+            // compleciones, solo la fecha de la última. La columna "Veces
+            // completada" es por tanto un booleano 1/0 (¿se completó alguna
+            // vez?), no el número real de veces que se completó la tarea.
             val completions = if (task.lastCompletedDate != null) "1" else "0"
             val lastCompleted = if (task.lastCompletedDate != null) {
                 val instant = Instant.fromEpochMilliseconds(task.lastCompletedDate)

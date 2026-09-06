@@ -1,3 +1,7 @@
+// ScreenModel del chat de comentarios de una tarea, usado por
+// `ui/screens/TaskDetailScreen.kt`. Habla con [FirestoreRepository] para
+// leer/crear comentarios (subcolección de la tarea en Firestore) y resolver
+// el nombre del autor a partir de la lista de miembros del hogar.
 package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
@@ -14,10 +18,15 @@ import org.taskhub.ui.i18n.AppStrings
 
 // ── Comments State ────────────────────────────────────────
 
+/** Estado del listado de comentarios de una tarea. */
 sealed class CommentsUiState {
+    /** Aún no se ha pedido cargar comentarios. */
     data object Idle : CommentsUiState()
+    /** Carga en curso, tanto al abrir la pantalla como al recargar tras publicar uno nuevo. */
     data object Loading : CommentsUiState()
+    /** Comentarios cargados con éxito, en el orden que devuelve el repositorio. */
     data class Success(val comments: List<CommentResponse>) : CommentsUiState()
+    /** Fallo al cargar o al publicar un comentario; [message] listo para mostrar. */
     data class Error(val message: String) : CommentsUiState()
 }
 
@@ -41,17 +50,21 @@ class TaskCommentsScreenModel(
     private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())
 
     private val _commentsState = MutableStateFlow<CommentsUiState>(CommentsUiState.Idle)
+    /** Estado de la lista de comentarios de la tarea abierta (ver [CommentsUiState]). */
     val commentsState: StateFlow<CommentsUiState> = _commentsState.asStateFlow()
 
     private val _newCommentText = MutableStateFlow("")
+    /** Texto del campo de "nuevo comentario", controlado por la UI (`TextField`). */
     val newCommentText: StateFlow<String> = _newCommentText.asStateFlow()
 
+    /** Actualiza el borrador de comentario, descartando cualquier exceso por encima de 200 caracteres. */
     fun setNewCommentText(text: String) {
         if (text.length <= 200) {
             _newCommentText.value = text
         }
     }
 
+    /** Carga (o recarga) los comentarios de [taskId] dentro de [householdId]. */
     fun loadComments(householdId: String, taskId: String) {
         screenModelScope.launch {
             _commentsState.value = CommentsUiState.Loading
@@ -68,6 +81,15 @@ class TaskCommentsScreenModel(
         }
     }
 
+    /**
+     * Publica el contenido actual de [newCommentText] (recortado; no hace
+     * nada si queda vacío) como comentario de [taskId], resolviendo primero
+     * el nombre visible del autor. Si [currentMemberId] es null, pide al
+     * repositorio que resuelva el miembro activo.
+     * Tras publicar con éxito, recarga la lista completa vía [loadComments]
+     * en vez de insertar el comentario en memoria: es más simple y evita
+     * duplicar la lógica de orden/formato que ya aplica el repositorio.
+     */
     fun addComment(householdId: String, taskId: String, currentMemberId: String?) {
         val text = _newCommentText.value.trim()
         if (text.isEmpty()) return
@@ -93,7 +115,15 @@ class TaskCommentsScreenModel(
         }
     }
 
-    /** Resolves the display name of the current member, for use as comment author. */
+    /**
+     * Resolves the display name of the current member, for use as comment author.
+     * Nota: el nombre de fallback difiere según el caso — si el miembro existe
+     * pero no tiene `displayName` (o está en blanco) se usa
+     * `task_comment_default_author`, mientras que si falla la propia llamada
+     * de red a [FirestoreRepository.getMembers] se usa `profile_default_name`.
+     * Son claves de i18n distintas ya en el código original; se documenta tal
+     * cual, sin unificarlas (fuera de alcance de esta pasada de comentarios).
+     */
     private suspend fun resolveCurrentMemberName(householdId: String, memberId: String): String {
         return try {
             val member = repo.getMembers(householdId).find { it.id == memberId }

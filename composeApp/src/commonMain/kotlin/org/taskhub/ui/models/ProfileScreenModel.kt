@@ -1,3 +1,9 @@
+// ScreenModel del perfil global de usuario (no confundir con el perfil de
+// "miembro" dentro de un hogar, ver [MemberScreenModel]): nombre, avatar,
+// bio y estado, que se guardan a nivel de cuenta y se ven igual en todos los
+// hogares del usuario. Usado por las pantallas de perfil propio (editable) y
+// perfil de otro usuario (solo lectura) en `ui/screens/`. Habla con
+// [FirestoreRepository] (colección de perfiles de usuario).
 package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
@@ -18,9 +24,13 @@ import org.taskhub.ui.i18n.AppStrings
  * Estados de carga del perfil de usuario (propio o ajeno).
  */
 sealed class ProfileUiState {
+    /** Aún no se ha pedido cargar el perfil. */
     data object Idle : ProfileUiState()
+    /** Carga en curso ([ProfileScreenModel.loadMyProfile] o [ProfileScreenModel.loadUserProfile]). */
     data object Loading : ProfileUiState()
+    /** Perfil disponible (real, o uno por defecto si el usuario aún no tiene documento de perfil). */
     data class Success(val profile: UserProfile) : ProfileUiState()
+    /** Fallo al cargar; [message] listo para mostrar. */
     data class Error(val message: String) : ProfileUiState()
 }
 
@@ -40,15 +50,23 @@ class ProfileScreenModel(
     private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())
 
     private val _myProfileState = MutableStateFlow<ProfileUiState>(ProfileUiState.Idle)
+    /** Perfil del usuario autenticado en este dispositivo, para la pantalla de edición. */
     val myProfileState: StateFlow<ProfileUiState> = _myProfileState.asStateFlow()
 
     private val _otherProfileState = MutableStateFlow<ProfileUiState>(ProfileUiState.Idle)
+    /** Perfil de OTRO usuario (vista pública, solo lectura), independiente del propio. */
     val otherProfileState: StateFlow<ProfileUiState> = _otherProfileState.asStateFlow()
 
     private val _saveState = MutableStateFlow<ProfileSaveState>(ProfileSaveState.Idle)
+    /** Progreso del guardado del perfil propio (ver [ProfileSaveState]). */
     val saveState: StateFlow<ProfileSaveState> = _saveState.asStateFlow()
 
-    /** Carga el perfil del usuario actual (para editar). */
+    /**
+     * Carga el perfil del usuario actual (para editar). Si aún no tiene
+     * documento de perfil en Firestore (usuario nuevo), expone un
+     * [UserProfile] vacío con solo el [UserProfile.id] relleno en vez de un
+     * error, para que la pantalla de edición arranque en blanco.
+     */
     fun loadMyProfile() {
         val userId = repo.getLocalId() ?: run {
             _myProfileState.value = ProfileUiState.Error("No estás autenticado. Inicia sesión primero.")
