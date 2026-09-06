@@ -32,3 +32,6 @@ keystore.properties
 
 # Kotlin build cache
 .kotlin/
+
+# Worktrees temporales de agentes (Claude Code)
+.claude/worktrees/
