@@ -1,3 +1,10 @@
+/**
+ * Formulario para dar de alta el primer miembro de un hogar recién creado.
+ * Navegado únicamente desde [CreateHouseholdScreen] tras crear el hogar; si
+ * el usuario ya es miembro, redirige directamente a [HouseholdScreen]. Usa
+ * [org.taskhub.ui.models.HouseholdScreenModel] (para cargar el hogar) y
+ * [org.taskhub.ui.models.MemberScreenModel] (para crear el miembro).
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*

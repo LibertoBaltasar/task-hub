@@ -1,3 +1,12 @@
+/**
+ * Pantalla de bienvenida (landing) que se muestra cuando el usuario no tiene
+ * ningún hogar guardado localmente, o vuelve aquí manualmente. Ofrece crear
+ * un hogar nuevo ([CreateHouseholdScreen]), unirse a uno existente por código
+ * de invitación ([JoinHouseholdScreen]) o, si ya hay hogares guardados en
+ * [org.taskhub.storage.HouseholdStore], saltar directo a [HomeScreen].
+ * Usa [org.taskhub.ui.models.HomeScreenModel] para leer/reconciliar esos
+ * hogares guardados contra Firestore.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -23,6 +32,11 @@ import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HomeScreenModel
 
+/**
+ * Landing screen sin ScreenModel propio de navegación: gestiona el diálogo
+ * de ajustes y los tres accesos de entrada al hogar (crear / unirse / ir a
+ * mis hogares).
+ */
 class WelcomeScreen : Screen {
 
     @Composable

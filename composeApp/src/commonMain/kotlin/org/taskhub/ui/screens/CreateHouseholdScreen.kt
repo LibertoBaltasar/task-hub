@@ -1,3 +1,9 @@
+/**
+ * Formulario para crear un hogar nuevo: navegado desde [WelcomeScreen]
+ * ("Crear un hogar"). Al crearse con éxito, sustituye la pila de navegación
+ * por [CreateProfileScreen] para dar de alta al primer miembro (el creador).
+ * Usa [org.taskhub.ui.models.HouseholdScreenModel] para la creación.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -22,6 +28,7 @@ import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
 
+/** Formulario mínimo: un único campo (nombre del hogar) obligatorio. */
 class CreateHouseholdScreen : Screen {
 
     @Composable

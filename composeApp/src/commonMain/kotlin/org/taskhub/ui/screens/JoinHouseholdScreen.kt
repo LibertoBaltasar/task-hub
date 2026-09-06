@@ -1,3 +1,10 @@
+/**
+ * Flujo de dos pasos para unirse a un hogar existente mediante código de
+ * invitación: navegado desde [WelcomeScreen] ("Unirse a un hogar"). Paso 1
+ * valida el código contra Firestore ([org.taskhub.ui.models.HouseholdScreenModel]);
+ * paso 2 crea el perfil del nuevo miembro
+ * ([org.taskhub.ui.models.MemberScreenModel]) y navega a [HouseholdScreen].
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -24,6 +31,10 @@ import org.taskhub.ui.models.HouseholdUiState
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 
+/**
+ * Screen con estado interno de "wizard": el paso mostrado se deriva de
+ * [joinedHouseholdId] (null = paso 1, código; no-null = paso 2, nombre).
+ */
 class JoinHouseholdScreen : Screen {
 
     @Composable
@@ -122,6 +133,7 @@ class JoinHouseholdScreen : Screen {
                 if (joinedHouseholdId == null) {
                     OutlinedTextField(
                         value = inviteCode,
+                        // Códigos de invitación son alfanuméricos en mayúsculas, máx. 8 chars.
                         onValueChange = { inviteCode = it.uppercase().take(8) },
                         label = { Text(s("household_invite_code")) },
                         placeholder = { Text(s("join_household_code_placeholder")) },
