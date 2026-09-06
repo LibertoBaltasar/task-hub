@@ -1,3 +1,8 @@
+/**
+ * Abstracción expect/actual del controlador de anuncios: define el contrato
+ * común y la implementación no-op compartida; cada plataforma aporta su
+ * `actual fun createAdController()` (Android: AdMob; iOS/JVM: [NoOpAdController]).
+ */
 package org.taskhub.platform
 
 /**

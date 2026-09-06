@@ -1,3 +1,6 @@
+/**
+ * `actual` Android de [logAnalyticsEvent]: delega en Firebase Analytics.
+ */
 package org.taskhub.platform
 
 import android.os.Bundle

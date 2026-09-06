@@ -1,3 +1,8 @@
+/**
+ * `actual` Android de [AdController]: implementación real con el SDK de
+ * Google Mobile Ads (AdMob) para interstitials, más el plumbing de
+ * señalización de contenido dirigido a menores (TFCD).
+ */
 package org.taskhub.platform
 
 import com.google.android.gms.ads.AdRequest
@@ -137,4 +142,5 @@ object AdControllerImpl : AdController {
     }
 }
 
+/** Implementación Android: siempre devuelve el singleton [AdControllerImpl]. */
 actual fun createAdController(): AdController = AdControllerImpl

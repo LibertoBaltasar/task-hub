@@ -1,26 +1,28 @@
+/**
+ * Colección de puentes expect/actual sin agrupar en su propia interfaz:
+ * compartir texto, caché del widget, Google Sign-In/Calendar, aleatoriedad
+ * segura y flags de debug. Cada `actual` vive en el `*Main` de su plataforma.
+ */
 package org.taskhub.platform
 
-/**
- * Platform-specific declarations shared across all targets.
- */
-
-/** Share text via the native share sheet. */
+/** Comparte texto mediante la hoja de compartir nativa de cada plataforma. */
 expect fun shareText(text: String, title: String)
 
-/** Save the widget theme preference to platform-specific widget cache. */
+/** Guarda la preferencia de tema del widget en la caché específica de la plataforma. */
 expect fun saveWidgetThemeToCache(theme: String)
 
-/** Update the widget with the current pending tasks list (one per line). */
+/** Actualiza el widget con la lista actual de tareas pendientes (una por línea). */
 expect fun updateWidgetPendingTasks(taskList: String)
 
-/** Launch the Google Sign-In flow to link a Google account for Calendar integration. */
+/** Lanza el flujo de Google Sign-In para vincular una cuenta de Google (integración con Calendar). */
 expect fun launchGoogleSignIn()
 
 /**
- * Obtains (or transparently refreshes) a Google Calendar OAuth **access token**
- * for the linked Google account, requesting user consent via native UI if
- * needed. Returns null if there's no linked account or the token could not be
- * obtained. Short-lived (~1h) — fetch on demand, don't treat it as durable.
+ * Obtiene (o refresca de forma transparente) un **access token** OAuth de
+ * Google Calendar para la cuenta vinculada, pidiendo consentimiento con UI
+ * nativa si hace falta. Devuelve null si no hay cuenta vinculada o si no se
+ * pudo obtener el token. De vida corta (~1h): pedirlo bajo demanda, no
+ * tratarlo como duradero.
  */
 expect suspend fun getGoogleCalendarAccessToken(): String?
 
@@ -42,9 +44,10 @@ expect suspend fun revokeGoogleCalendarAccess()
 expect fun secureRandomInt(bound: Int): Int
 
 /**
- * Debug flag — true in debug builds, false in release.
- * Used to guard println() logs and debug UI elements (red counter, etc.).
- * Set from MainActivity in onCreate() via BuildConfig.DEBUG.
+ * Flag de debug — true en builds debug, false en release.
+ * Se usa para condicionar logs con println() y elementos de UI de debug
+ * (contador rojo, etc.). Se fija desde MainActivity en onCreate() vía
+ * BuildConfig.DEBUG.
  */
 object DebugFlags {
     @Volatile

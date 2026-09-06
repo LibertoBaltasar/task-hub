@@ -1,3 +1,9 @@
+/**
+ * `actual` Android de las declaraciones sueltas de [Platform.kt]: usa
+ * `Intent.ACTION_SEND` para compartir, `SharedPreferences` para la caché del
+ * widget, los helpers de Google Sign-In/Calendar del módulo Android y
+ * `java.security.SecureRandom` como CSPRNG.
+ */
 package org.taskhub.platform
 
 import android.content.Context
@@ -8,6 +14,7 @@ import org.taskhub.GoogleSignInHelper
 import org.taskhub.GoogleCalendarAuthHelper
 import java.security.SecureRandom
 
+/** Comparte [text] con el chooser nativo de Android (`Intent.ACTION_SEND`). */
 actual fun shareText(text: String, title: String) {
     val context = AndroidContextHolder.context ?: return
     val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -24,6 +31,7 @@ actual fun shareText(text: String, title: String) {
     context.startActivity(chooser)
 }
 
+/** Guarda el tema del widget en SharedPreferences ("widget_cache"), leídas por [TaskHubWidgetProvider]. */
 actual fun saveWidgetThemeToCache(theme: String) {
     val context = AndroidContextHolder.context ?: return
     context.getSharedPreferences("widget_cache", Context.MODE_PRIVATE)
@@ -32,6 +40,11 @@ actual fun saveWidgetThemeToCache(theme: String) {
         .apply()
 }
 
+/**
+ * Guarda la lista de tareas pendientes en SharedPreferences y notifica al
+ * widget con un broadcast propio (`org.taskhub.WIDGET_REFRESH`) para que
+ * [TaskHubWidgetProvider] se repinte con los datos nuevos.
+ */
 actual fun updateWidgetPendingTasks(taskList: String) {
     val context = AndroidContextHolder.context ?: return
     context.getSharedPreferences("widget_cache", Context.MODE_PRIVATE)
@@ -44,16 +57,19 @@ actual fun updateWidgetPendingTasks(taskList: String) {
     context.sendBroadcast(intent)
 }
 
+/** Delega en [GoogleSignInHelper], que gestiona el flujo nativo de Google Sign-In. */
 actual fun launchGoogleSignIn() {
     val context = AndroidContextHolder.context ?: return
     GoogleSignInHelper.launch(context)
 }
 
+/** Delega en [GoogleCalendarAuthHelper] para obtener/refrescar el access token de Calendar. */
 actual suspend fun getGoogleCalendarAccessToken(): String? {
     val context = AndroidContextHolder.context ?: return null
     return GoogleCalendarAuthHelper.getAccessToken(context)
 }
 
+/** Delega en [GoogleSignInHelper] para revocar el consentimiento OAuth concedido. */
 actual suspend fun revokeGoogleCalendarAccess() {
     val context = AndroidContextHolder.context ?: return
     GoogleSignInHelper.revokeAccess(context)
@@ -61,9 +77,10 @@ actual suspend fun revokeGoogleCalendarAccess() {
 
 private val secureRandom = SecureRandom()
 
+/** Implementación Android: delega en `java.security.SecureRandom`, un CSPRNG del JDK. */
 actual fun secureRandomInt(bound: Int): Int = secureRandom.nextInt(bound)
 
-/** Simple static context holder set from MainActivity. */
+/** Contenedor estático simple del contexto/activity, fijado desde MainActivity. */
 object AndroidContextHolder {
     @Volatile
     var context: Context? = null

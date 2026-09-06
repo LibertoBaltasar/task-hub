@@ -1,3 +1,8 @@
+/**
+ * `actual` Android de [vibrate]: usa el servicio [Vibrator] del sistema con
+ * [VibrationEffect] (patrones de forma de onda para los tipos semánticos
+ * SUCCESS/ERROR/WARNING, pulsos simples para LIGHT/MEDIUM/HEAVY/SELECTION).
+ */
 package org.taskhub.platform
 
 import android.content.Context
@@ -5,6 +10,9 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 
 /**
+ * Cumple el contrato de [vibrate] disparando el patrón de [VibrationEffect]
+ * correspondiente a [kind] sobre el [Vibrator] del sistema.
+ *
  * VibrationEffect.createWaveform/createOneShot con amplitud requieren API 26
  * (minSdk de este proyecto), y ambos degradan solos a amplitud por defecto en
  * dispositivos sin control de amplitud — no hace falta comprobar
