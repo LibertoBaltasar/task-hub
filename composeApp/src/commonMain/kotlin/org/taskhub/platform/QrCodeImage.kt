@@ -1,3 +1,7 @@
+/**
+ * Composable commonMain que dibuja un QR con Canvas de Compose a partir de
+ * [QrEncoder], evitando depender de una librería de QR nativa por plataforma.
+ */
 package org.taskhub.platform
 
 import androidx.compose.foundation.Canvas
@@ -14,10 +18,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * Renders a QR code for the given [text] using Compose Canvas.
+ * Dibuja un código QR para el [text] dado usando Canvas de Compose.
  *
- * Uses a pure-Kotlin QR encoder that works on all KMP targets.
- * The QR is drawn as black modules on a white background with a quiet zone border.
+ * Usa un codificador de QR puro-Kotlin ([QrEncoder]) que funciona en todos
+ * los targets de KMP. El QR se pinta como módulos negros sobre fondo blanco,
+ * con un margen ("quiet zone") alrededor.
  *
  * [contentDescription] es obligatorio (sin default) para forzar a cada
  * call-site a decidir un texto accesible con el código en claro — un lector
@@ -33,6 +38,10 @@ fun QrCodeImage(
 ) {
     val matrix = remember(text) {
         try {
+            // QrEncoder.encode() puede lanzar si `text` no cabe en la
+            // versión 1-M (>16 caracteres) o contiene algún carácter fuera
+            // del alfabeto alfanumérico soportado; se captura para poder
+            // mostrar [onError] en vez de tumbar la pantalla.
             QrEncoder.encode(text)
         } catch (e: Exception) {
             null

@@ -1,3 +1,7 @@
+/**
+ * Puente multiplataforma (expect/actual) hacia el SDK de analytics nativo
+ * de cada target: Firebase Analytics en Android, no-op en iOS/JVM.
+ */
 package org.taskhub.platform
 
 /**

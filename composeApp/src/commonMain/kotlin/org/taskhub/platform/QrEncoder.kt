@@ -1,10 +1,17 @@
+/**
+ * Codificador de códigos QR puro-Kotlin (sin dependencias nativas), usado
+ * por [QrCodeImage] para dibujar el código de invitación al hogar en
+ * cualquier target de KMP (Android/iOS/JVM) sin necesitar una librería
+ * específica de cada plataforma.
+ */
 package org.taskhub.platform
 
 /**
- * Minimal QR Code encoder (Version 1, 21×21, alphanumeric, level M).
+ * Codificador mínimo de QR (Versión 1, 21×21, alfanumérico, nivel de
+ * corrección de errores M).
  *
- * Encodes up to 16 alphanumeric characters into a boolean matrix
- * where true = black module, false = white module.
+ * Codifica hasta 16 caracteres alfanuméricos en una matriz de booleanos
+ * donde true = módulo negro, false = módulo blanco.
  */
 object QrEncoder {
 
@@ -14,7 +21,15 @@ object QrEncoder {
     // Alphanumeric character set
     private const val ALPHA = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
 
-    /** Encode an alphanumeric string into a SIZE×SIZE boolean matrix. */
+    /**
+     * Codifica [text] (se pasa a mayúsculas; debe pertenecer al alfabeto
+     * [ALPHA] y caber en los 128 bits de datos de la versión 1-M, es decir,
+     * hasta 16 caracteres alfanuméricos) en una matriz SIZE×SIZE de
+     * booleanos lista para pintar. Aplica el pipeline completo del estándar
+     * QR: patrones de localización y temporización, bits de datos +
+     * corrección de errores Reed-Solomon, colocación en zigzag, selección de
+     * la máscara con menor penalización y bits de formato.
+     */
     fun encode(text: String): Array<BooleanArray> {
         val data = text.uppercase()
         val matrix = Array(SIZE) { BooleanArray(SIZE) }

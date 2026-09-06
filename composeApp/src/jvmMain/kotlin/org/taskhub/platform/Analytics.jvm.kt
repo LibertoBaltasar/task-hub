@@ -1,3 +1,6 @@
+/**
+ * `actual` JVM (desktop) de [logAnalyticsEvent]: no-op, ver detalle abajo.
+ */
 package org.taskhub.platform
 
 /**

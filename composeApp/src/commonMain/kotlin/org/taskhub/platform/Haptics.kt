@@ -1,3 +1,8 @@
+/**
+ * Feedback háptico multiplataforma (patrón expect/actual). Cada plataforma
+ * mapea [HapticKind] a su API nativa de vibración (Android: Vibrator +
+ * VibrationEffect; iOS: UIFeedbackGenerator de UIKit; JVM: no-op).
+ */
 package org.taskhub.platform
 
 /**

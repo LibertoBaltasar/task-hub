@@ -1,3 +1,7 @@
+/**
+ * `actual` Android de [AdBannerSlot]: renderiza [BannerAd] (AdMob) cuando
+ * está habilitado en [AdConfig].
+ */
 package org.taskhub.platform
 
 import androidx.compose.runtime.Composable
