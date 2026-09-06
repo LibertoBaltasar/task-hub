@@ -1,3 +1,9 @@
+/**
+ * DTOs de la API REST de Firestore/Firebase Auth (formato "wire", no los
+ * modelos de dominio de la app). Usados por [FirestoreClient] y todos los
+ * repositorios de `network/` para serializar/deserializar peticiones y
+ * respuestas HTTP con Ktor + kotlinx.serialization.
+ */
 package org.taskhub.network
 
 import kotlinx.serialization.KSerializer
@@ -14,6 +20,13 @@ import kotlinx.serialization.json.jsonPrimitive
 // ── Firestore REST API Value types ─────────────────────────
 // Firestore REST API uses typed wrappers for field values
 
+/**
+ * Wrapper tipado de un valor de campo de Firestore ("Value" en la API REST).
+ * Solo uno de los campos va relleno por instancia (unión discriminada por
+ * presencia); el resto queda a null. Nótese que [integerValue] es un String:
+ * la API REST de Firestore serializa los enteros de 64 bits como texto para
+ * no perder precisión en JSON.
+ */
 @Serializable
 data class FirestoreValue(
     val stringValue: String? = null,
@@ -24,11 +37,13 @@ data class FirestoreValue(
     val arrayValue: FirestoreArrayValue? = null
 )
 
+/** Valor de Firestore de tipo array: lista de [FirestoreValue] anidados. */
 @Serializable
 data class FirestoreArrayValue(
     val values: List<FirestoreValue> = emptyList()
 )
 
+/** Valor de Firestore de tipo mapa: campos anidados con nombre. */
 @Serializable
 data class FirestoreMapValue(
     val fields: Map<String, FirestoreValue> = emptyMap()
@@ -36,6 +51,7 @@ data class FirestoreMapValue(
 
 // ── Document envelope ──────────────────────────────────────
 
+/** Cuerpo de una petición de escritura (create/patch) de un documento de Firestore. */
 @Serializable
 data class FirestoreDocument(
     val fields: Map<String, FirestoreValue>
@@ -43,6 +59,7 @@ data class FirestoreDocument(
 
 // ── API Responses ──────────────────────────────────────────
 
+/** Documento tal como lo devuelve Firestore al leer/escribir (GET/POST/PATCH). */
 @Serializable
 data class FirestoreDocumentResponse(
     val name: String = "",  // full resource path: projects/.../documents/collection/docId
@@ -51,6 +68,7 @@ data class FirestoreDocumentResponse(
     val updateTime: String? = null
 )
 
+/** Respuesta de listar una colección (`GET .../collection`). */
 @Serializable
 data class FirestoreListResponse(
     val documents: List<FirestoreDocumentResponse> = emptyList(),
@@ -66,11 +84,13 @@ data class DeleteAccountRequest(val idToken: String)
 // ── Error envelope ──────────────────────────────────────────
 // Firestore REST errors come back as {"error": {"code": 403, "message": "...", "status": "PERMISSION_DENIED"}}
 
+/** Envoltorio JSON de un error de la API REST de Firestore/Google Cloud. */
 @Serializable
 data class FirestoreErrorEnvelope(
     val error: FirestoreErrorBody? = null
 )
 
+/** Cuerpo del error: código HTTP, mensaje legible y status simbólico (p. ej. `PERMISSION_DENIED`). */
 @Serializable
 data class FirestoreErrorBody(
     val code: Int? = null,
@@ -80,11 +100,13 @@ data class FirestoreErrorBody(
 
 // ── Query types ────────────────────────────────────────────
 
+/** Cuerpo de `POST .../documents:runQuery` para consultas estructuradas (no simples GET de colección). */
 @Serializable
 data class RunQueryRequest(
     val structuredQuery: StructuredQuery
 )
 
+/** Consulta estructurada de Firestore: de qué colección, con qué filtro y límite de resultados. */
 @Serializable
 data class StructuredQuery(
     val from: List<CollectionSelector>,
@@ -92,24 +114,28 @@ data class StructuredQuery(
     val limit: Int? = null
 )
 
+/** Selector de colección origen de una query; [allDescendants] activa collection group query. */
 @Serializable
 data class CollectionSelector(
     val collectionId: String,
     val allDescendants: Boolean = false
 )
 
+/** Filtro de una query: o bien un filtro simple de campo, o uno compuesto (AND/OR de sub-filtros). */
 @Serializable
 data class Filter(
     val fieldFilter: FieldFilter? = null,
     val compositeFilter: CompositeFilter? = null
 )
 
+/** Combinación de varios [Filter] con un operador (`AND`/`OR`). */
 @Serializable
 data class CompositeFilter(
     val op: String,
     val filters: List<Filter>
 )
 
+/** Filtro simple: compara un campo ([field]) con [value] usando el operador [op] (p. ej. `EQUAL`). */
 @Serializable
 data class FieldFilter(
     val field: FieldReference,
@@ -117,6 +143,7 @@ data class FieldFilter(
     val value: FirestoreValue
 )
 
+/** Referencia a un campo del documento por su ruta (p. ej. `"householdId"`). */
 @Serializable
 data class FieldReference(
     val fieldPath: String
@@ -124,6 +151,7 @@ data class FieldReference(
 
 // ── Firebase Auth (Anonymous) ──────────────────────────────
 
+/** Cuerpo de `POST signupNewUser` (Identity Toolkit) para alta de sesión anónima. */
 @Serializable
 data class FirebaseAuthRequest(
     // Sin valor por defecto: con encodeDefaults=false, un default aquí haría que
@@ -148,6 +176,12 @@ object StringOrNumberSerializer : KSerializer<String?> {
     }
 }
 
+/**
+ * Respuesta común de los endpoints de Identity Toolkit (alta anónima,
+ * sign-in con IdP). [expiresIn] usa [StringOrNumberSerializer] porque
+ * distintos endpoints de Firebase Auth lo devuelven unas veces como string y
+ * otras como número.
+ */
 @Serializable
 data class FirebaseAuthResponse(
     val idToken: String? = null,
@@ -160,6 +194,7 @@ data class FirebaseAuthResponse(
     val photoUrl: String? = null
 )
 
+/** Cuerpo de `POST signInWithIdp` (Identity Toolkit) para iniciar sesión con Google Sign-In. */
 @Serializable
 data class SignInWithIdpRequest(
     val postBody: String,
@@ -178,6 +213,11 @@ data class TokenRefreshResponse(
 
 // ── RunQuery response (one element per result) ─────────────
 
+/**
+ * Elemento de la respuesta de `runQuery` (que es un array JSON, un elemento
+ * por resultado). [document] es null en el último elemento "de cierre" que
+ * Firestore a veces envía solo con [readTime], sin documento.
+ */
 @Serializable
 data class RunQueryResponseItem(
     val document: FirestoreDocumentResponse? = null,

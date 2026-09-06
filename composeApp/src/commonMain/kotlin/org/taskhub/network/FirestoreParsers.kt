@@ -1,3 +1,9 @@
+/**
+ * Traducción de documentos crudos de la Firestore REST API
+ * ([FirestoreDocumentResponse], campos tipados como [FirestoreValue]) a los
+ * modelos de dominio de `network.models`. Usado por todos los repositorios
+ * de `network/` al leer colecciones/documentos.
+ */
 package org.taskhub.network
 
 import org.taskhub.network.models.AssignmentSlot
@@ -20,13 +26,13 @@ import org.taskhub.network.models.TaskResponse
 object FirestoreParsers {
 
     /**
-     * Extract the document ID from the full Firestore resource name.
+     * Extrae el ID de documento del "resource name" completo que devuelve Firestore.
      *
-     * By the time this runs, the HTTP status has already been validated by the
-     * [io.ktor.client.plugins.HttpResponseValidator] installed on the ktor client — any 4xx/5xx
-     * surfaces as a [FirestoreException] before the body is even parsed. So a blank name here
-     * means a 2xx response came back genuinely missing the 'name' field, which
-     * points at [operation] rather than a transport-level failure.
+     * Cuando esto se ejecuta, el status HTTP ya ha sido validado por el
+     * [io.ktor.client.plugins.HttpResponseValidator] instalado en el cliente ktor — cualquier
+     * 4xx/5xx sale como [FirestoreException] antes de que se llegue a parsear el body. Por
+     * tanto, un `name` en blanco aquí significa que una respuesta 2xx vino genuinamente sin el
+     * campo 'name' esperado, lo cual apunta a un bug en [operation], no a un fallo de transporte.
      */
     fun extractDocId(resourceName: String, operation: String): String {
         if (resourceName.isBlank()) {
@@ -39,6 +45,11 @@ object FirestoreParsers {
         return resourceName.substringAfterLast("/")
     }
 
+    /**
+     * Parsea un documento `households/{id}`. Si [doc] no trae `name` (p. ej.
+     * viene de un `runQuery` que no lo incluye) se usa [knownId] como
+     * respaldo; si tampoco hay [knownId], es un fallo real del llamador.
+     */
     fun toHouseholdResponse(
         doc: FirestoreDocumentResponse,
         knownId: String? = null,
@@ -60,6 +71,7 @@ object FirestoreParsers {
         )
     }
 
+    /** Parsea un documento `households/{id}/members/{memberId}`. */
     fun toMemberResponse(
         doc: FirestoreDocumentResponse,
         householdId: String,
@@ -88,6 +100,11 @@ object FirestoreParsers {
         )
     }
 
+    /**
+     * Parsea un documento `households/{id}/tasks/{taskId}`, incluyendo listas
+     * anidadas (`subtasks`, `assignmentRotation`) que Firestore representa
+     * como `arrayValue` de `mapValue`.
+     */
     fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse {
         val f = doc.fields
         return TaskResponse(
@@ -131,6 +148,12 @@ object FirestoreParsers {
         )
     }
 
+    /**
+     * Parsea un documento `.../tasks/{taskId}/assignments/{assignmentId}`.
+     * [TaskAssignmentResponse.updateTime] se conserva tal cual (el timestamp
+     * de escritura que da Firestore) para poder usarlo como control de
+     * concurrencia optimista al completar una asignación.
+     */
     fun toTaskAssignmentResponse(
         doc: FirestoreDocumentResponse,
         taskId: String
@@ -152,6 +175,7 @@ object FirestoreParsers {
         )
     }
 
+    /** Parsea un documento `.../tasks/{taskId}/comments/{commentId}`. */
     fun toCommentResponse(doc: FirestoreDocumentResponse): CommentResponse {
         val f = doc.fields
         return CommentResponse(
@@ -163,6 +187,7 @@ object FirestoreParsers {
         )
     }
 
+    /** Parsea un documento del historial de compleciones de una tarea (`taskHistory`). */
     fun toTaskHistoryResponse(doc: FirestoreDocumentResponse): TaskHistoryResponse {
         val f = doc.fields
         return TaskHistoryResponse(
@@ -175,6 +200,11 @@ object FirestoreParsers {
         )
     }
 
+    /**
+     * Parsea un documento de notificación. `titleKey`/`messageKey`/
+     * `messageParams` habilitan el render por-lector (i18n dinámico); ver el
+     * comentario en línea sobre notificaciones antiguas sin esos campos.
+     */
     fun toNotificationResponse(doc: FirestoreDocumentResponse): NotificationResponse {
         val f = doc.fields
         return NotificationResponse(
@@ -195,6 +225,7 @@ object FirestoreParsers {
         )
     }
 
+    /** Parsea un documento `households/{id}/rewards/{rewardId}`. */
     fun toRewardResponse(doc: FirestoreDocumentResponse, householdId: String): RewardResponse {
         val f = doc.fields
         return RewardResponse(
@@ -209,6 +240,7 @@ object FirestoreParsers {
         )
     }
 
+    /** Parsea un documento `households/{id}/rewardRedemptions/{redemptionId}`. */
     fun toRewardRedemption(doc: FirestoreDocumentResponse): RewardRedemption {
         val f = doc.fields
         return RewardRedemption(
@@ -220,6 +252,7 @@ object FirestoreParsers {
         )
     }
 
+    /** Parsea un documento de mensaje del chat de grupo del hogar. */
     fun toMessageResponse(doc: FirestoreDocumentResponse): MessageResponse {
         val f = doc.fields
         return MessageResponse(

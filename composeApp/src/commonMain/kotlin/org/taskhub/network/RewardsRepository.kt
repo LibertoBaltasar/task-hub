@@ -1,3 +1,9 @@
+/**
+ * Capa REST de Firestore para recompensas y sus canjes. Consumida por
+ * `ScreenModel`s de la UI de recompensas y orquestada desde
+ * [FirestoreRepository.redeemReward] para las operaciones que también tocan
+ * puntos de miembro.
+ */
 package org.taskhub.network
 
 import io.ktor.client.call.*
@@ -21,6 +27,10 @@ import org.taskhub.network.models.RewardResponse
  * `MemberRepository` (este último aún no existe). Se mantiene en
  * `FirestoreRepository` hasta esa fase — ver el resumen del encargo.
  */
+/**
+ * Repositorio REST de recompensas de un hogar: alta/baja de recompensas y
+ * registro de canjes. Delega auth y manejo de errores en [FirestoreClient].
+ */
 class RewardsRepository(
     private val baseUrl: String,
     private val firestoreClient: FirestoreClient
@@ -32,7 +42,7 @@ class RewardsRepository(
     private fun extractDocId(resourceName: String, operation: String): String =
         firestoreClient.extractDocId(resourceName, operation)
 
-    /** List all rewards for a household. */
+    /** Lista todas las recompensas de un hogar. Lectura pública (auth opcional vía API key). */
     suspend fun getRewards(householdId: String): List<RewardResponse> = orDefault(emptyList()) {
         val response: FirestoreListResponse = client.get(
             "$baseUrl/households/$householdId/rewards"
@@ -43,7 +53,7 @@ class RewardsRepository(
         response.documents.map { doc -> FirestoreParsers.toRewardResponse(doc, householdId) }
     }
 
-    /** Create a reward. Requires auth (write). */
+    /** Crea una recompensa nueva en el hogar. Requiere auth (escritura). */
     suspend fun createReward(
         householdId: String,
         title: String,
@@ -76,14 +86,14 @@ class RewardsRepository(
         return RewardResponse(id, householdId, title, description, cost, icon, createdBy, now)
     }
 
-    /** Delete a reward. Requires auth (write). */
+    /** Borra una recompensa. Requiere auth (escritura). */
     suspend fun deleteReward(householdId: String, rewardId: String) {
         client.delete("$baseUrl/households/$householdId/rewards/$rewardId") {
             withAuth()
         }
     }
 
-    /** Get all reward redemptions for a household. */
+    /** Lista todos los canjes de recompensas de un hogar. Lectura pública (auth opcional vía API key). */
     suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> = orDefault(emptyList()) {
         val response: FirestoreListResponse = client.get(
             "$baseUrl/households/$householdId/rewardRedemptions"

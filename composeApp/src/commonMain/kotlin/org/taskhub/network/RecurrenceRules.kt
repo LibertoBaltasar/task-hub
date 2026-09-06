@@ -1,3 +1,9 @@
+/**
+ * Motor de recurrencia de tareas (daily/weekly/monthly): cálculo de "¿toca
+ * hoy?", próxima ocurrencia y rotación de asignados. Usado por
+ * [FirestoreRepository]/[TaskRepository] al completar tareas y regenerar la
+ * siguiente asignación, y por las pantallas de lista/calendario de la UI.
+ */
 package org.taskhub.network
 
 import kotlinx.datetime.DateTimeUnit
