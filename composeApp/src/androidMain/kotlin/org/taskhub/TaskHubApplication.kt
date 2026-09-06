@@ -1,3 +1,8 @@
+// Clase `Application` de Task Hub para Android: punto de arranque del
+// proceso, antes de cualquier Activity o composición de Compose. Configura
+// AdMob (con las restricciones de contenido infantil del hogar) y registra
+// el sondeo periódico de notificaciones ([NotificationPollWorker]) para que
+// siga funcionando aunque la app no esté en primer plano.
 package org.taskhub
 
 import android.app.Application
@@ -24,6 +29,12 @@ import java.util.concurrent.TimeUnit
  */
 class TaskHubApplication : Application() {
 
+    /**
+     * Se ejecuta una única vez al crear el proceso, antes de cualquier
+     * Activity. Inicializa Firebase y AdMob (con la configuración de
+     * contenido apto para menores) y deja programado el sondeo periódico de
+     * notificaciones.
+     */
     override fun onCreate() {
         super.onCreate()
 

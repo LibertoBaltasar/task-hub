@@ -1,3 +1,9 @@
+// Programación de recordatorios de vencimiento de tarea vía WorkManager.
+// Invocado desde commonMain (`AndroidNotificationScheduler`, la implementación
+// `actual` del scheduler de plataforma) al crear/editar/completar una tarea
+// con fecha límite. Independiente del flujo de "tarea asignada"/"mensaje
+// nuevo" de [NotificationPollWorker]: este es local al dispositivo, no pasa
+// por Firestore.
 package org.taskhub
 
 import android.content.Context
@@ -11,17 +17,25 @@ import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
 
 /**
- * Schedules a one-time notification to remind about a task deadline.
- * Uses WorkManager to reliably schedule at the exact time.
+ * Programa un recordatorio único (no periódico) para avisar del vencimiento
+ * de una tarea. Usa WorkManager para que se dispare de forma fiable a la
+ * hora exacta, incluso si la app no está en primer plano o el proceso se
+ * reinicia entre medias.
  *
- * Schedule is set for 1h before the deadline.
- * If the deadline is less than 1h away or in the past, no notification is scheduled.
+ * El recordatorio se fija 1h antes del vencimiento.
+ * Si el vencimiento está a menos de 1h vista o ya pasó, no se programa nada.
  */
 object TaskReminderScheduler {
 
     private const val WORK_NAME_PREFIX = "task_reminder_"
     private const val REMINDER_MINUTES_BEFORE = 60
 
+    /**
+     * Programa (o reemplaza, si ya había uno para [taskId]) el recordatorio
+     * de esta tarea. `enqueueUniqueWork` + [ExistingWorkPolicy.REPLACE]:
+     * si la fecha límite cambia (p. ej. el usuario la reprograma), la nueva
+     * llamada sustituye el trabajo pendiente en vez de acumular duplicados.
+     */
     fun scheduleReminder(
         context: Context,
         taskId: String,
@@ -63,6 +77,11 @@ object TaskReminderScheduler {
         Log.d("TaskReminderScheduler", "Scheduled reminder for $taskId at $reminderTime (in ${delayMs / 60000} min)")
     }
 
+    /**
+     * Cancela el recordatorio pendiente de [taskId], si existe (p. ej. al
+     * completar la tarea o borrar su fecha límite). No-op si no había
+     * ninguno programado.
+     */
     fun cancelReminder(context: Context, taskId: String) {
         val workName = "$WORK_NAME_PREFIX$taskId"
         WorkManager.getInstance(context).cancelUniqueWork(workName)
@@ -70,6 +89,13 @@ object TaskReminderScheduler {
     }
 }
 
+/**
+ * `Worker` que se dispara a la hora programada por [TaskReminderScheduler]
+ * y delega en [NotificationHelper.showTaskReminder] para mostrar la
+ * notificación. Los datos de la tarea viajan en [inputData] (serializados
+ * como `WorkRequest.Data`) porque WorkManager puede ejecutar esto en un
+ * proceso nuevo, sin nada en memoria de la sesión que programó el trabajo.
+ */
 class ReminderWorker(
     context: Context,
     params: WorkerParameters

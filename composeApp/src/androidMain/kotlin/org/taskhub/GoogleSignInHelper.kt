@@ -1,3 +1,7 @@
+// Lado Android del inicio de sesión con Google: envuelve el SDK nativo de
+// Google Sign-In (cuenta + idToken + scope de Calendar) y entrega el
+// resultado a `GoogleAuthManager` de commonMain a través de
+// [GoogleSignInResultHolder]. Se registra desde `MainActivity.onCreate`.
 package org.taskhub
 
 import android.app.Activity

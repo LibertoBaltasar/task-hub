@@ -1,3 +1,7 @@
+// Lado Android del acceso a Google Calendar: obtiene el token OAuth de
+// acceso (distinto del idToken de Firebase) que consumen `GoogleAuthManager`/
+// `CalendarSyncManager` de commonMain para llamar a la API de Calendar. Se
+// registra desde `MainActivity.onCreate` junto a [GoogleSignInHelper].
 package org.taskhub
 
 import android.accounts.Account

@@ -1,3 +1,9 @@
+// Fachada única para mostrar notificaciones locales del sistema en Android.
+// La invocan dos flujos independientes: [NotificationPollWorker] (tareas
+// asignadas/mensajes nuevos leídos de Firestore, canal [CHANNEL_ID_UPDATES])
+// y [TaskReminderScheduler]/`ReminderWorker` (recordatorio de vencimiento de
+// una tarea, canal [CHANNEL_ID]). También gestiona el permiso
+// `POST_NOTIFICATIONS` (Android 13+) que ambos flujos necesitan.
 package org.taskhub
 
 import android.Manifest
@@ -13,7 +19,13 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import org.taskhub.ui.i18n.AppStrings
 
+/**
+ * Punto único para crear canales de notificación y mostrar las notificaciones
+ * locales del sistema de Task Hub. Ver la cabecera del archivo para los dos
+ * flujos que la usan y sus respectivos canales.
+ */
 object NotificationHelper {
+    /** Canal para recordatorios de vencimiento de tarea (TaskReminderScheduler). */
     const val CHANNEL_ID = "task_reminders"
     const val CHANNEL_NAME = "Recordatorios de tareas"
     private const val NOTIFICATION_TIMEOUT_MS = 60_000L
@@ -35,6 +47,14 @@ object NotificationHelper {
             PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * Crea (o actualiza, si ya existe) el canal [CHANNEL_ID_UPDATES] usado
+     * para tareas asignadas y mensajes nuevos. Se llama en cada sondeo de
+     * [org.taskhub.NotificationPollWorker] con el idioma del LECTOR ya
+     * resuelto, porque el nombre/descripción del canal son visibles al
+     * usuario en los ajustes del sistema y deben mostrarse en su idioma.
+     * No-op en API < 26 (los canales no existen antes de Android O).
+     */
     fun createUpdatesChannel(context: Context, lang: String) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -110,6 +130,13 @@ object NotificationHelper {
         }
     }
 
+    /**
+     * Crea el canal [CHANNEL_ID] (recordatorios de vencimiento), con
+     * importancia HIGH porque a diferencia de una tarea asignada o un
+     * mensaje, sí es urgente (un plazo a punto de vencer). Se llama desde
+     * `MainActivity.onCreate` para tenerlo listo antes de que
+     * `TaskReminderScheduler`/`ReminderWorker` puedan necesitarlo.
+     */
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -124,6 +151,14 @@ object NotificationHelper {
         }
     }
 
+    /**
+     * Muestra el recordatorio local de "esta tarea vence pronto", disparado
+     * por `ReminderWorker` (programado por [org.taskhub.TaskReminderScheduler]
+     * al asignar/editar una tarea con fecha límite). Es "fire and forget":
+     * si el permiso de notificaciones no está concedido, simplemente no
+     * muestra nada (a diferencia de [NotificationPollWorker], aquí no hay
+     * ningún estado de sondeo que proteger de un avance prematuro).
+     */
     fun showTaskReminder(
         context: Context,
         taskTitle: String,
