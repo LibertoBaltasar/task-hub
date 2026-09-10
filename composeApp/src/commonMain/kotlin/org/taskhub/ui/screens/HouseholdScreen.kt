@@ -170,6 +170,10 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val ownerHousehold = (householdState as? HouseholdUiState.Success)?.household
         val isAdmin = myMember?.role == "admin" ||
             (currentUserId != null && ownerHousehold != null && currentUserId == ownerHousehold.ownerId)
+        // Borrar el hogar es la acción más destructiva: reservada al owner
+        // (quien lo creó), igual que en firestore.rules — un admin promovido
+        // que no sea el owner no debe verla ni poder ejecutarla.
+        val isOwner = currentUserId != null && ownerHousehold != null && currentUserId == ownerHousehold.ownerId
 
         // ── Chat de mensajes ──
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -378,14 +382,14 @@ data class HouseholdScreen(val householdId: String) : Screen {
                         IconButton(onClick = { showSettings = true }) {
                             Icon(Icons.Default.Settings, contentDescription = s("profile_settings_label"))
                         }
-                        // Delete
+                        // Delete: solo el owner del hogar la ve/ejecuta (ver isOwner arriba).
                         if (isDeleting || isLeaving) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(24.dp),
                                 color = MaterialTheme.colorScheme.onSurface,
                                 strokeWidth = 2.dp
                             )
-                        } else {
+                        } else if (isOwner) {
                             IconButton(onClick = { showConfirmDialog1 = true }) {
                                 Icon(Icons.Default.Delete, contentDescription = s("household_delete_title"))
                             }
