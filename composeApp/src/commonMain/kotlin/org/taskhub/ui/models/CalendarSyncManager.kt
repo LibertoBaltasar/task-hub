@@ -1,3 +1,10 @@
+/**
+ * Manager (no ScreenModel) inyectado como singleton en Koin que sincroniza
+ * tareas con fecha hacia Google Calendar. Lo usan [org.taskhub.ui.screens.TaskDetailScreen]
+ * (sync bajo demanda) y [org.taskhub.ui.screens.PersonalSpaceScreen]/
+ * [org.taskhub.ui.screens.HouseholdScreen] (reconciliación al entrar),
+ * apoyándose en [GoogleAuthManager] para obtener el access token de Calendar.
+ */
 package org.taskhub.ui.models
 
 import kotlinx.coroutines.CancellationException

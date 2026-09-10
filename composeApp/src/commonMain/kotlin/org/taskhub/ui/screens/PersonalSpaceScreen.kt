@@ -1,3 +1,10 @@
+/**
+ * Menú de acceso al espacio Personal de un hogar (tareas, calendario). Usa
+ * [org.taskhub.ui.models.MemberScreenModel] para obtener el miembro único
+ * "Yo" y [org.taskhub.ui.models.CalendarSyncManager] para reconciliar
+ * eventos pendientes; navega a [TaskListScreen], [CreateTaskScreen] y
+ * [CalendarScreen]. Se abre desde [HomeScreen].
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*

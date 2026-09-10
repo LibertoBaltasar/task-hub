@@ -1,3 +1,9 @@
+/**
+ * Formulario para crear una recompensa canjeable con puntos en un hogar.
+ * Delega la creación en [org.taskhub.ui.models.MemberScreenModel]
+ * (`rewardActionState`); al terminar con éxito navega hacia atrás a
+ * [RewardListScreen]. Se accede desde [RewardListScreen] (botón de añadir).
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -32,6 +38,12 @@ import org.taskhub.ui.models.RewardActionState
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.theme.*
 
+/**
+ * Pantalla de creación de recompensa para el hogar [householdId]: icono
+ * (emoji), título, descripción y coste en puntos, con una tarjeta de
+ * previsualización en vivo. El botón de crear se habilita solo con título no
+ * vacío y coste positivo.
+ */
 data class CreateRewardScreen(val householdId: String) : Screen {
 
     @Composable

@@ -1,3 +1,11 @@
+/**
+ * ScreenModel de miembros de un hogar: alta/baja/rol, recompensas (crear,
+ * borrar, canjear) y transferencias de puntos entre miembros (agradecer con
+ * límite diario, donar con validación de saldo). Lo usan
+ * [org.taskhub.ui.screens.HouseholdScreen], [org.taskhub.ui.screens.RankingScreen]
+ * y las pantallas de recompensas ([org.taskhub.ui.screens.RewardListScreen],
+ * [org.taskhub.ui.screens.CreateRewardScreen], [org.taskhub.ui.screens.MemberRewardScreen]).
+ */
 package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
@@ -20,6 +28,7 @@ import org.taskhub.platform.vibrate
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
 
+/** Estados de carga de la lista de miembros de un hogar. */
 sealed class MemberUiState {
     data object Idle : MemberUiState()
     data object Loading : MemberUiState()
@@ -27,6 +36,7 @@ sealed class MemberUiState {
     data class Error(val message: String) : MemberUiState()
 }
 
+/** Estados de carga de la lista de recompensas de un hogar. */
 sealed class RewardUiState {
     data object Idle : RewardUiState()
     data object Loading : RewardUiState()
@@ -34,6 +44,7 @@ sealed class RewardUiState {
     data class Error(val message: String) : RewardUiState()
 }
 
+/** Estado de una acción sobre recompensas (crear, borrar o canjear). */
 sealed class RewardActionState {
     data object Idle : RewardActionState()
     data object Loading : RewardActionState()
@@ -57,6 +68,7 @@ sealed class MemberActionState {
     data class Error(val message: String) : MemberActionState()
 }
 
+/** Estado de la acción de "agradecer" puntos a otro miembro (con límite diario). */
 sealed class AppreciateActionState {
     data object Idle : AppreciateActionState()
     data object Loading : AppreciateActionState()
@@ -65,6 +77,7 @@ sealed class AppreciateActionState {
     data class Error(val messageKey: String) : AppreciateActionState()
 }
 
+/** Estado de la acción de donar puntos propios a otro miembro. */
 sealed class DonateActionState {
     data object Idle : DonateActionState()
     data object Loading : DonateActionState()
@@ -73,6 +86,12 @@ sealed class DonateActionState {
     data class Error(val messageKey: String) : DonateActionState()
 }
 
+/**
+ * ScreenModel de miembros/recompensas/transferencias de un hogar. Expone
+ * [uiState] (lista de miembros), [rewardState]/[rewardActionState] y
+ * [appreciateActionState]/[donateActionState] para las transferencias de
+ * puntos entre miembros.
+ */
 class MemberScreenModel(
     private val repo: FirestoreRepository,
     private val settingsStore: SettingsStore
@@ -105,6 +124,7 @@ class MemberScreenModel(
     /** UID del usuario actual. Ver [FirestoreRepository.getLocalId]. */
     val localId: String? get() = repo.getLocalId()
 
+    /** Carga los miembros del hogar [householdId]. */
     fun loadMembers(householdId: String) {
         screenModelScope.launch {
             _uiState.value = MemberUiState.Loading
@@ -125,6 +145,7 @@ class MemberScreenModel(
         }
     }
 
+    /** Crea un miembro nuevo (p.ej. perfil infantil) en el hogar y recarga la lista. */
     fun addMember(householdId: String, displayName: String, role: String, userId: String? = null, inviteCode: String? = null) {
         screenModelScope.launch {
             _uiState.value = MemberUiState.Loading
@@ -146,6 +167,7 @@ class MemberScreenModel(
         }
     }
 
+    /** Elimina a [memberId] del hogar. Ignora llamadas mientras ya hay una acción en curso (evita doble-tap). */
     fun removeMember(householdId: String, memberId: String) {
         if (_memberActionState.value == MemberActionState.Loading) return // evita doble-tap
         screenModelScope.launch {
@@ -192,22 +214,26 @@ class MemberScreenModel(
         }
     }
 
+    /** Vuelve [memberActionState] a [MemberActionState.Idle]. */
     fun clearMemberAction() {
         _memberActionState.value = MemberActionState.Idle
     }
 
+    /** Resetea el estado de miembros (uiState, último creado y acción) a Idle/null. */
     fun reset() {
         _uiState.value = MemberUiState.Idle
         _lastCreatedMember.value = null
         _memberActionState.value = MemberActionState.Idle
     }
 
+    /** Limpia [lastCreatedMember] tras consumirlo (p.ej. tras navegar con el nuevo miembro). */
     fun clearLastCreated() {
         _lastCreatedMember.value = null
     }
 
     // ── Rewards ──────────────────────────────────────────
 
+    /** Carga las recompensas disponibles del hogar [householdId]. */
     fun loadRewards(householdId: String) {
         screenModelScope.launch {
             _rewardState.value = RewardUiState.Loading
@@ -224,6 +250,7 @@ class MemberScreenModel(
         }
     }
 
+    /** Crea una recompensa canjeable en el hogar y recarga la lista al terminar. */
     fun createReward(
         householdId: String,
         title: String,
@@ -251,6 +278,7 @@ class MemberScreenModel(
         }
     }
 
+    /** Borra la recompensa [rewardId] y recarga la lista. */
     fun deleteReward(householdId: String, rewardId: String) {
         screenModelScope.launch {
             try {
@@ -268,6 +296,11 @@ class MemberScreenModel(
         }
     }
 
+    /**
+     * Canjea la recompensa [rewardId] para [memberId], descontando
+     * [pointsSpent] puntos. Ignora llamadas mientras ya hay un canje en
+     * curso (evita doble-tap / doble descuento).
+     */
     fun redeemReward(
         householdId: String,
         rewardId: String,
@@ -294,6 +327,7 @@ class MemberScreenModel(
         }
     }
 
+    /** Vuelve [rewardActionState] a [RewardActionState.Idle]. */
     fun clearRewardAction() {
         _rewardActionState.value = RewardActionState.Idle
     }
@@ -306,6 +340,12 @@ class MemberScreenModel(
     private val _donateActionState = MutableStateFlow<DonateActionState>(DonateActionState.Idle)
     val donateActionState: StateFlow<DonateActionState> = _donateActionState.asStateFlow()
 
+    /**
+     * "Agradece" [amount] puntos de [fromMemberId] a [toMemberId] (no resta
+     * saldo al emisor, sujeto a un límite diario validado en
+     * [MemberRepository.appreciateMember]). Ignora llamadas mientras ya hay
+     * una en curso.
+     */
     fun appreciateMember(householdId: String, fromMemberId: String, toMemberId: String, amount: Int) {
         if (_appreciateActionState.value == AppreciateActionState.Loading) return
         screenModelScope.launch {
@@ -324,6 +364,12 @@ class MemberScreenModel(
         }
     }
 
+    /**
+     * Dona [amount] puntos propios de [fromMemberId] a [toMemberId]
+     * (sí resta saldo al emisor; requiere saldo suficiente, validado en
+     * [MemberRepository.donatePoints]). Ignora llamadas mientras ya hay una
+     * en curso.
+     */
     fun donatePoints(householdId: String, fromMemberId: String, toMemberId: String, amount: Int) {
         if (_donateActionState.value == DonateActionState.Loading) return
         screenModelScope.launch {
@@ -342,14 +388,17 @@ class MemberScreenModel(
         }
     }
 
+    /** Vuelve [appreciateActionState] a [AppreciateActionState.Idle]. */
     fun clearAppreciateAction() {
         _appreciateActionState.value = AppreciateActionState.Idle
     }
 
+    /** Vuelve [donateActionState] a [DonateActionState.Idle]. */
     fun clearDonateAction() {
         _donateActionState.value = DonateActionState.Idle
     }
 
+    /** Traduce el motivo de fallo de "agradecer" a una clave de i18n. */
     private fun appreciateErrorKey(reason: MemberRepository.AppreciateErrorReason): String = when (reason) {
         MemberRepository.AppreciateErrorReason.SELF -> "transfer_error_self"
         MemberRepository.AppreciateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
@@ -357,6 +406,7 @@ class MemberScreenModel(
         MemberRepository.AppreciateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
     }
 
+    /** Traduce el motivo de fallo de "donar" a una clave de i18n. */
     private fun donateErrorKey(reason: MemberRepository.DonateErrorReason): String = when (reason) {
         MemberRepository.DonateErrorReason.SELF -> "transfer_error_self"
         MemberRepository.DonateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"

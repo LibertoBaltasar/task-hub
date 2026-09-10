@@ -1,3 +1,11 @@
+/**
+ * Pantalla de calendario de tareas de un hogar, en vista semana/mes. Usa el
+ * [org.taskhub.ui.models.TaskScreenModel] compartido (mismo que
+ * [TaskListScreen]/[HomeScreen]) para cargar las tareas y calcula en cliente,
+ * por celda de día, si cada una está pendiente/completada/vencida. Se navega
+ * aquí desde [PersonalSpaceScreen]/[HomeScreen]; al tocar una tarea del popup
+ * de día se abre [TaskDetailScreen].
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.background
@@ -94,6 +102,14 @@ private fun DayTaskEntry.onContainerColor(): Color = when {
 //  CalendarScreen
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Pantalla de calendario. Muestra las tareas del hogar [householdId] en una
+ * cuadrícula semanal o mensual, con un punto/chip de color por estado
+ * (pendiente/vencida/completada). Al tocar un día se abre un popup
+ * ([DayTasksPopup]) con el detalle de sus tareas; si se pasa [memberId], el
+ * listado de tareas se restringe a ese miembro (usado desde el espacio
+ * personal de un miembro concreto).
+ */
 data class CalendarScreen(
     val householdId: String,
     val memberId: String? = null
