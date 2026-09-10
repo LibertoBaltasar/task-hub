@@ -74,7 +74,18 @@ class HomeScreen : Screen {
         val authManager = koinInject<GoogleAuthManager>()
         val authState by authManager.state.collectAsState()
 
-        var households by remember { mutableStateOf<List<SavedHousehold>>(emptyList()) }
+        // Semilla con la lista guardada localmente (sync, sin red) en vez de
+        // vacía: `households` es un `remember` LOCAL de este composable, así
+        // que se reinicia cada vez que se vuelve a esta pantalla (p.ej. al
+        // hacer pop() desde un hogar) — antes se quedaba en `emptyList()`
+        // hasta que `reconcileHouseholds()` (red) resolvía, y offline eso
+        // puede tardar (timeout) o nunca resolver rápido, dejando la rama de
+        // "no tienes hogares, crea uno" visible por error aunque el usuario
+        // SÍ tenga hogares guardados — bug reportado 2026-09-12 ("pantalla
+        // principal en blanco al volver sin cobertura"). `reconcileHouseholds()`
+        // en el LaunchedEffect de abajo sigue corriendo para podar hogares
+        // fantasma cuando SÍ hay red.
+        var households by remember { mutableStateOf(model.getSavedHouseholds()) }
         var showFabMenu by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 

@@ -86,6 +86,7 @@ data class CreateTaskScreen(
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val focusManager = LocalFocusManager.current
         val taskModel = koinScreenModel<TaskScreenModel>()
         val memberModel = koinScreenModel<MemberScreenModel>()
         val actionState by taskModel.actionState.collectAsState()
@@ -349,7 +350,8 @@ data class CreateTaskScreen(
                                 if (titleTouched && title.isBlank()) {
                                     Text(s("create_task_title_required"))
                                 }
-                            }
+                            },
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
                         )
                     }
 
@@ -374,7 +376,9 @@ data class CreateTaskScreen(
                                 onValueChange = { subtaskText = it },
                                 label = { Text(s("create_task_add_item")) },
                                 modifier = Modifier.weight(1f),
-                                singleLine = true
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                             )
                             Button(
                                 onClick = {
@@ -433,7 +437,8 @@ data class CreateTaskScreen(
                             label = { Text(s("create_task_description_label")) },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
-                            maxLines = 4
+                            maxLines = 4,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
                         )
                     }
 
@@ -444,7 +449,8 @@ data class CreateTaskScreen(
                             label = { Text(s("public_profile_stat_points")) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                             isError = (pointsText.toIntOrNull() ?: -1) <= 0,
                             supportingText = {
                                 if (pointsText.toIntOrNull() == null) {
@@ -580,7 +586,8 @@ data class CreateTaskScreen(
                                 label = { Text(s("create_task_day_of_month_field")) },
                                 supportingText = { Text(s("recurrence_day_of_month_hint")) },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                                 modifier = Modifier.fillMaxWidth(0.4f)
                             )
                         }
@@ -619,7 +626,9 @@ data class CreateTaskScreen(
                                 onValueChange = { tagsText = it },
                                 label = { Text(s("create_task_add_tag")) },
                                 modifier = Modifier.weight(1f),
-                                singleLine = true
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                             )
                             Button(
                                 onClick = {
@@ -839,7 +848,9 @@ data class CreateTaskScreen(
                                     label = { Text(s("create_task_time_label")) },
                                     modifier = Modifier.weight(1f),
                                     singleLine = true,
-                                    isError = !deadlineTime.isValidTimeFormat()
+                                    isError = !deadlineTime.isValidTimeFormat(),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                                 )
                             }
                         }
@@ -904,7 +915,8 @@ data class CreateTaskScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                                 // A diferencia de "Puntos", este campo no validaba nada: con
                                 // "Aplicar penalización" activado y el valor vacío/0,
                                 // pValue caía en un fallback silencioso a 0 (createTask()
@@ -971,7 +983,8 @@ data class CreateTaskScreen(
                                 label = { Text(s("create_task_penalty_max_label")) },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                                 // A diferencia de sus campos hermanos ("Puntos", penaltyValue),
                                 // este no validaba nada: cualquier texto no numérico caía en
                                 // un fallback silencioso a 0 (pMax más arriba). 0/vacío SÍ es

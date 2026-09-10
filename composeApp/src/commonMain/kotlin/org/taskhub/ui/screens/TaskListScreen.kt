@@ -319,14 +319,24 @@ data class TaskListScreen(
  * a partir de task.frequency + task.lastCompletedDate + task.dueDate.
  * No hay "instancias" en Firestore — una tarea recurrente es UN solo documento.
  */
-private data class TaskWithStatus(
+internal data class TaskWithStatus(
     val task: TaskResponse,
     val isDueToday: Boolean,
     val isCompletedToday: Boolean,
-    val isOverdue: Boolean
+    val isOverdue: Boolean,
+    /**
+     * Completada y no vuelve a estar pendiente ahora mismo — a diferencia de
+     * [isCompletedToday] (solo HOY), cubre cualquier compleción pasada: una
+     * tarea "once" ya hecha, o una recurrente completada pero que aún no ha
+     * reabierto su ventana de "debida" (p.ej. semanal completada el lunes,
+     * consultada el martes). Antes del fix (bug 2026-09-12) no existía este
+     * estado y esas tareas desaparecían de TODA la pantalla — ni pendientes
+     * ni en el filtro "Completadas" — hasta que la recurrencia las reabría.
+     */
+    val isCompleted: Boolean
 )
 
-private data class TaskGroup(
+internal data class TaskGroup(
     val label: String,
     val sortKey: Int,
     val dateKey: String,
@@ -392,7 +402,7 @@ private fun taskComparator(sort: TaskSort): Comparator<TaskWithStatus> = when (s
     TaskSort.CREATED_DESC -> compareByDescending { it.task.createdAt }
 }
 
-private fun groupTasksByStatus(
+internal fun groupTasksByStatus(
     items: List<TaskWithStatus>,
     sort: TaskSort,
     lang: String
@@ -401,6 +411,10 @@ private fun groupTasksByStatus(
     val overdueItems = dueItems.filter { it.isOverdue }
     val pendingToday = dueItems.filter { !it.isOverdue }
     val completedToday = items.filter { it.isCompletedToday }
+    // Completadas en días ANTERIORES (bug 2026-09-12): sin este grupo, estas
+    // tareas no caían en ningún bucket de arriba y desaparecían de la
+    // pantalla por completo, incluido el filtro "Completadas" (ver [isCompleted]).
+    val completedOther = items.filter { it.isCompleted && !it.isCompletedToday }
 
     val groups = mutableListOf<TaskGroup>()
     val comparator = taskComparator(sort)
@@ -445,6 +459,19 @@ private fun groupTasksByStatus(
             label = AppStrings.get("tasks_completed_today", lang),
             sortKey = 99,
             dateKey = "completed_today",
+            isOverdue = false,
+            isNoDate = false,
+            items = sorted
+        ))
+    }
+
+    // Completed on a previous day — ver KDoc de [TaskWithStatus.isCompleted].
+    if (completedOther.isNotEmpty()) {
+        val sorted = completedOther.sortedByDescending { it.task.lastCompletedDate ?: 0 }
+        groups.add(TaskGroup(
+            label = AppStrings.get("tasks_completed_other", lang),
+            sortKey = 100,
+            dateKey = "completed_other",
             isOverdue = false,
             isNoDate = false,
             items = sorted
@@ -523,7 +550,8 @@ private fun TaskListContent(
                 task = task,
                 isDueToday = due,
                 isCompletedToday = done,
-                isOverdue = isOverdue
+                isOverdue = isOverdue,
+                isCompleted = !due && task.lastCompletedDate != null
             )
         }
     }
@@ -545,7 +573,7 @@ private fun TaskListContent(
                     val status = statusByTaskId.getValue(task.id)
                     status.isDueToday && !status.isCompletedToday
                 }
-                TaskFilter.COMPLETED -> statusByTaskId.getValue(task.id).isCompletedToday
+                TaskFilter.COMPLETED -> statusByTaskId.getValue(task.id).isCompleted
                 TaskFilter.MINE -> {
                     val mid = currentMemberId ?: return@filter false
                     val taskAssignments = assignmentsByTask[task.id] ?: emptyList()
@@ -684,7 +712,8 @@ private fun TaskListContent(
             }
         } else {
             groups.forEach { group ->
-                val isCollapsed = collapsedGroups[group.dateKey] ?: (group.dateKey == "completed_today")
+                val isCollapsed = collapsedGroups[group.dateKey]
+                    ?: (group.dateKey == "completed_today" || group.dateKey == "completed_other")
 
                 stickyHeader(key = "header_${group.dateKey}") {
                     GroupHeader(
@@ -766,7 +795,11 @@ private fun TaskCard(
     val pendingCount = assignments.count { it.status == "assigned" }
     val completedCount = assignments.count { it.status == "completed" }
     val totalAssigned = assignments.size
-    val isDone = item.isCompletedToday
+    // isCompleted (no isCompletedToday): esta card también se usa para tareas
+    // completadas en días anteriores (grupo "Completadas", ver
+    // [TaskWithStatus.isCompleted]) — deben verse igual de "hechas"
+    // (tachado, sin botón "Hecho") que las completadas hoy.
+    val isDone = item.isCompleted
     val reduceMotion = shouldReduceMotion()
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
