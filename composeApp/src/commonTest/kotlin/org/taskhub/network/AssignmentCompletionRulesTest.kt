@@ -25,6 +25,10 @@ class AssignmentCompletionRulesTest {
         status = status
     )
 
+    /**
+     * La asignación recién completada (ya en estado "completed") nunca debe
+     * volver a aparecer entre las "hermanas" a cerrar — evita reprocesarla.
+     */
     @Test
     fun siblingsToClose_excludesTheJustCompletedAssignment() {
         val all = listOf(
@@ -37,6 +41,10 @@ class AssignmentCompletionRulesTest {
         assertEquals(listOf(assignment(id = "a2", status = "assigned")), siblings)
     }
 
+    /**
+     * Solo se cierran hermanas en estado "assigned": una ya "completed" o
+     * "cancelled" no debe tocarse (no hay nada que cerrar, o ya está cerrada).
+     */
     @Test
     fun siblingsToClose_excludesAssignmentsThatAreNotAssigned() {
         val all = listOf(
@@ -50,6 +58,11 @@ class AssignmentCompletionRulesTest {
         assertTrue(siblings.isEmpty())
     }
 
+    /**
+     * Cuando una tarea compartida la completa un miembro, las asignaciones
+     * "assigned" de TODOS los demás miembros se cierran, no solo las del
+     * mismo miembro — completar la tarea la cierra para todo el grupo.
+     */
     @Test
     fun siblingsToClose_includesAllOtherAssignedSiblingsRegardlessOfMember() {
         val all = listOf(
@@ -63,6 +76,10 @@ class AssignmentCompletionRulesTest {
         assertEquals(setOf("a2", "a3"), siblings.map { it.id }.toSet())
     }
 
+    /**
+     * Si la asignación completada era la única existente, no hay hermanas
+     * que cerrar.
+     */
     @Test
     fun siblingsToClose_withNoOtherAssignments_returnsEmpty() {
         val all = listOf(assignment(id = "a1", status = "assigned"))
@@ -72,6 +89,7 @@ class AssignmentCompletionRulesTest {
         assertTrue(siblings.isEmpty())
     }
 
+    /** Caso límite defensivo: lista vacía no debe romper el cálculo. */
     @Test
     fun siblingsToClose_withEmptyAssignmentList_returnsEmpty() {
         assertTrue(AssignmentCompletionRules.siblingsToClose(emptyList(), completedAssignmentId = "a1").isEmpty())

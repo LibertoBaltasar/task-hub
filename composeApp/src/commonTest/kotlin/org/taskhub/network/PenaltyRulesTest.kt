@@ -36,6 +36,7 @@ class PenaltyRulesTest {
 
     // ── resolveCompletionOutcome ─────────────────────────────────
 
+    /** Sin fecha límite (dueDate == 0), la tarea nunca puede considerarse tardía y siempre da puntos íntegros. */
     @Test
     fun resolveCompletionOutcome_noDueDate_isOnTimeWithFullPoints() {
         // dueDate == 0 significa "sin fecha límite": nunca penaliza.
@@ -44,6 +45,7 @@ class PenaltyRulesTest {
         assertEquals(50, outcome.pointsAwarded)
     }
 
+    /** El instante exacto de la fecha límite todavía cuenta como "a tiempo" (límite inclusive). */
     @Test
     fun resolveCompletionOutcome_completedExactlyAtDueDate_isOnTime() {
         val outcome = PenaltyRules.resolveCompletionOutcome(task(points = 50), dueDate = 1_000L, now = 1_000L)
@@ -51,16 +53,19 @@ class PenaltyRulesTest {
         assertEquals(50, outcome.pointsAwarded)
     }
 
+    /** Un instante después de la fecha límite ya es tardío. */
     @Test
     fun resolveCompletionOutcome_completedAfterDueDate_isLate() {
         val outcome = PenaltyRules.resolveCompletionOutcome(task(points = 50), dueDate = 1_000L, now = 1_001L)
         assertFalse(outcome.onTime)
     }
 
+    /**
+     * Sin `penaltyMode` configurado la penalización es 0, pero onTime sigue
+     * siendo false: "a tiempo" y "puntos íntegros" son cosas distintas.
+     */
     @Test
     fun resolveCompletionOutcome_lateWithoutPenaltyMode_awardsFullPointsButNotOnTime() {
-        // Sin penaltyMode configurado la penalización es 0, pero onTime sigue
-        // siendo false: "a tiempo" y "puntos íntegros" son cosas distintas.
         val outcome = PenaltyRules.resolveCompletionOutcome(
             task(points = 50, penaltyMode = null), dueDate = 1_000L, now = 1_000L + dayMs
         )
@@ -68,6 +73,7 @@ class PenaltyRulesTest {
         assertEquals(50, outcome.pointsAwarded)
     }
 
+    /** Con modo de penalización fijo, los puntos otorgados ya reflejan la penalización descontada. */
     @Test
     fun resolveCompletionOutcome_lateWithFixedPenalty_subtractsFromPoints() {
         val outcome = PenaltyRules.resolveCompletionOutcome(
@@ -78,6 +84,7 @@ class PenaltyRulesTest {
         assertEquals(90, outcome.pointsAwarded)
     }
 
+    /** Los puntos otorgados nunca deben ser negativos, aunque la penalización calculada supere los puntos de la tarea. */
     @Test
     fun resolveCompletionOutcome_pointsNeverGoBelowZero() {
         val outcome = PenaltyRules.resolveCompletionOutcome(
@@ -90,17 +97,20 @@ class PenaltyRulesTest {
 
     // ── calculatePenalty ──────────────────────────────────────────
 
+    /** Sin modo de penalización configurado, no se penaliza nunca (aunque haya retraso). */
     @Test
     fun calculatePenalty_noPenaltyMode_isZero() {
         assertEquals(0, PenaltyRules.calculatePenalty(task(penaltyMode = null), dueDate = 1_000L, now = 1_000L + dayMs))
     }
 
+    /** Antes de la fecha límite nunca hay penalización, aunque haya modo configurado. */
     @Test
     fun calculatePenalty_notYetOverdue_isZero() {
         val overdueTask = task(penaltyMode = "fixed", penaltyValue = 10)
         assertEquals(0, PenaltyRules.calculatePenalty(overdueTask, dueDate = 1_000L, now = 500L))
     }
 
+    /** El primer intervalo de penalización empieza inmediatamente al pasar la fecha límite (redondeo hacia arriba). */
     @Test
     fun calculatePenalty_fixedMode_multipleDayIntervals() {
         // 2.5 días tarde -> 3 intervalos de día (redondeo hacia arriba: el
@@ -110,6 +120,7 @@ class PenaltyRulesTest {
         assertEquals(30, PenaltyRules.calculatePenalty(overdueTask, dueDate = 1_000L, now = overdueBy2AndHalfDays))
     }
 
+    /** El modo porcentual aplica el porcentaje configurado sobre los puntos de la tarea, por cada intervalo vencido. */
     @Test
     fun calculatePenalty_percentageMode_computesPercentOfPointsPerInterval() {
         // 10 días tarde con intervalo semanal -> 2 intervalos (1 semana + resto) -> 2*20% = 40% de 100 = 40
@@ -117,6 +128,7 @@ class PenaltyRulesTest {
         assertEquals(40, PenaltyRules.calculatePenalty(overdueTask, dueDate = 0L, now = 10 * dayMs))
     }
 
+    /** El intervalo "mes" se aproxima con bloques fijos de 30 días, no con el calendario real. */
     @Test
     fun calculatePenalty_monthInterval_usesThirtyDayIntervals() {
         val overdueTask = task(points = 100, penaltyMode = "fixed", penaltyValue = 5, penaltyInterval = "month")
@@ -124,6 +136,7 @@ class PenaltyRulesTest {
         assertEquals(10, PenaltyRules.calculatePenalty(overdueTask, dueDate = 0L, now = 35 * dayMs))
     }
 
+    /** `penaltyMax` limita la penalización total aunque los intervalos acumulados la superarían. */
     @Test
     fun calculatePenalty_cappedAtPenaltyMax() {
         val overdueTask = task(points = 100, penaltyMode = "fixed", penaltyValue = 50, penaltyInterval = "day", penaltyMax = 80)
@@ -132,6 +145,7 @@ class PenaltyRulesTest {
         assertEquals(80, PenaltyRules.calculatePenalty(overdueTask, dueDate = 0L, now = overdueBy2AndHalfDays))
     }
 
+    /** `penaltyMax == 0` es el valor especial "sin tope", no "penalización máxima cero". */
     @Test
     fun calculatePenalty_zeroPenaltyMax_meansUncapped() {
         val overdueTask = task(points = 1000, penaltyMode = "fixed", penaltyValue = 50, penaltyInterval = "day", penaltyMax = 0)
@@ -140,10 +154,12 @@ class PenaltyRulesTest {
         assertEquals(150, PenaltyRules.calculatePenalty(overdueTask, dueDate = 0L, now = overdueBy2AndHalfDays))
     }
 
+    /**
+     * Sin `penaltyMax`, un `penaltyValue` alto podría superar los puntos de la
+     * tarea — la penalización nunca debe superar `task.points` (evita puntos negativos).
+     */
     @Test
     fun calculatePenalty_neverExceedsTaskPoints() {
-        // Sin penaltyMax, un penaltyValue alto podría superar los puntos de la
-        // tarea — la penalización nunca debe superar `task.points`.
         val overdueTask = task(points = 20, penaltyMode = "fixed", penaltyValue = 1000, penaltyInterval = "day")
         assertEquals(20, PenaltyRules.calculatePenalty(overdueTask, dueDate = 0L, now = dayMs))
     }
