@@ -1,16 +1,31 @@
+// DTOs (`@Serializable`) que modelan los documentos de Firestore leídos/
+// escritos por FirestoreRepository/HouseholdRepository/MemberRepository/
+// TaskRepository/RewardsRepository/NotificationRepository vía la API REST
+// (Ktor + kotlinx.serialization) — NO son entidades del SDK de Firestore.
+// Cada tipo documenta, en su KDoc, la colección/documento que representa.
+
 package org.taskhub.network.models
 
 import androidx.compose.runtime.Immutable
 import kotlinx.serialization.Serializable
 
 // ── Request DTOs ──────────────────────────────────────────
+// NOTA: estos 3 DTOs no tienen ningún call-site en el resto del código (no
+// hay referencias a CreateHouseholdRequest/JoinHouseholdRequest/
+// CreateMemberRequest fuera de este archivo) — parecen vestigios de un diseño
+// previo con un backend intermedio (antes de hablar con Firestore REST
+// directamente, ver KDoc de FirestoreRepository: "no Ktor server needed").
+// Se documentan tal cual pero podrían eliminarse en una limpieza futura.
 
+/** Vestigio sin uso — ver nota de arriba. Cuerpo de una petición de creación de hogar. */
 @Serializable
 data class CreateHouseholdRequest(val name: String)
 
+/** Vestigio sin uso — ver nota de arriba. Cuerpo de una petición de unión a hogar por código de invitación. */
 @Serializable
 data class JoinHouseholdRequest(val inviteCode: String)
 
+/** Vestigio sin uso — ver nota de arriba. Cuerpo de una petición de creación de miembro. */
 @Serializable
 data class CreateMemberRequest(
     val displayName: String,
@@ -20,6 +35,7 @@ data class CreateMemberRequest(
 
 // ── Response DTOs ─────────────────────────────────────────
 
+/** Documento `households/{id}`. Un hogar (espacio compartido de tareas/miembros/recompensas). */
 @Immutable
 @Serializable
 data class HouseholdResponse(
@@ -38,7 +54,10 @@ data class HouseholdResponse(
     val ownerId: String = ""
 )
 
-/** Miembro de un hogar. Cada usuario que se une crea un Member doc. */
+/**
+ * Documento `households/{householdId}/members/{id}`.
+ * Miembro de un hogar. Cada usuario que se une crea un Member doc.
+ */
 @Immutable
 @Serializable
 data class MemberResponse(
@@ -95,11 +114,17 @@ data class UserProfile(
     val updatedAt: Long = 0
 )
 
+/** Cuerpo de una respuesta de error genérica de la API REST de Firestore. */
 @Serializable
 data class ErrorResponse(val error: String)
 
 // ── Task DTOs ────────────────────────────────────────────
 
+/**
+ * Un slot de la rotación semanal de asignados de una tarea recurrente —
+ * elemento de la lista [TaskResponse.assignmentRotation] (NO es un documento
+ * propio de Firestore; se serializa embebido dentro del documento de la tarea).
+ */
 @Serializable
 data class AssignmentSlot(
     /** 1=Lunes..7=Domingo */
@@ -107,6 +132,11 @@ data class AssignmentSlot(
     val memberId: String
 )
 
+/**
+ * Un ítem de la checklist de una tarea — elemento de la lista
+ * [TaskResponse.subtasks] (NO es un documento propio de Firestore; se
+ * serializa embebido dentro del documento de la tarea).
+ */
 @Serializable
 data class Subtask(
     val id: String,
@@ -115,6 +145,7 @@ data class Subtask(
 )
 
 /**
+ * Documento `households/{householdId}/tasks/{id}`.
  * Representa una tarea en Firestore y en la UI.
  *
  * Modelo simplificado sin instancias:
@@ -191,6 +222,7 @@ data class TaskResponse(
 )
 
 /**
+ * Documento `households/{householdId}/tasks/{taskId}/assignments/{id}`.
  * Asignación de una tarea a un miembro.
  * Una tarea puede tener 0..N asignaciones (una por miembro).
  */
@@ -229,6 +261,7 @@ data class TaskAssignmentResponse(
 
 // ── Comments DTO ─────────────────────────────────────────
 
+/** Documento `households/{householdId}/tasks/{taskId}/comments/{id}`. Comentario de un miembro en una tarea. */
 @Serializable
 data class CommentResponse(
     val id: String,
@@ -247,6 +280,7 @@ data class CommentResponse(
 
 // ── Message DTO ────────────────────────────────────────────
 
+/** Documento `households/{householdId}/messages/{id}`. Mensaje del chat del hogar. */
 @Serializable
 data class MessageResponse(
     val id: String,
@@ -258,6 +292,12 @@ data class MessageResponse(
 
 // ── Task History DTO ──────────────────────────────────────
 
+/**
+ * Documento `households/{householdId}/taskHistory/{id}`.
+ * Registro histórico de una compleción de tarea — fuente de agregación para
+ * StatsScreen (independiente del estado actual de la tarea/asignación, que
+ * puede haberse revertido/reasignado después).
+ */
 @Serializable
 data class TaskHistoryResponse(
     val id: String,
@@ -271,6 +311,8 @@ data class TaskHistoryResponse(
 // ── Notification DTO ──────────────────────────────────────
 
 /**
+ * Documento `households/{householdId}/notifications/{id}`.
+ *
  * [titleKey]/[messageKey]/[messageParams] permiten renderizar el texto en el
  * idioma del LECTOR en vez de quedar fijado al idioma de quien la escribió
  * (panel de notificaciones 2026-09-05, IMPORTANTE) — ver
@@ -295,6 +337,7 @@ data class NotificationResponse(
 
 // ── Reward DTOs ────────────────────────────────────────────
 
+/** Documento `households/{householdId}/rewards/{id}`. Recompensa canjeable por puntos. */
 @Immutable
 @Serializable
 data class RewardResponse(
@@ -308,6 +351,11 @@ data class RewardResponse(
     val createdAt: Long = 0
 )
 
+/**
+ * Documento `households/{householdId}/rewardRedemptions/{id}`.
+ * Registro histórico de un canje de recompensa (puntos ya descontados al
+ * miembro en el momento del canje).
+ */
 @Serializable
 data class RewardRedemption(
     val id: String,
