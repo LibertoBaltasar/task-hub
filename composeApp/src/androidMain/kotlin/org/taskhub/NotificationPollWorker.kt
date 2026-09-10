@@ -135,11 +135,14 @@ class NotificationPollWorker(
         firestoreClient.ensureAuth()
         val members = memberRepository.getMembers(householdId)
         val identities = firestoreClient.currentUserIdentities()
-        val isRealMember = members.any { it.userId != null && it.userId in identities }
-        if (!isRealMember) return
-
-        val memberId = memberRepository.resolveCurrentMember(householdId)
-        if (memberId.isBlank()) return
+        // Resuelto directamente de `members` (ya traído arriba) en vez de
+        // `resolveCurrentMember`, que repetiría su propio `getMembers`
+        // interno: el Worker construye un `MemberRepository` nuevo en cada
+        // `doWork()`, así que su caché de resolución siempre está fría y esa
+        // llamada duplicaba la lectura de Firestore por hogar en cada ciclo
+        // (panel de revisión 2026-09-10, arrastrado desde 2026-09-06).
+        val memberId = members.firstOrNull { it.userId != null && it.userId in identities }?.id
+        if (memberId.isNullOrBlank()) return
 
         val all = notificationRepository.getNotifications(householdId)
 

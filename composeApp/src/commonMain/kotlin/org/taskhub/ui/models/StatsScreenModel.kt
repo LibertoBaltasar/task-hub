@@ -181,7 +181,13 @@ private fun computeStats(
     val fromHistory = memberHistory.map { h ->
         CompletionRecord(h.completedAt, h.points, h.onTime, h.taskId)
     }
-    val allCompletions = fromAssignments + fromHistory
+    // completeTask/completeAssignment escriben la MISMA compleción en ambas
+    // colecciones (taskHistory + asignación propia del completer), así que
+    // sin deduplicar por taskId+completedAt toda compleción de tarea
+    // asignada se contaba dos veces (panel de revisión 2026-09-10, hallazgo
+    // crítico #1 arrastrado desde la auditoría 2026-09-06).
+    val allCompletions = (fromAssignments + fromHistory)
+        .distinctBy { it.taskId to it.completedAt }
 
     // Tasks per day (last 7 days)
     val days = (0..6).map { offset ->
