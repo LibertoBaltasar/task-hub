@@ -12,6 +12,18 @@ import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
+/**
+ * Servicio FCM de Task Hub. El sistema instancia esta clase y llama a
+ * [onNewToken] cuando se genera o rota el token de push del dispositivo, y a
+ * [onMessageReceived] cuando llega un mensaje mientras el proceso de la app
+ * está vivo (con el proceso muerto, Android construye la notificación
+ * directamente desde el payload "notification" sin pasar por aquí).
+ *
+ * Hoy no hay backend propio ni Cloud Functions que envíen pushes dirigidos —
+ * ver [org.taskhub.NotificationPollWorker] para el mecanismo real de entrega
+ * (sondeo periódico) de "tarea asignada"/"mensaje nuevo". Este servicio queda
+ * preparado (token guardado, canal creado) para cuando exista ese backend.
+ */
 class TaskHubFirebaseMessagingService : FirebaseMessagingService() {
 
     companion object {
@@ -19,6 +31,7 @@ class TaskHubFirebaseMessagingService : FirebaseMessagingService() {
         const val CHANNEL_ID = "fcm_general"
     }
 
+    /** Crea (si no existe) el canal de notificación FCM al arrancar el servicio. */
     override fun onCreate() {
         super.onCreate()
         createFcmChannel()
@@ -40,6 +53,12 @@ class TaskHubFirebaseMessagingService : FirebaseMessagingService() {
         org.taskhub.platform.AndroidSchedulerHolder.scheduler?.saveFcmToken(token)
     }
 
+    /**
+     * Se dispara con la app en primer o segundo plano cuando llega un mensaje
+     * FCM con payload "notification": muestra una notificación del sistema
+     * con el título/cuerpo recibidos. El payload "data" (si lo hay) solo se
+     * loguea por ahora — no dispara ninguna acción personalizada.
+     */
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         Log.d(TAG, "FCM message from ${message.from}")
@@ -57,6 +76,13 @@ class TaskHubFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
 
+    /**
+     * Construye y muestra la notificación del sistema en el canal
+     * [CHANNEL_ID]. Al tocarla, reabre la app (o la trae a primer plano) sin
+     * extras de deep link — a diferencia de [org.taskhub.NotificationHelper],
+     * no dirige a ningún hogar/tarea concretos porque el payload FCM no
+     * incluye esos IDs.
+     */
     private fun showNotification(title: String, body: String) {
         val intent = packageManager.getLaunchIntentForPackage(packageName)
             ?: Intent(this, MainActivity::class.java).apply {
