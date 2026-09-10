@@ -268,21 +268,6 @@ class TaskScreenModel(
                 _allTags.value = tagSet.toList().sorted()
 
                 _listState.value = TaskListUiState.Success(tasks, assignments, members)
-
-                // Señalización AdMob por sesión según el rol del perfil activo
-                // — ver KDoc de [AdController.updateChildDirectedSignal].
-                // loadTasks() se dispara en cada apertura de la lista de
-                // tareas (tras setCurrentMemberId con el perfil activo), así
-                // que es el punto más temprano/central para refrescar la
-                // señal. Best-effort: nunca debe interrumpir la carga.
-                try {
-                    val myRole = members.find { it.id == _currentMemberId.value }?.role
-                    if (myRole != null) {
-                        adController.updateChildDirectedSignal(myRole == "child")
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 // Relanzar: si no, una loadTasks() más reciente que ya canceló este
                 // Job ve su propia cancelación tratada como un error normal aquí
@@ -833,18 +818,6 @@ class TaskScreenModel(
                 }
                 _currentMemberId.value = myMemberId
                 _myAssignment.value = assignments.find { it.memberId == myMemberId }
-
-                // Señalización AdMob por sesión según el rol del perfil activo
-                // — ver KDoc de [AdController.updateChildDirectedSignal].
-                // Best-effort: nunca debe interrumpir la carga del detalle.
-                try {
-                    val myRole = members.find { it.id == myMemberId }?.role
-                    if (myRole != null) {
-                        adController.updateChildDirectedSignal(myRole == "child")
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FirestoreException) {
