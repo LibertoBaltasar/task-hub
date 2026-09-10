@@ -8,6 +8,7 @@ package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -19,12 +20,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
@@ -54,6 +57,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val focusManager = LocalFocusManager.current
         val memberModel = koinScreenModel<MemberScreenModel>()
         val actionState by memberModel.rewardActionState.collectAsState()
         val appSettings = LocalAppSettings.current
@@ -211,6 +215,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         supportingText = {
                             if (titleTouched && title.isBlank()) Text(s("create_task_title_required"))
                         },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         colors = taskHubTextFieldColors()
                     )
 
@@ -241,7 +246,8 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) costTouched = true },
                         singleLine = true,
                         prefix = { Text("⭐ ") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                         isError = costTouched && (costText.toIntOrNull() ?: 0) <= 0,
                         supportingText = {
                             // Antes solo había mensaje para el caso de error;

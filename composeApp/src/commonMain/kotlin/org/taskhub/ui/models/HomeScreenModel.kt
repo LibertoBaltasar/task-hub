@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
@@ -151,15 +152,17 @@ class HomeScreenModel(
      * su propio fetch en un `LaunchedEffect`, sin pasar por ningún ScreenModel
      * — el único sitio del árbol con ese patrón (panel v7, #15).
      *
-     * Usa [isPending] (misma regla que [loadAllTasks]) en vez de mirar solo
-     * `lastCompletedDate == null` — antes del fix (panel 2026-09-11) una
+     * Usa [isPending] (misma regla que [loadAllTasks]) en vez de mirar
+     * solo `lastCompletedDate == null` — antes del fix (panel 2026-09-11) una
      * tarea recurrente ya completada alguna vez (p. ej. diaria, completada
      * ayer) nunca volvía a aparecer aquí aunque hoy tocara de nuevo, aun
      * cuando sí aparecía correctamente en el dashboard agregado de
-     * [loadAllTasks] — dos definiciones de "pendiente" que divergían.
+     * [loadAllTasks] — dos definiciones de "pendiente" que divergían. Test de
+     * regresión: [previewFilterTasks] es la misma función pura usada aquí,
+     * ver `HomeScreenModelTest.kt`.
      */
     private fun previewFilter(tasks: List<TaskResponse>): List<TaskResponse> =
-        tasks.filter { isPending(it) }.take(5)
+        previewFilterTasks(tasks)
 
     fun loadHouseholdPreview(householdId: String) {
         screenModelScope.launch {
@@ -193,28 +196,6 @@ class HomeScreenModel(
                 )
             }
         }
-    }
-
-    /**
-     * Determina si una tarea está pendiente (no completada hoy).
-     */
-    private fun isPending(task: TaskResponse): Boolean {
-        val now = Clock.System.now()
-        val tz = TimeZone.currentSystemDefault()
-        val today = now.toLocalDateTime(tz).date
-        val todayStartEpoch = today.atStartOfDayIn(tz).toEpochMilliseconds()
-
-        val due = RecurrenceRules.isDueToday(
-            frequency = task.frequency,
-            recurrenceDays = task.recurrenceDays,
-            recurrenceDay = task.recurrenceDay,
-            lastCompletedDate = task.lastCompletedDate,
-            nowEpochMs = now.toEpochMilliseconds(),
-            tz = tz
-        )
-
-        val done = task.lastCompletedDate != null && task.lastCompletedDate >= todayStartEpoch
-        return due && !done
     }
 
     /**
@@ -254,6 +235,36 @@ class HomeScreenModel(
         val error: String? = null
     )
 }
+
+/**
+ * Determina si una tarea está pendiente (no completada hoy). Función pura de
+ * nivel de archivo (no método de [HomeScreenModel]) para poder testearla sin
+ * mockear [FirestoreRepository]/[HouseholdStore]/[SettingsStore] — usada por
+ * [HomeScreenModel.loadAllTasks] y, vía [previewFilterTasks], por
+ * [HomeScreenModel.loadHouseholdPreview]. Ver `HomeScreenModelTest.kt` para
+ * el test de regresión de la divergencia corregida en el panel 2026-09-11.
+ */
+internal fun isPending(task: TaskResponse, now: Instant = Clock.System.now()): Boolean {
+    val tz = TimeZone.currentSystemDefault()
+    val today = now.toLocalDateTime(tz).date
+    val todayStartEpoch = today.atStartOfDayIn(tz).toEpochMilliseconds()
+
+    val due = RecurrenceRules.isDueToday(
+        frequency = task.frequency,
+        recurrenceDays = task.recurrenceDays,
+        recurrenceDay = task.recurrenceDay,
+        lastCompletedDate = task.lastCompletedDate,
+        nowEpochMs = now.toEpochMilliseconds(),
+        tz = tz
+    )
+
+    val done = task.lastCompletedDate != null && task.lastCompletedDate >= todayStartEpoch
+    return due && !done
+}
+
+/** Misma regla de "pendiente" que [isPending], recortada a las primeras 5 — ver [HomeScreenModel.previewFilter]. */
+internal fun previewFilterTasks(tasks: List<TaskResponse>, now: Instant = Clock.System.now()): List<TaskResponse> =
+    tasks.filter { isPending(it, now) }.take(5)
 
 /** Estado de previsualización de tareas de UN hogar. Ver [HomeScreenModel.loadHouseholdPreview]. */
 sealed class HouseholdPreviewState {
