@@ -26,12 +26,24 @@ import org.taskhub.platform.AndroidContextHolder
 import org.taskhub.platform.DebugFlags
 import org.taskhub.BuildConfig
 
+/**
+ * Activity única de Task Hub — punto de entrada Android que aloja la raíz de
+ * Compose ([App]). En `onCreate` deja listos los holders estáticos de
+ * contexto/Activity que usan los helpers de plataforma (AdMob, notificaciones,
+ * Google Sign-In/Calendar), registra los launchers de permisos/login/
+ * actualización, y resuelve el deep link de notificaciones (ver
+ * [consumeDeepLink]) antes de montar Compose.
+ */
 class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
     }
 
+    // Resultado del permiso POST_NOTIFICATIONS ignorado a propósito: la app
+    // funciona igual con o sin notificaciones locales, solo cambia si
+    // NotificationHelper puede llegar a mostrarlas (ver
+    // NotificationHelper.canShowNotifications).
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* Permissions result — notifications will work or skip */ }
@@ -48,6 +60,13 @@ class MainActivity : ComponentActivity() {
     private var deepLinkTaskId by mutableStateOf<String?>(null)
     private var deepLinkNotificationId by mutableStateOf<String?>(null)
 
+    /**
+     * Extrae de [intent] los extras de deep link puestos por una notificación
+     * local (ver el comentario de las propiedades `deepLink*` arriba) y
+     * actualiza el estado observable por Compose. Se llama tanto desde
+     * `onCreate` (arranque en frío) como desde [onNewIntent] (Activity ya
+     * viva, reutilizada por `FLAG_ACTIVITY_CLEAR_TOP`).
+     */
     private fun consumeDeepLink(intent: Intent?) {
         deepLinkHouseholdId = intent?.getStringExtra("householdId")?.ifBlank { null }
         deepLinkTaskId = intent?.getStringExtra("taskId")
@@ -84,6 +103,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Secuencia de arranque: tema y edge-to-edge, holders de contexto/
+     * Activity, registro de los launchers de Google Sign-In/Calendar, flag de
+     * debug, inicialización del scheduler de notificaciones y su canal,
+     * permiso de notificaciones (Android 13+), comprobación de actualización
+     * in-app, resolución del deep link inicial y, por último, montaje de
+     * [App] con ese deep link como parámetro.
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -140,6 +167,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Nueva notificación tocada con la Activity ya en memoria (launchMode
+     * "standard" + `FLAG_ACTIVITY_CLEAR_TOP` reutiliza la instancia en vez de
+     * recrearla). Actualiza el Intent de la Activity y vuelve a extraer el
+     * deep link para que Compose reaccione al cambio de estado.
+     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
