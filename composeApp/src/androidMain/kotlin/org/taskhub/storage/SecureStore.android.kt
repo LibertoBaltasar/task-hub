@@ -1,3 +1,6 @@
+// Implementación Android de `createSecureStore` (expect/actual multiplatform):
+// ver [SecureStore] para el contrato y el KDoc de `createSecureStore` para el
+// cifrado y el fallback si el Keystore del dispositivo no está disponible.
 package org.taskhub.storage
 
 import android.util.Log

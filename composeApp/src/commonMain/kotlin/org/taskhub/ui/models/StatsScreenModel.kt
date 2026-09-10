@@ -1,3 +1,8 @@
+// ScreenModel de la pantalla de estadísticas de un miembro: agrega tareas,
+// asignaciones, historial y logros del hogar en un único [MemberStatsData]
+// (rachas, puntos/tareas de los últimos 7 días, distribución por etiqueta y
+// puntualidad). Toda la lógica de cálculo vive en [computeStats], función
+// pura sin I/O para poder testearla sin mocks de red.
 package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
@@ -21,6 +26,11 @@ import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.ui.i18n.AppStrings
 
+/**
+ * Resultado agregado de [computeStats] para un miembro: rachas, series
+ * diarias de los últimos 7 días y totales acumulados, listo para pintar en
+ * `StatsBody` sin más cálculo en la UI.
+ */
 data class MemberStatsData(
     val currentStreak: Int,
     val bestStreak: Int,
@@ -33,13 +43,18 @@ data class MemberStatsData(
     val overdueCount: Int
 )
 
+/** Nº de tareas completadas en un día concreto (serie de 7 días de [MemberStatsData.tasksPerDay]). */
 data class DayCount(val dayLabel: String, val count: Int)
+/** Puntos ganados en un día concreto (serie de 7 días de [MemberStatsData.dailyPoints]). */
 data class DayPoints(val dayLabel: String, val points: Int)
+/** Nº de tareas completadas por etiqueta, ya recortado a las top 6 en [computeStats]. */
 data class TagCount(val tag: String, val count: Int)
 
+/** Estados de carga de la pantalla de estadísticas. */
 sealed class StatsUiState {
     data object Idle : StatsUiState()
     data object Loading : StatsUiState()
+    /** [achievements] incluye tanto los logros ya desbloqueados como los pendientes, con su estado. */
     data class Success(val data: MemberStatsData, val achievements: List<Achievement>) : StatsUiState()
     data class Error(val message: String) : StatsUiState()
 }
@@ -55,6 +70,12 @@ class StatsScreenModel(
     private val _uiState = MutableStateFlow<StatsUiState>(StatsUiState.Idle)
     val uiState: StateFlow<StatsUiState> = _uiState.asStateFlow()
 
+    /**
+     * Carga y calcula las estadísticas de [memberId] en [householdId]: tareas,
+     * asignaciones, historial, miembros y logros desbloqueados. Las 4 lecturas
+     * de red son independientes entre sí (ver comentario más abajo) y se
+     * lanzan en paralelo antes de reducirlas con [computeStats].
+     */
     fun loadStats(householdId: String, memberId: String, lang: String) {
         screenModelScope.launch {
             _uiState.value = StatsUiState.Loading
@@ -107,6 +128,17 @@ class StatsScreenModel(
 
 // ── Computation ────────────────────────────────────────────
 
+/**
+ * Calcula [MemberStatsData] para [member] a partir de tareas, asignaciones e
+ * historial ya cargados — función pura (sin I/O), testeable sin mocks de red.
+ * Combina compleciones de dos fuentes (asignaciones completadas por el
+ * miembro + registros de `taskHistory`, ver comentarios inline de más abajo
+ * para el porqué de fusionarlas), y sobre esa lista unificada calcula la
+ * serie de los últimos 7 días, la distribución por etiqueta (top 6) y la
+ * tasa de puntualidad. Racha actual/mejor racha se leen directamente de
+ * [member] (ya mantenidas por [TaskScreenModel] al completar tareas), no se
+ * recalculan aquí.
+ */
 private fun computeStats(
     tasks: List<TaskResponse>,
     assignments: List<TaskAssignmentResponse>,

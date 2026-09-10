@@ -1,3 +1,8 @@
+// ScreenModel principal de tareas: listado/detalle, crear/editar/borrar,
+// completar (con puntos/penalización/racha/logros), deshacer compleción,
+// reasignar quién la hizo y sincronización best-effort con Google Calendar.
+// Ver el diagrama de arquitectura más abajo para cómo encaja con
+// [FirestoreRepository] y Firestore.
 package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
@@ -86,6 +91,7 @@ import kotlinx.datetime.*
 
 // ── UI State ──────────────────────────────────────────────
 
+/** Estados de carga del listado de tareas de un hogar. */
 sealed class TaskListUiState {
     data object Idle : TaskListUiState()
     data object Loading : TaskListUiState()
@@ -97,6 +103,7 @@ sealed class TaskListUiState {
     data class Error(val message: String) : TaskListUiState()
 }
 
+/** Estados de carga del detalle de una tarea concreta. */
 sealed class TaskDetailUiState {
     data object Idle : TaskDetailUiState()
     data object Loading : TaskDetailUiState()
@@ -108,6 +115,7 @@ sealed class TaskDetailUiState {
     data class Error(val message: String) : TaskDetailUiState()
 }
 
+/** Estado genérico de una mutación en curso (crear/completar/asignar/editar/borrar). */
 sealed class TaskActionState {
     data object Idle : TaskActionState()
     data object Loading : TaskActionState()
@@ -117,6 +125,7 @@ sealed class TaskActionState {
 
 // ── Filter & Sort ─────────────────────────────────────────
 
+/** Filtro aplicado al listado de tareas (aplicado en `TaskListScreen`, no aquí). */
 enum class TaskFilter {
     ALL,
     PENDING,
@@ -124,6 +133,7 @@ enum class TaskFilter {
     MINE
 }
 
+/** Orden aplicado al listado de tareas (aplicado en `TaskListScreen`, no aquí). */
 enum class TaskSort {
     DEADLINE_ASC,
     DEADLINE_DESC,
@@ -133,6 +143,13 @@ enum class TaskSort {
 
 // ── ScreenModel ───────────────────────────────────────────
 
+/**
+ * ScreenModel de `TaskListScreen`/`TaskDetailScreen`. Expone por separado el
+ * estado del listado ([listState]), el del detalle ([detailState]) y el de
+ * la última mutación disparada ([actionState]/[reassignState]), para que
+ * ambas pantallas puedan compartir instancia (vía Koin) sin pisarse el
+ * estado entre sí.
+ */
 class TaskScreenModel(
     private val repo: FirestoreRepository,
     private val notificationScheduler: NotificationScheduler,
@@ -320,6 +337,13 @@ class TaskScreenModel(
 
     // ── Create task ─────────────────────────────────────────
 
+    /**
+     * Crea la tarea y la asigna: si [memberIds] viene vacío, se asigna a
+     * TODOS los miembros del hogar (auto-assign) en vez de dejarla sin
+     * asignar. Si [dueDate] es futuro, programa además un recordatorio local
+     * ([NotificationScheduler]) y sincroniza el evento de Google Calendar de
+     * cada asignación creada (best-effort, ver [syncCalendarOnAssigned]).
+     */
     fun createTask(
         householdId: String,
         createdBy: String,
@@ -433,6 +457,19 @@ class TaskScreenModel(
     private val _undoState = MutableStateFlow<UndoState?>(null)
     val undoState: StateFlow<UndoState?> = _undoState.asStateFlow()
 
+    /**
+     * Completa una tarea desde la lista principal (a diferencia de
+     * [completeAssignment], no requiere que exista una asignación previa).
+     * Guarda [UndoState] ANTES de escribir en Firestore para poder revertir
+     * puntos/racha/historial si el usuario deshace la acción, delega en
+     * [FirestoreRepository.completeTask] el otorgamiento de puntos +
+     * sincronización de asignaciones (ver su KDoc para la concurrencia
+     * optimista y la regeneración del siguiente ciclo), y encadena como
+     * efectos best-effort: cancelar el recordatorio pendiente, sincronizar
+     * Calendar y actualizar racha/logros. Ninguno de esos efectos secundarios
+     * puede convertir la acción en error una vez que el servidor ya otorgó
+     * los puntos (evita el reintento manual que los duplicaría).
+     */
     fun completeTask(householdId: String, taskId: String) {
         if (_actionState.value == TaskActionState.Loading) return // evita doble-tap / doble suma de puntos
         screenModelScope.launch {
@@ -675,6 +712,14 @@ class TaskScreenModel(
 
     // ── Complete assignment (existing, keeps working) ────────
 
+    /**
+     * Completa una asignación concreta (flujo alternativo a [completeTask]
+     * cuando la UI ya tiene la [TaskAssignmentResponse] en mano, p.ej. desde
+     * el calendario o la vista de asignaciones). Delega en
+     * [FirestoreRepository.completeAssignment] el otorgamiento de puntos y la
+     * concurrencia optimista; encadena Calendar y racha/logros como efectos
+     * best-effort igual que [completeTask], y refresca el detalle al terminar.
+     */
     fun completeAssignment(
         householdId: String,
         taskId: String,
@@ -756,6 +801,13 @@ class TaskScreenModel(
 
     // ── Load task detail ────────────────────────────────────
 
+    /**
+     * Carga la tarea, sus asignaciones y los miembros del hogar para
+     * `TaskDetailScreen`. También resuelve [currentMemberId]/[myAssignment]
+     * (la asignación del usuario en sesión, si la hay) — base para el
+     * indicador de sincronización con Google Calendar — y refresca la
+     * señalización TFCD de AdMob según el rol del perfil activo.
+     */
     fun loadTaskDetail(householdId: String, taskId: String) {
         screenModelScope.launch {
             _detailState.value = TaskDetailUiState.Loading
@@ -809,6 +861,7 @@ class TaskScreenModel(
 
     // ── Assign task to members ──────────────────────────────
 
+    /** Crea nuevas asignaciones para [memberIds] (no sustituye las existentes; ver [updateTask]/[replaceAssignments] para eso). */
     fun assignMembers(
         householdId: String,
         taskId: String,
@@ -844,6 +897,15 @@ class TaskScreenModel(
 
     // ── Update task ─────────────────────────────────────────
 
+    /**
+     * Edita una tarea existente y sustituye sus asignaciones ([replaceAssignments]
+     * — crea las nuevas antes de borrar las antiguas para no dejar la tarea
+     * sin ninguna si la creación falla a medias). Igual que [createTask], si
+     * no se selecciona a nadie en [memberIds] se asigna a todos los miembros
+     * del hogar. Antes de tocar las asignaciones, borra el evento de Calendar
+     * de las actuales ([syncCalendarOnUnassigned]) y, tras crear las nuevas,
+     * las sincroniza de nuevo ([syncCalendarOnAssigned]).
+     */
     fun updateTask(
         householdId: String,
         taskId: String,
@@ -937,6 +999,7 @@ class TaskScreenModel(
 
     // ── Delete task ──────────────────────────────────────────
 
+    /** Borra la tarea; antes limpia el evento de Calendar de sus asignaciones actuales (best-effort). */
     fun deleteTask(householdId: String, taskId: String) {
         if (_actionState.value == TaskActionState.Loading) return
         screenModelScope.launch {
@@ -1083,6 +1146,7 @@ class TaskScreenModel(
     // la lista antes de que la primera escritura se confirmara y la sobrescribía).
     private val subtaskTogglesInFlight = mutableSetOf<String>()
 
+    /** Marca/desmarca una subtarea (lee la tarea fresca, la muta en memoria y hace PATCH del array completo). */
     fun toggleSubtask(householdId: String, taskId: String, subtaskId: String) {
         if (taskId in subtaskTogglesInFlight) return
         subtaskTogglesInFlight += taskId
@@ -1106,6 +1170,7 @@ class TaskScreenModel(
         }
     }
 
+    /** Vuelve todos los StateFlows a su valor inicial — usado al reutilizar el ScreenModel al cambiar de hogar. */
     fun reset() {
         // Cancela una loadTasks() en vuelo: si no, puede resolver después de este
         // reset() y sobrescribir el Idle recién puesto con datos del hogar anterior
