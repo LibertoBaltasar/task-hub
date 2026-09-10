@@ -1,3 +1,7 @@
+/**
+ * Colores semánticos (éxito/aviso/info) que complementan al `colorScheme`
+ * de Material3 de [TaskHubTheme] — ver KDoc de [SemanticColors] más abajo.
+ */
 package org.taskhub.ui.theme
 
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +33,7 @@ data class SemanticColors(
     val onInfoContainer: Color,
 )
 
+/** Variante clara de [SemanticColors], usada cuando `darkTheme == false` en [TaskHubTheme]. */
 val LightSemanticColors = SemanticColors(
     success = Color(0xFF2E7D32),
     onSuccess = Color.White,
@@ -46,6 +51,7 @@ val LightSemanticColors = SemanticColors(
     onInfoContainer = Color(0xFF0D47A1),
 )
 
+/** Variante oscura de [SemanticColors], usada cuando `darkTheme == true` en [TaskHubTheme]. */
 val DarkSemanticColors = SemanticColors(
     success = Color(0xFF81C784),
     // onSuccess oscurecido de 0xFF1B5E20 (3.91:1, por debajo del umbral AA de
@@ -76,6 +82,12 @@ val DarkSemanticColors = SemanticColors(
     onInfoContainer = Color(0xFFBBDEFB),
 )
 
+/**
+ * CompositionLocal con los [SemanticColors] vigentes. [TaskHubTheme] lo
+ * provee (claro u oscuro según `darkTheme`); el valor por defecto
+ * ([LightSemanticColors]) solo se usa si algo lee [semanticColors] fuera de
+ * [TaskHubTheme] (no debería ocurrir en la app).
+ */
 val LocalSemanticColors = staticCompositionLocalOf { LightSemanticColors }
 
 /**

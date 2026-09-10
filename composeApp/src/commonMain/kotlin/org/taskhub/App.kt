@@ -1,3 +1,8 @@
+/**
+ * Raíz de Compose de Task Hub, común a Android/iOS/JVM. Instala Koin
+ * ([org.taskhub.di.appModule]), resuelve tema/idioma persistidos y aloja el
+ * único [Navigator] de Voyager de la app.
+ */
 package org.taskhub
 
 import androidx.compose.foundation.layout.Box
@@ -35,6 +40,22 @@ import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.ui.theme.Teal600
 
 /**
+ * Composable raíz de la app.
+ *
+ * Orden de arranque: 1) [KoinApplication] instala [org.taskhub.di.appModule]
+ * (necesario ya para [SplashScreen], que lee el idioma de [SettingsStore]);
+ * 2) tras el splash (1.5s) se resuelven tema/idioma reactivos desde
+ * [SettingsStore] y se envuelve el árbol en [TaskHubTheme] +
+ * `LocalAppSettings`; 3) un `LaunchedEffect(Unit)` hace la inicialización de
+ * arranque en frío — resolver/crear el hogar "Personal" (determinista por
+ * UID para que sea el mismo en todos los dispositivos con la misma cuenta),
+ * asegurar el miembro "Yo" en él, restaurar hogares compartidos desde la
+ * nube ([GoogleAuthManager.restoreFromCloudOnStartup]) y subir el token FCM
+ * pendiente — todo best-effort (nunca bloquea si está offline); 4) se crea
+ * el único [Navigator] de Voyager de la app con la pila inicial
+ * `[HomeScreen(), destino?]` (el destino del deep link, si lo hay, ya
+ * incluido para evitar un salto visual doble).
+ *
  * [deepLinkHouseholdId]/[deepLinkTaskId] llegan de tocar una notificación
  * local del sistema (Android: [org.taskhub.NotificationHelper.showUpdateNotification]
  * o el recordatorio de tarea) — `null` en el arranque normal e ignorados en
