@@ -462,14 +462,15 @@ un cambio menor y no urgente.
 Detectados durante la lectura de código/docs para este análisis. No se ha
 corregido nada; se listan aquí para que el dueño decida priorizarlos.
 
-- **H1 — README.md desactualizado respecto al stack real.**
-  `README.md:3,9-21,43-93` describe un backend Ktor Server + PostgreSQL +
-  Flyway y un estado de "Fase 0 — Setup" (línea 111), que no corresponde al
-  stack real documentado en `CLAUDE.md` (Firestore vía REST, sin servidor
-  propio, Koin, Voyager, multiplatform-settings, features avanzadas como
-  chat/calendario/recurrencia/ranking ya implementadas). El README es el
-  primer archivo que ve cualquier visitante del repo en GitHub y da una
-  impresión completamente obsoleta del proyecto.
+- **H1 — README.md desactualizado respecto al stack real. [YA CORREGIDO
+  en esta misma pasada de documentación, ver `README.md` actual.]**
+  `README.md:3,9-21,43-93` (versión previa) describía un backend Ktor Server
+  + PostgreSQL + Flyway y un estado de "Fase 0 — Setup" (línea 111), que no
+  correspondía al stack real documentado en `CLAUDE.md` (Firestore vía REST,
+  sin servidor propio, Koin, Voyager, multiplatform-settings, features
+  avanzadas como chat/calendario/recurrencia/ranking ya implementadas). Se
+  reescribió como parte del Entregable 1 de este mismo encargo; se deja aquí
+  constancia del hallazgo original por trazabilidad.
 
 - **H2 — HU-04c de `docs/specs.md:55-56` describe una feature no
   implementada.** La "vista simplificada infantil" (solo tareas asignadas +
@@ -516,7 +517,50 @@ corregido nada; se listan aquí para que el dueño decida priorizarlos.
   si se usa tal cual en comunicación externa podría interpretarse como
   promesa de una funcionalidad que no existe.
 
+- **H8 — `CLAUDE.md` tenía `targetSdk 35` desactualizado. [YA CORREGIDO
+  en esta misma pasada.]** `composeApp/build.gradle.kts` ya usa
+  `compileSdk = 36` / `targetSdk = 36` desde el commit `4b5d9ef` ("subir
+  targetSdk a 36"), pero esa subida no se había propagado a la memoria corta
+  del proyecto. Corregido al reescribir `CLAUDE.md` en este mismo encargo.
+
+- **H9 — `firestore.rules` no puede verificar que `points`/`pointsSpent`
+  escritos en `taskHistory`/`rewardRedemptions` sean el valor correcto
+  calculado para una tarea/recompensa concreta** (solo valida que no sean
+  negativos ni superen el coste real). Es una limitación estructural de no
+  tener backend/Cloud Functions: cualquier cliente autenticado como miembro
+  del hogar podría, en teoría, escribir un `pointsSpent` menor al real. Ya
+  señalado en el propio repo (ver comentarios de `firestore.rules` y
+  `docs/atomicidad-commit-pendiente.md`); se deja constancia aquí porque es
+  relevante también para la conversación de a quién va dirigida la app
+  (confianza entre convivientes, no anonimato entre desconocidos).
+
+- **H10 — `storage/SecureStore.ios.kt` nunca se ha compilado/ejecutado en un
+  entorno con Xcode/macOS** (según su propio comentario interno). Antes de
+  cualquier release a iOS habría que verificarlo en un build real; hoy es
+  código no probado.
+
+- **H11 — El widget de pantalla de inicio (`TaskHubWidgetProvider.kt`) no
+  propaga `householdId`/`taskId` al abrir la app**, a diferencia de
+  notificaciones y recordatorios: tocar el widget siempre lleva a la
+  `HomeScreen` genérica aunque el usuario esperara ir directo a la tarea
+  mostrada en el widget.
+
+- **H12 — `NotificationRepository.getNotifications` no pagina**, a
+  diferencia de otras colecciones que también crecen sin límite. Mitigado
+  parcialmente por `purgeOldRead` (purga notificaciones leídas de más de 90
+  días), pero un hogar muy activo entre purgas podría devolver una lista
+  grande en cada sondeo de `NotificationPollWorker` (cada ~30 min).
+
+- **H13 — `firestore.rules` valida `pointsSpent == cost` al canjear una
+  recompensa, pero no se ha verificado si existe (o debería existir) un
+  tope de canjes repetidos de la misma recompensa** a nivel de regla; no
+  confirmado como bug, señalado como área a revisar por quien conozca el
+  modelo `RewardResponse` en detalle.
+
 ---
 
 *Fin del informe. Archivo de solo lectura: no se ha modificado ningún otro
-archivo del repositorio como parte de este análisis.*
+archivo del repositorio como parte de este análisis (los hallazgos H8-H13 se
+recopilaron de los informes de los agentes que documentaron el código en
+paralelo, como parte del mismo encargo, y se añadieron aquí por ser el lugar
+designado para consolidar hallazgos).*
