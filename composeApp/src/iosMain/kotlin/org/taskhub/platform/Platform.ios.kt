@@ -5,15 +5,31 @@ import kotlinx.cinterop.refTo
 import platform.Security.SecRandomCopyBytes
 import platform.Security.kSecRandomDefault
 
+/**
+ * Implementación iOS del `expect` [shareText] (`platform/Platform.kt`).
+ *
+ * Pendiente de implementar con `UIActivityViewController` (el share sheet
+ * nativo de iOS/UIKit) — de momento solo deja constancia por consola.
+ */
 actual fun shareText(text: String, title: String) {
     // TODO: iOS implementation using UIActivityViewController
     println("shareText not implemented on iOS: $title")
 }
 
+/**
+ * Implementación iOS del `expect` [saveWidgetThemeToCache] (`platform/Platform.kt`).
+ *
+ * No-op: todavía no existe un widget de iOS (WidgetKit) que consuma este tema.
+ */
 actual fun saveWidgetThemeToCache(theme: String) {
     // iOS: no widget cache yet — no-op for now
 }
 
+/**
+ * Implementación iOS del `expect` [updateWidgetPendingTasks] (`platform/Platform.kt`).
+ *
+ * No-op: todavía no existe un widget de iOS (WidgetKit) que consuma esta lista.
+ */
 actual fun updateWidgetPendingTasks(taskList: String) {
     // iOS: no widget yet — no-op
 }
@@ -28,11 +44,24 @@ actual fun launchGoogleSignIn() {
     GoogleSignInResultHolder.setResult("")
 }
 
+/**
+ * Implementación iOS del `expect` [getGoogleCalendarAccessToken] (`platform/Platform.kt`).
+ *
+ * No-op: Google Sign-In no está implementado en iOS todavía (ver
+ * [launchGoogleSignIn] arriba), así que nunca hay una cuenta vinculada de la
+ * que obtener un token de Calendar. Siempre devuelve null.
+ */
 actual suspend fun getGoogleCalendarAccessToken(): String? {
     // iOS: Google Sign-In not supported — no-op
     return null
 }
 
+/**
+ * Implementación iOS del `expect` [revokeGoogleCalendarAccess] (`platform/Platform.kt`).
+ *
+ * No-op por el mismo motivo que [getGoogleCalendarAccessToken]: sin Google
+ * Sign-In en iOS no hay consentimiento OAuth que revocar.
+ */
 actual suspend fun revokeGoogleCalendarAccess() {
     // iOS: Google Sign-In not supported — no-op
 }

@@ -1,3 +1,6 @@
+// Miembros/perfiles/puntos — ver KDoc de [MemberRepository] más abajo para el
+// detalle del alcance (qué se quedó en FirestoreRepository y por qué).
+
 package org.taskhub.network
 
 import io.ktor.client.call.*
@@ -513,32 +516,39 @@ class MemberRepository(
     //  Appreciation ("agradecer" — acuñación con tope semanal) & donations
     // ────────────────────────────────────────────────────────
 
+/** Resultado de [appreciateMember]: éxito (con presupuesto restante y nuevo total del receptor) o error tipado. */
     sealed class AppreciateResult {
         data class Ok(val remaining: Int, val receptorNewTotal: Int) : AppreciateResult()
         data class Error(val reason: AppreciateErrorReason) : AppreciateResult()
     }
 
+    /** Motivos por los que [appreciateMember] puede rechazar la operación sin lanzar. */
     enum class AppreciateErrorReason { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED, MEMBER_NOT_FOUND }
 
+    /** Traduce el error de dominio (sin dependencias de red) de [PointsRules] al tipo público de este repo. */
     private fun PointsRules.AppreciateError.toRepoReason(): AppreciateErrorReason = when (this) {
         PointsRules.AppreciateError.SELF -> AppreciateErrorReason.SELF
         PointsRules.AppreciateError.INVALID_AMOUNT -> AppreciateErrorReason.INVALID_AMOUNT
         PointsRules.AppreciateError.LIMIT_EXCEEDED -> AppreciateErrorReason.LIMIT_EXCEEDED
     }
 
+    /** Resultado de [donatePoints]: éxito (con los nuevos totales de ambos) o error tipado. */
     sealed class DonateResult {
         data class Ok(val donorNewTotal: Int, val receptorNewTotal: Int) : DonateResult()
         data class Error(val reason: DonateErrorReason) : DonateResult()
     }
 
+    /** Motivos por los que [donatePoints] puede rechazar la operación sin lanzar. */
     enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND }
 
+    /** Traduce el error de dominio (sin dependencias de red) de [PointsRules] al tipo público de este repo. */
     private fun PointsRules.DonateError.toRepoReason(): DonateErrorReason = when (this) {
         PointsRules.DonateError.SELF -> DonateErrorReason.SELF
         PointsRules.DonateError.INVALID_AMOUNT -> DonateErrorReason.INVALID_AMOUNT
         PointsRules.DonateError.INSUFFICIENT_BALANCE -> DonateErrorReason.INSUFFICIENT_BALANCE
     }
 
+    /** Presupuesto de "agradecer" vigente de [member] en el instante [now] — ver [PointsRules.currentAppreciationBudget]. */
     private fun currentAppreciationBudget(member: MemberResponse, now: Long): PointsRules.AppreciationBudget =
         PointsRules.currentAppreciationBudget(member.appreciationGiven, member.appreciationWeekStart, now)
 
