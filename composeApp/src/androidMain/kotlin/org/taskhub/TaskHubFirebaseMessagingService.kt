@@ -70,8 +70,13 @@ class TaskHubFirebaseMessagingService : FirebaseMessagingService() {
             )
         }
 
-        message.data.isNotEmpty().let {
-            Log.d(TAG, "Message data: ${message.data}")
+        if (message.data.isNotEmpty()) {
+            // Solo las CLAVES, no los valores: sin R8 que elimine Log en
+            // release (ver KDoc de la clase), un backend futuro podría meter
+            // aquí householdId/taskId/nombres — mismo criterio que ya se
+            // aplica al token (arriba, se trunca a su longitud) pero que no
+            // se había extendido a este payload (panel 2026-09-11, MENOR).
+            Log.d(TAG, "Message data keys: ${message.data.keys}")
             // Handle data payload for custom actions
         }
     }

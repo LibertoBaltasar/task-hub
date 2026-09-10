@@ -19,8 +19,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -109,7 +112,12 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showEmojiPicker = !showEmojiPicker },
+                            // role = Button + stateDescription expandido/colapsado: antes era
+                            // un toggle visual mudo para TalkBack (panel 2026-09-11, MENOR).
+                            .clickable(role = Role.Button) { showEmojiPicker = !showEmojiPicker }
+                            .semantics {
+                                stateDescription = s(if (showEmojiPicker) "state_expanded" else "state_collapsed")
+                            },
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant
                         )
@@ -164,8 +172,14 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                                     Surface(
                                         modifier = Modifier
                                             .size(48.dp)
-                                            .semantics { contentDescription = s("edit_profile_emoji_content_desc").replace("%s", emoji) }
-                                            .clickable {
+                                            // selected: sin esto, TalkBack no distinguía el emoji ya
+                                            // elegido del resto (solo color de fondo/borde visual) —
+                                            // panel 2026-09-11, IMPORTANTE.
+                                            .semantics {
+                                                contentDescription = s("edit_profile_emoji_content_desc").replace("%s", emoji)
+                                                selected = selectedIcon == emoji
+                                            }
+                                            .clickable(role = Role.Button) {
                                                 selectedIcon = emoji
                                                 showEmojiPicker = false
                                             },

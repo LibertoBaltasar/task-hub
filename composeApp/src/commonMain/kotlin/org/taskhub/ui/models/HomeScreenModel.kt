@@ -227,7 +227,7 @@ class HomeScreenModel(
         if (sorted.isEmpty()) return "🎉 ¡No hay tareas pendientes!"
 
         val now = Clock.System.now().toEpochMilliseconds()
-        val householdNames = households.associate { it.id to it.name }
+        val householdsById = households.associateBy { it.id }
 
         return sorted.joinToString("\n") { (hid, task) ->
             val freqIcon = when (task.frequency) {
@@ -238,8 +238,11 @@ class HomeScreenModel(
             }
             val overdue = task.dueDate > 0 && task.dueDate < now
             val marker = if (overdue) "⚠️" else ""
-            val householdName = householdNames[hid]
-            val prefix = if (householdName != null && householdName != "Personal") "[$householdName] " else ""
+            val household = householdsById[hid]
+            // isPersonal (no comparar por nombre): un hogar COMPARTIDO al que
+            // alguien le puso literalmente "Personal" de nombre se confundía
+            // con el espacio Personal real y perdía el prefijo (panel 2026-09-11).
+            val prefix = if (household != null && !household.isPersonal) "[${household.name}] " else ""
             "$marker$freqIcon $prefix${task.title}"
         }
     }

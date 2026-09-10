@@ -236,6 +236,7 @@ object AppStrings {
             "transfer_error_invalid_amount" to "Importe inválido",
             "transfer_error_member_not_found" to "Miembro no encontrado",
             "transfer_error_failed" to "No se pudo completar la transferencia. Tus puntos no se han visto afectados.",
+            "transfer_error_rollback_failed" to "No se pudo completar la transferencia y no se pudo revertir el descuento. Contacta con el administrador del hogar para revisar tu saldo de puntos.",
             "appreciate_error_limit" to "Límite semanal alcanzado",
             "donate_error_insufficient_balance" to "Saldo insuficiente",
 
@@ -852,6 +853,7 @@ object AppStrings {
             "transfer_error_invalid_amount" to "Invalid amount",
             "transfer_error_member_not_found" to "Member not found",
             "transfer_error_failed" to "The transfer couldn't be completed. Your points were not affected.",
+            "transfer_error_rollback_failed" to "The transfer couldn't be completed and the deduction couldn't be reverted. Contact your household admin to review your points balance.",
             "appreciate_error_limit" to "Weekly limit reached",
             "donate_error_insufficient_balance" to "Insufficient balance",
 

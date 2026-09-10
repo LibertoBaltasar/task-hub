@@ -198,10 +198,16 @@ class FirestoreClient(
         }
 
         // 3) Alta anónima nueva (sin email/password) y persistir el refresh token.
-        val response: FirebaseAuthResponse = client.post("$authUrl?key=$apiKey") {
-            contentType(ContentType.Application.Json)
-            setBody(FirebaseAuthRequest(returnSecureToken = true))
-        }.body()
+        val response: FirebaseAuthResponse = try {
+            client.post("$authUrl?key=$apiKey") {
+                contentType(ContentType.Application.Json)
+                setBody(FirebaseAuthRequest(returnSecureToken = true))
+            }.body()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw redactApiKey(e)
+        }
 
         val idToken = response.idToken
         val localId = response.localId
@@ -231,13 +237,19 @@ class FirestoreClient(
      * Body (form-urlencoded): grant_type=refresh_token&refresh_token=...
      */
     private suspend fun refreshFirebaseToken(refreshToken: String): RefreshedAuth {
-        val response: TokenRefreshResponse = client.post("$secureTokenUrl?key=$apiKey") {
-            contentType(ContentType.Application.FormUrlEncoded)
-            setBody(FormDataContent(Parameters.build {
-                append("grant_type", "refresh_token")
-                append("refresh_token", refreshToken)
-            }))
-        }.body()
+        val response: TokenRefreshResponse = try {
+            client.post("$secureTokenUrl?key=$apiKey") {
+                contentType(ContentType.Application.FormUrlEncoded)
+                setBody(FormDataContent(Parameters.build {
+                    append("grant_type", "refresh_token")
+                    append("refresh_token", refreshToken)
+                }))
+            }.body()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw redactApiKey(e)
+        }
 
         val idToken = response.id_token
         val userId = response.user_id
@@ -342,10 +354,32 @@ class FirestoreClient(
     suspend fun deleteFirebaseAccount() {
         val token = ensureAuth()
             ?: throw IllegalStateException("No hay sesión activa para eliminar la cuenta")
-        client.post("https://identitytoolkit.googleapis.com/v1/accounts:delete?key=$apiKey") {
-            contentType(ContentType.Application.Json)
-            setBody(DeleteAccountRequest(token))
+        try {
+            client.post("https://identitytoolkit.googleapis.com/v1/accounts:delete?key=$apiKey") {
+                contentType(ContentType.Application.Json)
+                setBody(DeleteAccountRequest(token))
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw redactApiKey(e)
         }
+    }
+
+    /**
+     * Ktor mete la URL completa (con `?key=$apiKey`) en el mensaje de las
+     * excepciones de timeout/conexión (`HttpRequestTimeoutException`,
+     * `ConnectTimeoutException`), lanzadas ANTES de llegar a
+     * [HttpResponseValidator] — sin este saneado, esa clave acababa en el
+     * Snackbar de error de la UI (patrón `e.message ?: fallback`, extendido
+     * por casi todos los `ScreenModel`) y en Logcat de producción cada vez
+     * que la alta/refresco de sesión o el borrado de cuenta tenían un fallo
+     * de red (panel 2026-09-11, IMPORTANTE).
+     */
+    private fun redactApiKey(e: Exception): Exception {
+        val msg = e.message ?: return e
+        if (!msg.contains(apiKey)) return e
+        return IllegalStateException(msg.replace(apiKey, "***"), e)
     }
 
     companion object {

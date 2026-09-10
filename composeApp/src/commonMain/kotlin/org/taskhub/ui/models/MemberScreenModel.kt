@@ -421,5 +421,6 @@ class MemberScreenModel(
         MemberRepository.DonateErrorReason.INSUFFICIENT_BALANCE -> "donate_error_insufficient_balance"
         MemberRepository.DonateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
         MemberRepository.DonateErrorReason.TRANSFER_FAILED -> "transfer_error_failed"
+        MemberRepository.DonateErrorReason.ROLLBACK_FAILED -> "transfer_error_rollback_failed"
     }
 }

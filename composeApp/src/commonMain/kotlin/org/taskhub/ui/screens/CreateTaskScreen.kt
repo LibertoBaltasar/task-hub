@@ -1100,9 +1100,17 @@ private fun QuickTemplatesSection(
 //  Helpers
 // ────────────────────────────────────────────────────────────
 
+// Regex a nivel de archivo (no recompiladas en cada llamada): isValidDateFormat/
+// isValidTimeFormat se invocan desde el cuerpo del composable principal
+// (condición `enabled` del botón Crear/Guardar, `isError` del campo de hora),
+// así que sin esto se recompilaban en CADA recomposición del formulario, con
+// cualquier tecleo en CUALQUIER campo (panel 2026-09-11, MENOR).
+private val DATE_FORMAT_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
+private val TIME_FORMAT_REGEX = Regex("""(\d{2}):(\d{2})""")
+
 /** Comprueba el formato literal aaaa-mm-dd (no valida que la fecha exista). */
 internal fun String.isValidDateFormat(): Boolean =
-    Regex("""\d{4}-\d{2}-\d{2}""").matches(this)
+    DATE_FORMAT_REGEX.matches(this)
 
 /** Valida formato HH:mm y rango real de hora/minuto (evita crash de LocalDateTime, ver comentario abajo). */
 internal fun String.isValidTimeFormat(): Boolean {
@@ -1110,7 +1118,7 @@ internal fun String.isValidTimeFormat(): Boolean {
     // cumple pero LocalDateTime(...) en parseDeadline() lanza
     // IllegalArgumentException con una hora/minuto fuera de rango — sin esta
     // validación, el botón Crear/Guardar quedaba habilitado y pulsar crasheaba.
-    val match = Regex("""(\d{2}):(\d{2})""").matchEntire(this) ?: return false
+    val match = TIME_FORMAT_REGEX.matchEntire(this) ?: return false
     val (hourStr, minuteStr) = match.destructured
     val hour = hourStr.toIntOrNull() ?: return false
     val minute = minuteStr.toIntOrNull() ?: return false

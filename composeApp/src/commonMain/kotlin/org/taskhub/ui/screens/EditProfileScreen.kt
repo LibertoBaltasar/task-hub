@@ -20,7 +20,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -197,8 +199,14 @@ class EditProfileScreen : Screen {
                                             Surface(
                                                 modifier = Modifier
                                                     .size(48.dp)
-                                                    .semantics { contentDescription = s("edit_profile_emoji_content_desc").replace("%s", emoji) }
-                                                    .clickable {
+                                                    // selected: el emoji ya elegido solo se distinguía por
+                                                    // color/borde visual, mudo para TalkBack (panel
+                                                    // 2026-09-11, IMPORTANTE, mismo patrón que CreateRewardScreen).
+                                                    .semantics {
+                                                        contentDescription = s("edit_profile_emoji_content_desc").replace("%s", emoji)
+                                                        selected = avatarEmoji == emoji
+                                                    }
+                                                    .clickable(role = Role.Button) {
                                                         avatarEmoji = emoji
                                                         showEmojiGrid = false
                                                     },

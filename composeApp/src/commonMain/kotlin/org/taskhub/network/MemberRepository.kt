@@ -286,8 +286,18 @@ class MemberRepository(
         val identities = firestoreClient.currentUserIdentities()
         members.firstOrNull { it.userId != null && it.userId in identities }?.let { return it.id }
 
-        // 2. Fallback: primer miembro existente
-        if (members.isNotEmpty()) return members.first().id
+        // 2. Fallback: primer miembro SIN cuenta vinculada (perfil "child" sin
+        // userId, el caso típico de onboarding de JoinHouseholdScreen) —
+        // NUNCA uno cuyo userId ya pertenece a OTRA identidad real: antes se
+        // devolvía `members.first()` sin condición, así que un usuario cuya
+        // identidad local dejara de coincidir con ningún miembro (p.ej. tras
+        // el escenario de `ownerId` sin limpiar de `leaveHousehold`, ver
+        // docs/auditoria-completa-2026-09-06.md hallazgo CRÍTICO #2) heredaba
+        // en silencio la identidad de OTRO miembro real, sin ningún error
+        // visible (panel 2026-09-11, IMPORTANTE). Si no hay ningún perfil sin
+        // reclamar, se cae al paso 3 (crear un miembro "Yo" nuevo) en vez de
+        // adivinar.
+        members.firstOrNull { it.userId == null }?.let { return it.id }
 
         // 3. Sin miembros: crear uno "Yo" vinculado al usuario actual.
         // Si createMember falla (p. ej. Firestore devuelve una respuesta sin
@@ -538,8 +548,14 @@ class MemberRepository(
         data class Error(val reason: DonateErrorReason) : DonateResult()
     }
 
-    /** Motivos por los que [donatePoints] puede rechazar la operación sin lanzar. */
-    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND, TRANSFER_FAILED }
+    /**
+     * Motivos por los que [donatePoints] puede rechazar la operación sin lanzar.
+     * [ROLLBACK_FAILED] es distinto de [TRANSFER_FAILED]: en ese caso concreto
+     * la reversión del débito al donante TAMBIÉN falló, así que sus puntos sí
+     * pueden haberse visto afectados — a diferencia de [TRANSFER_FAILED], cuyo
+     * mensaje afirma lo contrario (panel 2026-09-11, IMPORTANTE).
+     */
+    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND, TRANSFER_FAILED, ROLLBACK_FAILED }
 
     /** Traduce el error de dominio (sin dependencias de red) de [PointsRules] al tipo público de este repo. */
     private fun PointsRules.DonateError.toRepoReason(): DonateErrorReason = when (this) {
@@ -690,7 +706,13 @@ class MemberRepository(
                 addMemberPoints(householdId, fromMemberId, amount)
             } catch (e2: CancellationException) {
                 throw e2
-            } catch (_: Exception) { }
+            } catch (_: Exception) {
+                // La reversión también falló: a diferencia del caso normal,
+                // aquí SÍ es posible que el donante se haya quedado con menos
+                // puntos sin que nadie los reciba — distinguido de
+                // TRANSFER_FAILED para no afirmarle lo contrario en la UI.
+                return DonateResult.Error(DonateErrorReason.ROLLBACK_FAILED)
+            }
             return DonateResult.Error(DonateErrorReason.TRANSFER_FAILED)
         }
 
