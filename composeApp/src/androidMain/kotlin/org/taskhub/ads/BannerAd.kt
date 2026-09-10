@@ -1,3 +1,5 @@
+// Composable Android-only que envuelve el AdView nativo de AdMob. Ver
+// [AdConfig] para el ID de anuncio y el interruptor que lo activa/desactiva.
 package org.taskhub.ads
 
 import androidx.compose.runtime.Composable

@@ -1,3 +1,7 @@
+// CRUD de tareas, historial de compleciones, asignaciones y comentarios
+// (subcolecciones bajo `households/{id}`). Ver el KDoc de la clase para lo
+// que NO vive aquí (completar/reasignar, que orquestan puntos de miembro a
+// la vez y se quedan en [FirestoreRepository]).
 package org.taskhub.network
 
 import io.ktor.client.call.*
@@ -605,6 +609,21 @@ class TaskRepository(
     //  Task helpers
     // ────────────────────────────────────────────────────────
 
+    /**
+     * Reescribe TODOS los campos editables de una tarea (a diferencia de
+     * [updateSubtasks]/[updateAssignmentRotation], que solo tocan un campo).
+     * Recalcula `nextDueAt` con [computeNextDueAt] anclado en
+     * [lastCompletedDate] (o `now` si nunca se completó, igual que
+     * [createTask]) para que editar un campo no relacionado con la
+     * recurrencia (p.ej. el título) no adelante/atrase la fecha límite
+     * pendiente. Los campos "borrables" (`recurrenceDay`, penalización,
+     * `nextDueAt`) usan `NULL_VALUE` explícito vía [penaltyFieldsOrClear]/
+     * [nextDueAtField] en vez de omitirse, para limpiar un valor previo si el
+     * usuario lo quitó en este edit. Devuelve el `nextDueAt` recalculado (lo
+     * usa el caller — ver [org.taskhub.ui.models.TaskScreenModel.updateTask] —
+     * como `dueDate` de las asignaciones de una tarea recurrente sin fecha
+     * límite manual).
+     */
     suspend fun updateTask(
         householdId: String,
         taskId: String,

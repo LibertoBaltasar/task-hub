@@ -1,3 +1,5 @@
+// Constantes e interruptor de AdMob (interstitial/banner) para la app.
+// Consumido por [BannerAd] y por `AdController.android.kt`.
 package org.taskhub.ads
 
 /**

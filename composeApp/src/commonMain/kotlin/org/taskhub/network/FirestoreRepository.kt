@@ -1,3 +1,8 @@
+// Fachada de acceso a Firestore vía REST (ver `docs/refactor-arquitectura-2026-08-31.md`):
+// delega la mayor parte del CRUD por dominio en los repos de
+// `HouseholdRepository`/`MemberRepository`/`TaskRepository`/`NotificationRepository`/
+// `RewardsRepository`, y conserva aquí solo la orquestación que toca más de un
+// dominio a la vez (p.ej. completar una tarea otorga puntos a un miembro).
 package org.taskhub.network
 
 import io.ktor.client.*
@@ -64,6 +69,16 @@ private const val MAX_CONCURRENT_DELETES = 20
  * Uses Firebase Anonymous Auth for write access.
  * The API key alone only allows reads — writes require a Bearer token.
  * Anonymous Auth requires zero user interaction (no Google Sign-In, no UI).
+ *
+ * Construcción de rutas: todas las URLs son concatenaciones directas sobre
+ * [baseUrl] (= `firestoreBaseUrl(projectId)`, el endpoint REST de la base de
+ * datos) siguiendo la jerarquía real de Firestore, p.ej.
+ * `$baseUrl/households/{id}` para un hogar y
+ * `$baseUrl/households/{id}/tasks/{taskId}/assignments/{assignmentId}` para
+ * una asignación — no hay una capa de "query builder" intermedia. Los repos
+ * de dominio inyectados ([taskRepository], [householdRepository]...) reciben
+ * ese mismo [baseUrl] ya resuelto y construyen sus propias rutas con el mismo
+ * patrón.
  */
 class FirestoreRepository(
     private val projectId: String = DEFAULT_FIRESTORE_PROJECT_ID,
@@ -269,8 +284,20 @@ class FirestoreRepository(
     }
 
     /**
-     * Quick connectivity check — HEAD request to Firestore REST API.
-     * Returns true if the network is reachable, false otherwise.
+     * Sonda de alcanzabilidad: pide un documento que se sabe que NO existe
+     * (`households/__ping__`) solo para comprobar si el dispositivo llega a
+     * Firestore, sin depender de tener un hogar real ni de estar
+     * autenticado (usa la API key, no auth).
+     *
+     * El resultado esperado de esa petición es un 404 ("documento no
+     * encontrado") — o un 403 si las reglas de seguridad lo bloquean antes de
+     * comprobar existencia — y ambos cuentan como "hay red": Firestore tuvo
+     * que responder con un status HTTP real, lo que solo pasa si la conexión
+     * llegó al servidor. Por eso [FirestoreException] (cualquier respuesta
+     * HTTP de Firestore, sea cual sea el código) se trata como éxito aquí, y
+     * solo un fallo de TRANSPORTE (timeout, DNS, sin conexión — una excepción
+     * que ni siquiera llega a convertirse en [FirestoreException]) se
+     * interpreta como offline.
      */
     suspend fun isOnline(): Boolean {
         return try {

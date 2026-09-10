@@ -1,3 +1,5 @@
+// Implementación Android de `shouldReduceMotion` (expect/actual multiplatform):
+// respeta la preferencia de accesibilidad del sistema para desactivar animaciones.
 package org.taskhub.ui.components
 
 import android.provider.Settings
