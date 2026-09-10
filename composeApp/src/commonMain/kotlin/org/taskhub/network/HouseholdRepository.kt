@@ -52,6 +52,18 @@ class HouseholdRepository(
     private val notificationRepository: NotificationRepository,
     private val settingsStore: SettingsStore
 ) {
+
+    /**
+     * Lanzada por [joinHousehold] cuando el código de invitación no resuelve
+     * a ningún hogar. Tipada (en vez de un `IllegalStateException` con texto
+     * fijo en español) para que el catch del ScreenModel pueda mapearla a
+     * `AppStrings` por tipo — antes `e.message` nunca era null, así que el
+     * fallback de i18n del catch nunca se usaba y un usuario con la app en
+     * otro idioma veía el texto en español en el flujo de onboarding más
+     * común de la app (panel de revisión 2026-09-10, Experto 2, IMPORTANTE,
+     * NUEVO).
+     */
+    class InvalidInviteCodeException(message: String) : Exception(message)
     private val client = firestoreClient.client
 
     private suspend fun HttpRequestBuilder.withAuth() = with(firestoreClient) { withAuth() }
@@ -269,7 +281,14 @@ class HouseholdRepository(
         val survivorIds = survivorList.map { it.id }.toSet()
         val prunedIds = saved.filter { it.id !in survivorIds }.map { it.id }
         if (prunedIds.isNotEmpty()) {
-            store.replaceSavedHouseholds(survivorList)
+            // Releer justo antes de escribir en vez de reusar `saved` (foto
+            // de antes del `awaitAll` de red): si durante esa ventana el
+            // usuario abandonó un hogar a mano (leaveHousehold, que escribe
+            // directo al store), sobrescribir con la foto vieja lo
+            // resucitaba (panel de revisión 2026-09-10, arrastrado desde la
+            // auditoría 2026-09-06, hallazgo crítico #4).
+            val current = store.getSavedHouseholds()
+            store.replaceSavedHouseholds(current.filter { it.id !in prunedIds })
             prunedIds.forEach { taskCache.clearHousehold(it) }
         }
         return survivorList
@@ -326,7 +345,7 @@ class HouseholdRepository(
         }.body()
 
         val householdId = inviteResponse.fields["householdId"]?.stringValue
-            ?: throw IllegalStateException("Código de invitación inválido")
+            ?: throw InvalidInviteCodeException("Código de invitación inválido")
 
         // 2) Leer el hogar por su ID.
         return getHousehold(householdId)

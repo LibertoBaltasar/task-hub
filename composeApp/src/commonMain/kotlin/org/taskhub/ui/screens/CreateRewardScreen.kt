@@ -8,6 +8,7 @@ package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -21,6 +22,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
@@ -225,9 +227,20 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         modifier = Modifier.fillMaxWidth().onFocusChanged { if (!it.isFocused) costTouched = true },
                         singleLine = true,
                         prefix = { Text("⭐ ") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         isError = costTouched && (costText.toIntOrNull() ?: 0) <= 0,
                         supportingText = {
-                            if (costTouched && (costText.toIntOrNull() ?: 0) <= 0) Text(s("create_task_points_error_positive"))
+                            // Antes solo había mensaje para el caso de error;
+                            // una tecla no numérica se descartaba en silencio
+                            // (`onValueChange` la filtra) sin ningún feedback
+                            // — un hint fijo aclara por qué no aparece lo que
+                            // se tecleó (panel v7 2026-09-10, Exp. 5, MENOR,
+                            // SIGUE ABIERTO).
+                            if (costTouched && (costText.toIntOrNull() ?: 0) <= 0) {
+                                Text(s("create_task_points_error_positive"))
+                            } else {
+                                Text(s("create_reward_cost_hint"))
+                            }
                         },
                         colors = taskHubTextFieldColors()
                     )

@@ -571,6 +571,8 @@ class TaskScreenModel(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) { }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _undoState.value = null
                 if (e is FirestoreRepository.TaskCompletionConflictException) {

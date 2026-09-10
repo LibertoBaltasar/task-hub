@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -811,7 +812,9 @@ private fun TaskCard(
                 scaleY = cardScale
                 alpha = cardAlpha
             }
-            .clickable(enabled = !isCompleting, onClick = onClick),
+            // role = Button: semántica estructurada para TalkBack/VoiceOver
+            // (panel v7 2026-09-10, Exp. 3, IMPORTANTE).
+            .clickable(enabled = !isCompleting, role = Role.Button, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (isDone) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 else MaterialTheme.colorScheme.surface

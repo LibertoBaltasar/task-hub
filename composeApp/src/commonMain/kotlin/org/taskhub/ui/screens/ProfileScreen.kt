@@ -9,6 +9,7 @@
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -194,7 +195,9 @@ private fun HouseholdProfileCard(
 
     Card(
         modifier = Modifier.fillMaxWidth().then(
-            if (onNavigate != null) Modifier.clickable { onNavigate() } else Modifier
+            // role = Button: sin esto, TalkBack leía la tarjeta como texto
+            // estático sin anunciar que es pulsable (panel 2026-09-11, MENOR).
+            if (onNavigate != null) Modifier.clickable(role = Role.Button) { onNavigate() } else Modifier
         ),
         colors = CardDefaults.cardColors(
             containerColor = color.copy(alpha = 0.08f)

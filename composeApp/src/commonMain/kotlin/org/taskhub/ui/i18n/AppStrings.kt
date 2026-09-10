@@ -141,6 +141,7 @@ object AppStrings {
             "household_share" to "📤 Compartir",
             "household_invite_title" to "Código de invitación",
             "household_qr_description" to "Código QR con el código de invitación %s",
+            "household_invite_card_description" to "Hogar %1\$s. Código de invitación %2\$s. Toca para ver el código QR",
             "household_share_message" to "Únete a mi espacio en Task Hub: %s. Descárgala en: https://play.google.com/store/apps/details?id=org.taskhub",
             "household_share_subject" to "Invitación a Task Hub",
             "household_view_tasks" to "📋 Ver Tareas",
@@ -234,6 +235,7 @@ object AppStrings {
             "transfer_error_self" to "No puedes hacerlo contigo mismo",
             "transfer_error_invalid_amount" to "Importe inválido",
             "transfer_error_member_not_found" to "Miembro no encontrado",
+            "transfer_error_failed" to "No se pudo completar la transferencia. Tus puntos no se han visto afectados.",
             "appreciate_error_limit" to "Límite semanal alcanzado",
             "donate_error_insufficient_balance" to "Saldo insuficiente",
 
@@ -426,6 +428,7 @@ object AppStrings {
             "create_reward_description_label" to "Descripción (opcional)",
             "create_reward_description_placeholder" to "Elige cuándo y cómo se entrega...",
             "create_reward_cost_label" to "Coste en puntos",
+            "create_reward_cost_hint" to "Solo números",
             "create_reward_preview_label" to "Vista previa",
             "create_reward_submit" to "Crear Recompensa",
 
@@ -472,6 +475,7 @@ object AppStrings {
             // Calendario (CalendarScreen.kt)
             "calendar_toggle_month" to "Mes",
             "calendar_toggle_week" to "Semana",
+            "calendar_today" to "hoy",
             "calendar_prev_week" to "Semana anterior",
             "calendar_prev_month" to "Mes anterior",
             "calendar_next_week" to "Semana siguiente",
@@ -753,6 +757,7 @@ object AppStrings {
             "household_share" to "📤 Share",
             "household_invite_title" to "Invite code",
             "household_qr_description" to "QR code with the invite code %s",
+            "household_invite_card_description" to "Household %1\$s. Invite code %2\$s. Tap to see the QR code",
             "household_share_message" to "Join my space on Task Hub: %s. Download at: https://play.google.com/store/apps/details?id=org.taskhub",
             "household_share_subject" to "Task Hub Invitation",
             "household_view_tasks" to "📋 View Tasks",
@@ -846,6 +851,7 @@ object AppStrings {
             "transfer_error_self" to "You can't do this to yourself",
             "transfer_error_invalid_amount" to "Invalid amount",
             "transfer_error_member_not_found" to "Member not found",
+            "transfer_error_failed" to "The transfer couldn't be completed. Your points were not affected.",
             "appreciate_error_limit" to "Weekly limit reached",
             "donate_error_insufficient_balance" to "Insufficient balance",
 
@@ -1028,6 +1034,7 @@ object AppStrings {
             "create_reward_description_label" to "Description (optional)",
             "create_reward_description_placeholder" to "Choose when and how it's delivered...",
             "create_reward_cost_label" to "Cost in points",
+            "create_reward_cost_hint" to "Numbers only",
             "create_reward_preview_label" to "Preview",
             "create_reward_submit" to "Create Reward",
 
@@ -1074,6 +1081,7 @@ object AppStrings {
             // Calendar (CalendarScreen.kt)
             "calendar_toggle_month" to "Month",
             "calendar_toggle_week" to "Week",
+            "calendar_today" to "today",
             "calendar_prev_week" to "Previous week",
             "calendar_prev_month" to "Previous month",
             "calendar_next_week" to "Next week",

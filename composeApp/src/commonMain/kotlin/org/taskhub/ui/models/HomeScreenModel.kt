@@ -150,9 +150,16 @@ class HomeScreenModel(
      * Antes esa sección inyectaba [FirestoreRepository] directamente y hacía
      * su propio fetch en un `LaunchedEffect`, sin pasar por ningún ScreenModel
      * — el único sitio del árbol con ese patrón (panel v7, #15).
+     *
+     * Usa [isPending] (misma regla que [loadAllTasks]) en vez de mirar solo
+     * `lastCompletedDate == null` — antes del fix (panel 2026-09-11) una
+     * tarea recurrente ya completada alguna vez (p. ej. diaria, completada
+     * ayer) nunca volvía a aparecer aquí aunque hoy tocara de nuevo, aun
+     * cuando sí aparecía correctamente en el dashboard agregado de
+     * [loadAllTasks] — dos definiciones de "pendiente" que divergían.
      */
     private fun previewFilter(tasks: List<TaskResponse>): List<TaskResponse> =
-        tasks.filter { it.lastCompletedDate == null || it.lastCompletedDate == 0L }.take(5)
+        tasks.filter { isPending(it) }.take(5)
 
     fun loadHouseholdPreview(householdId: String) {
         screenModelScope.launch {

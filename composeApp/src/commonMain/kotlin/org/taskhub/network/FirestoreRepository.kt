@@ -931,6 +931,17 @@ class FirestoreRepository(
     class AssignmentCompletionConflictException(message: String) : Exception(message)
 
     /**
+     * Lanzada por [redeemReward] cuando el saldo del miembro ya no alcanza
+     * para el coste de la recompensa. Tipada (en vez de un `IllegalStateException`
+     * con texto fijo en español) para que el catch del ScreenModel pueda
+     * mapearla a `AppStrings` por tipo — antes `e.message` nunca era null, así
+     * que el fallback de i18n del catch nunca se usaba y un usuario con la
+     * app en otro idioma veía el texto en español (panel de revisión
+     * 2026-09-10, Experto 2, IMPORTANTE, NUEVO).
+     */
+    class InsufficientBalanceException(message: String) : Exception(message)
+
+    /**
      * Mark a task as completed today. Sets lastCompletedDate, awards points
      * (con penalización por retraso si `task.nextDueAt`/`dueDate`/`penaltyMode`
      * aplican — ver [resolveCompletionOutcome]), records history, sincroniza la
@@ -1983,7 +1994,7 @@ class FirestoreRepository(
         val member = getMembers(householdId).find { it.id == memberId }
             ?: throw IllegalStateException("Miembro no encontrado")
         if (member.totalPoints < pointsSpent) {
-            throw IllegalStateException("Saldo insuficiente para canjear esta recompensa")
+            throw InsufficientBalanceException("Saldo insuficiente para canjear esta recompensa")
         }
 
         // 1. Guardar primero el registro de canje: si el paso 2 (descontar

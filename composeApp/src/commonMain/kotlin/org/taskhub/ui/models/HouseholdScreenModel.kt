@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import org.taskhub.network.FIRESTORE_GONE_MESSAGE
 import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.HouseholdRepository
 import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MemberResponse
@@ -126,6 +127,12 @@ class HouseholdScreenModel(
                 buzz(HapticKind.SUCCESS)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: HouseholdRepository.InvalidInviteCodeException) {
+                // Por tipo, no por e.message (fijo en español desde el repo,
+                // nunca null) — panel de revisión 2026-09-10, Experto 2,
+                // IMPORTANTE.
+                _uiState.value = HouseholdUiState.Error(s("household_error_invalid_invite_code"))
+                buzz(HapticKind.ERROR)
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
                     e.message ?: s("household_error_invalid_invite_code")

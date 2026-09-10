@@ -138,8 +138,13 @@ class StatsScreenModel(
  * tasa de puntualidad. Racha actual/mejor racha se leen directamente de
  * [member] (ya mantenidas por [TaskScreenModel] al completar tareas), no se
  * recalculan aquí.
+ *
+ * `internal` (no `private`) para poder testearla directamente desde
+ * `commonTest` sin mocks de red — el doble conteo (panel 2026-09-06/09-10)
+ * estuvo abierto en producción varios días porque, siendo `private`, no había
+ * forma de escribirle un test de regresión (panel 2026-09-11).
  */
-private fun computeStats(
+internal fun computeStats(
     tasks: List<TaskResponse>,
     assignments: List<TaskAssignmentResponse>,
     history: List<TaskHistoryResponse>,

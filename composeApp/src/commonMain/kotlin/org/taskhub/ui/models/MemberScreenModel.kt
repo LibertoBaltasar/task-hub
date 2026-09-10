@@ -318,6 +318,13 @@ class MemberScreenModel(
                 loadMembers(householdId)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: FirestoreRepository.InsufficientBalanceException) {
+                // Por tipo, no por e.message (que viene fijo en español desde
+                // el repo y nunca es null, así que el fallback de i18n de
+                // abajo nunca se disparaba) — panel de revisión 2026-09-10,
+                // Experto 2, IMPORTANTE.
+                _rewardActionState.value = RewardActionState.Error(s("member_reward_insufficient"))
+                buzz(HapticKind.ERROR)
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
                     e.message ?: s("reward_error_redeeming")
@@ -404,6 +411,7 @@ class MemberScreenModel(
         MemberRepository.AppreciateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
         MemberRepository.AppreciateErrorReason.LIMIT_EXCEEDED -> "appreciate_error_limit"
         MemberRepository.AppreciateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
+        MemberRepository.AppreciateErrorReason.TRANSFER_FAILED -> "transfer_error_failed"
     }
 
     /** Traduce el motivo de fallo de "donar" a una clave de i18n. */
@@ -412,5 +420,6 @@ class MemberScreenModel(
         MemberRepository.DonateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
         MemberRepository.DonateErrorReason.INSUFFICIENT_BALANCE -> "donate_error_insufficient_balance"
         MemberRepository.DonateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
+        MemberRepository.DonateErrorReason.TRANSFER_FAILED -> "transfer_error_failed"
     }
 }

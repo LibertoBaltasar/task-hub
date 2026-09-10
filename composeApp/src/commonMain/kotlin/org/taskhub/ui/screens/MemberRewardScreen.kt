@@ -71,6 +71,12 @@ data class MemberRewardScreen(
             else -> null
         }
 
+        // Mientras memberState no ha llegado a Success (primer frame tras
+        // navegar a esta pantalla), currentMember es null y memberPoints cae
+        // a 0 — sin distinguir este caso, el botón mostraba "Puntos
+        // insuficientes" aunque el usuario sí tuviera saldo (panel v7
+        // 2026-09-10, Exp. 5, MENOR, SIGUE ABIERTO).
+        val isLoadingMember = memberState !is MemberUiState.Success
         val memberPoints = currentMember?.totalPoints ?: 0
         val canAfford = memberPoints >= reward.cost
 
@@ -212,15 +218,18 @@ data class MemberRewardScreen(
                     Button(
                         onClick = { showConfirmDialog = true },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = canAfford && !isRedeeming,
+                        enabled = canAfford && !isRedeeming && !isLoadingMember,
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
                         shape = MaterialTheme.shapes.large,
                         contentPadding = PaddingValues(16.dp)
                     ) {
-                        if (isRedeeming) {
+                        if (isRedeeming || isLoadingMember) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                // El botón usa containerColor = tertiary; onPrimary
+                                // desentonaba en modo oscuro (panel v7 2026-09-10,
+                                // Exp. 1/4, MENOR-IMPORTANTE, SIGUE ABIERTO).
+                                color = MaterialTheme.colorScheme.onTertiary,
                                 strokeWidth = 2.dp
                             )
                         } else {

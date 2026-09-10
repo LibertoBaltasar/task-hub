@@ -523,7 +523,7 @@ class MemberRepository(
     }
 
     /** Motivos por los que [appreciateMember] puede rechazar la operación sin lanzar. */
-    enum class AppreciateErrorReason { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED, MEMBER_NOT_FOUND }
+    enum class AppreciateErrorReason { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED, MEMBER_NOT_FOUND, TRANSFER_FAILED }
 
     /** Traduce el error de dominio (sin dependencias de red) de [PointsRules] al tipo público de este repo. */
     private fun PointsRules.AppreciateError.toRepoReason(): AppreciateErrorReason = when (this) {
@@ -539,7 +539,7 @@ class MemberRepository(
     }
 
     /** Motivos por los que [donatePoints] puede rechazar la operación sin lanzar. */
-    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND }
+    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND, TRANSFER_FAILED }
 
     /** Traduce el error de dominio (sin dependencias de red) de [PointsRules] al tipo público de este repo. */
     private fun PointsRules.DonateError.toRepoReason(): DonateErrorReason = when (this) {
@@ -617,7 +617,21 @@ class MemberRepository(
                 }
                 taskCache.clearMembers(householdId)
                 // Acuñar: el receptor gana puntos sin que se le resten al que agradece.
-                addMemberPoints(householdId, toMemberId, amount)
+                // Envuelto en try/catch: si `toMemberId` no es el propio emisor y
+                // este no es isTrusted(hid), firestore.rules rechaza el PATCH al
+                // documento ajeno (403) — sin capturar, esa excepción se propagaba
+                // sin control fuera de este bloque (panel de revisión 2026-09-10,
+                // Experto 9, CRÍTICO). El presupuesto ya consumido no se revierte
+                // a propósito (ver comentario de la función): es preferible que el
+                // emisor pierda parte de su cupo semanal, recuperable la semana
+                // siguiente, a reabrir la carrera que el orden actual evita.
+                try {
+                    addMemberPoints(householdId, toMemberId, amount)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    return AppreciateResult.Error(AppreciateErrorReason.TRANSFER_FAILED)
+                }
                 return AppreciateResult.Ok(
                     remaining = PointsRules.WEEKLY_APPRECIATION_BUDGET - newGiven,
                     receptorNewTotal = toMember.totalPoints + amount
@@ -660,7 +674,25 @@ class MemberRepository(
         // camino, el peor caso es que los puntos "desaparezcan" (recuperable
         // reintentando la donación), nunca que se dupliquen de la nada.
         addMemberPoints(householdId, fromMemberId, -amount)
-        addMemberPoints(householdId, toMemberId, amount)
+        try {
+            addMemberPoints(householdId, toMemberId, amount)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Si `toMemberId` no es el propio donante y este no es
+            // isTrusted(hid), firestore.rules rechaza el PATCH al documento
+            // ajeno (403) — sin este catch, la excepción se propagaba sin
+            // control y los puntos ya restados al donante desaparecían sin
+            // acreditarse a nadie (panel de revisión 2026-09-10, Experto 9,
+            // CRÍTICO). Revertimos el débito para dejar la operación sin
+            // efecto en vez de perder puntos.
+            try {
+                addMemberPoints(householdId, fromMemberId, amount)
+            } catch (e2: CancellationException) {
+                throw e2
+            } catch (_: Exception) { }
+            return DonateResult.Error(DonateErrorReason.TRANSFER_FAILED)
+        }
 
         return DonateResult.Ok(
             donorNewTotal = fromMember.totalPoints - amount,

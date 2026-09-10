@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -484,7 +485,9 @@ private fun DayColumn(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .clickable(onClick = onClick)
+            // role = Button: semántica estructurada para TalkBack/VoiceOver
+            // (panel v7 2026-09-10, Exp. 3, IMPORTANTE).
+            .clickable(role = Role.Button, onClick = onClick)
             .then(
                 if (isToday) Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
                 else Modifier
@@ -539,10 +542,33 @@ private fun MonthDayCell(
     isToday: Boolean,
     onClick: () -> Unit
 ) {
+    val appSettings = LocalAppSettings.current
+    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    val completedCount = entries.count { it.isCompleted }
+    val overdueCount = entries.count { it.isOverdue }
+    // Los indicadores de estado (puntos de color) son mudos para TalkBack y
+    // el número de día por sí solo no comunica cuántas tareas hay ni su
+    // estado — se resume aquí en una sola descripción (panel v7 2026-09-10,
+    // Exp. 3, IMPORTANTE, NUEVO).
+    val cellDescription = buildString {
+        append(date.dayOfMonth)
+        if (isToday) append(", ${s("calendar_today")}")
+        if (entries.isNotEmpty()) {
+            append(", ${entries.size}")
+            if (completedCount > 0) append(", $completedCount ${s("calendar_task_status_completed")}")
+            if (overdueCount > 0) append(", $overdueCount ${s("calendar_task_status_overdue")}")
+        } else {
+            append(", ${s("calendar_no_tasks_for_day")}")
+        }
+    }
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .clickable(onClick = onClick)
+            // role = Button + contentDescription resumida: sin esto, TalkBack
+            // solo leía el número de día, mudo respecto a las tareas del día
+            // (panel v7 2026-09-10, Exp. 3, IMPORTANTE, NUEVO).
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) { contentDescription = cellDescription }
             .then(
                 if (isToday) Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
                 else Modifier
@@ -708,7 +734,9 @@ private fun TaskPopupItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            // role = Button: semántica estructurada para TalkBack/VoiceOver
+            // (panel v7 2026-09-10, Exp. 3, IMPORTANTE).
+            .clickable(role = Role.Button, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )

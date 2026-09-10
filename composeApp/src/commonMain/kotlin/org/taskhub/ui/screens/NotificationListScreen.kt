@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -212,7 +213,9 @@ private fun NotificationCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        // role = Button: semántica estructurada para TalkBack/VoiceOver
+        // (panel v7 2026-09-10, Exp. 3, IMPORTANTE).
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (!notification.read)
                 MaterialTheme.colorScheme.primaryContainer

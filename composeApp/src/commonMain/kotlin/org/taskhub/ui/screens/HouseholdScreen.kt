@@ -18,6 +18,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -205,7 +208,15 @@ data class HouseholdScreen(val householdId: String) : Screen {
         LaunchedEffect(householdId) {
             householdModel.loadMessages(householdId)
             while (true) {
-                kotlinx.coroutines.delay(20_000L)
+                // 20s → 60s: getMessages trae la subcolección `messages`
+                // COMPLETA en cada tick (sin cursor/limit) — a 20s, un hogar
+                // con chat activo/antiguo disparaba varias recargas
+                // completas por minuto mientras la pantalla estuviera
+                // abierta. Mitigación de bajo riesgo; migrar a
+                // structuredQuery con paginación real sigue siendo la
+                // solución de fondo (panel de revisión 2026-09-10, Experto
+                // 11, IMPORTANTE, NUEVO).
+                kotlinx.coroutines.delay(60_000L)
                 householdModel.loadMessages(householdId)
             }
         }
@@ -442,7 +453,15 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { showQrDialog = true },
+                                            // role = Button + contentDescription: la tarjeta era muda
+                                            // para TalkBack (solo se leía el texto suelto, sin indicar
+                                            // que es pulsable ni qué hace) — panel 2026-09-11, IMPORTANTE.
+                                            .clickable(role = Role.Button) { showQrDialog = true }
+                                            .semantics(mergeDescendants = true) {
+                                                contentDescription = s("household_invite_card_description")
+                                                    .replace("%1\$s", household.name)
+                                                    .replace("%2\$s", household.inviteCode)
+                                            },
                                         colors = CardDefaults.cardColors(
                                             containerColor = MaterialTheme.colorScheme.primaryContainer
                                         )

@@ -268,8 +268,12 @@ class FirestoreClient(
      * [ensureAuth]. Lo usa [FirestoreRepository.signInWithGoogle] tras
      * intercambiar el idToken de Google por uno de Firebase — ese flujo no es
      * "asegurar" un token existente sino sustituirlo por uno nuevo de sesión.
+     * Protegido por [authMutex] igual que el resto de escrituras de estos 3
+     * campos: sin el lock, una corrutina en medio de [ensureAuth] podía leer
+     * una combinación a medio escribir de token/uid/expiry (panel de revisión
+     * 2026-09-10, Experto 6, NUEVO).
      */
-    fun setAuthState(idToken: String, localId: String, expiry: Long) {
+    suspend fun setAuthState(idToken: String, localId: String, expiry: Long) = authMutex.withLock {
         bearerToken = idToken
         cachedLocalId = localId
         tokenExpiry = expiry

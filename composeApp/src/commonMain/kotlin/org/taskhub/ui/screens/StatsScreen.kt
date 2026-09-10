@@ -318,6 +318,10 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
             val textMeasurer = rememberTextMeasurer()
             val lineColor = MaterialTheme.colorScheme.tertiary
             val pointColor = MaterialTheme.colorScheme.tertiary
+            // "Agujero" del punto: antes Color.White fijo, se veía como un
+            // punto blanco incrustado sobre la card oscura en modo oscuro
+            // (panel v7 2026-09-10, Exp. 1/4, MENOR, SIGUE ABIERTO).
+            val surfaceColor = MaterialTheme.colorScheme.surface
             val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
             val chartDescription = remember(dailyPoints) {
                 dailyPoints.joinToString(", ") { "${it.dayLabel}: ${it.points}" }
@@ -357,7 +361,7 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
                 // Draw points
                 points.forEach { point ->
                     drawCircle(color = pointColor, radius = 5f, center = point)
-                    drawCircle(color = Color.White, radius = 3f, center = point)
+                    drawCircle(color = surfaceColor, radius = 3f, center = point)
                 }
 
                 // Labels

@@ -20,10 +20,12 @@ import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.appupdate.AppUpdateOptions
 import com.google.android.play.core.install.model.AppUpdateType
 import com.google.android.play.core.install.model.UpdateAvailability
+import com.russhwolf.settings.Settings
 import org.taskhub.platform.AndroidNotificationScheduler
 import org.taskhub.platform.AndroidSchedulerHolder
 import org.taskhub.platform.AndroidContextHolder
 import org.taskhub.platform.DebugFlags
+import org.taskhub.storage.HouseholdStore
 import org.taskhub.BuildConfig
 
 /**
@@ -68,9 +70,25 @@ class MainActivity : ComponentActivity() {
      * viva, reutilizada por `FLAG_ACTIVITY_CLEAR_TOP`).
      */
     private fun consumeDeepLink(intent: Intent?) {
-        deepLinkHouseholdId = intent?.getStringExtra("householdId")?.ifBlank { null }
-        deepLinkTaskId = intent?.getStringExtra("taskId")
-        deepLinkNotificationId = intent?.getStringExtra("notificationId")
+        val householdId = intent?.getStringExtra("householdId")?.ifBlank { null }
+        // MainActivity es `exported` (obligatorio por el intent-filter
+        // LAUNCHER) sin comprobación de firmante: cualquier app instalada en
+        // el dispositivo puede lanzar un Intent explícito con extras
+        // arbitrarios. Antes de confiar en ellos, comprobamos que el hogar
+        // corresponde a uno que este dispositivo ya conoce — un deep link
+        // legítimo (notificación propia) siempre apunta a un hogar guardado
+        // localmente (panel de revisión 2026-09-10, Experto 9, MENOR).
+        val isKnownHousehold = householdId != null &&
+            HouseholdStore(Settings()).getSavedHouseholds().any { it.id == householdId }
+        if (isKnownHousehold) {
+            deepLinkHouseholdId = householdId
+            deepLinkTaskId = intent?.getStringExtra("taskId")
+            deepLinkNotificationId = intent?.getStringExtra("notificationId")
+        } else {
+            deepLinkHouseholdId = null
+            deepLinkTaskId = null
+            deepLinkNotificationId = null
+        }
     }
 
     /**
