@@ -18,6 +18,7 @@ class SecureStoreJvmTest {
 
     private val rawPrefs = Preferences.userRoot().node("org/taskhub/secure")
 
+    /** Un ciphertext manipulado (tag GCM roto) hace fallar el descifrado real; `getString` lo atrapa y devuelve `null` en vez de propagar la excepción. */
     @Test
     fun get_withCorruptedCiphertext_returnsNullInsteadOfThrowing() {
         val store = createSecureStore()
@@ -35,6 +36,7 @@ class SecureStoreJvmTest {
         rawPrefs.remove(key)
     }
 
+    /** Un valor que ni siquiera es Base64 válido también falla limpio: `null`, no excepción. */
     @Test
     fun get_withNonBase64Garbage_returnsNullInsteadOfThrowing() {
         val store = createSecureStore()

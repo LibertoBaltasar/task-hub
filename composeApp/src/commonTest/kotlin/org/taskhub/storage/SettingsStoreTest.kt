@@ -27,6 +27,7 @@ class SettingsStoreTest {
 
     // ── getGoogleRefreshToken — migración de token legado ──────────
 
+    /** Un token legado en texto plano (Settings) se migra a [SecureStore] y se borra del origen. */
     @Test
     fun getGoogleRefreshToken_migratesLegacyPlainTextToken_toSecureStore() {
         val settings = FakeSettings(mutableMapOf(keyGoogleRefreshToken to "legacy-google-token"))
@@ -39,6 +40,7 @@ class SettingsStoreTest {
         assertNull(settings.getStringOrNull(keyGoogleRefreshToken)) // el original se borra tras migrar
     }
 
+    /** Si el token ya vive en [SecureStore], se usa directamente sin volver a tocar Settings. */
     @Test
     fun getGoogleRefreshToken_alreadyMigrated_prefersSecureStoreWithoutTouchingSettings() {
         val settings = FakeSettings()
@@ -50,6 +52,7 @@ class SettingsStoreTest {
         assertNull(settings.getStringOrNull(keyGoogleRefreshToken)) // no hubo migración: settings sigue vacío
     }
 
+    /** Sin token en ningún sitio, devuelve `null` y no escribe nada en [SecureStore]. */
     @Test
     fun getGoogleRefreshToken_noValueAnywhere_returnsNullWithoutSideEffects() {
         val settings = FakeSettings()
@@ -61,6 +64,7 @@ class SettingsStoreTest {
         assertEquals(0, secureStore.size)
     }
 
+    /** Si [SecureStore] no puede leerse (p.ej. clave rotada), cae de vuelta al valor legado en texto plano. */
     @Test
     fun getGoogleRefreshToken_secureStoreCannotBeRead_fallsBackSilentlyToLegacyValue() {
         // Simula un valor cifrado ilegible (p.ej. clave rotada/corrupta): la
@@ -77,6 +81,7 @@ class SettingsStoreTest {
         assertEquals("legacy-fallback-token", token)
     }
 
+    /** Si [SecureStore] falla Y tampoco hay valor legado, devuelve `null` sin lanzar. */
     @Test
     fun getGoogleRefreshToken_secureStoreCannotBeRead_andNoLegacyValue_returnsNullSilently() {
         val settings = FakeSettings()
@@ -89,6 +94,7 @@ class SettingsStoreTest {
 
     // ── getAnonymousRefreshToken — mismo mecanismo, distinta key ──
 
+    /** Mismo mecanismo de migración que el token de Google, pero con la key del token anónimo. */
     @Test
     fun getAnonymousRefreshToken_migratesLegacyPlainTextToken_toSecureStore() {
         val settings = FakeSettings(mutableMapOf(keyAnonRefreshToken to "legacy-anon-token"))
@@ -101,6 +107,7 @@ class SettingsStoreTest {
         assertNull(settings.getStringOrNull(keyAnonRefreshToken))
     }
 
+    /** Sin token anónimo en ningún sitio, devuelve `null`. */
     @Test
     fun getAnonymousRefreshToken_noValueAnywhere_returnsNull() {
         val settings = FakeSettings()
@@ -111,6 +118,7 @@ class SettingsStoreTest {
 
     // ── getCalendarId/setCalendarId — mapa por hogar (panel v7, #30) ──
 
+    /** Un hogar sin `calendarId` guardado devuelve `null`. */
     @Test
     fun getCalendarId_withoutSetCalendarId_returnsNull() {
         val store = store(FakeSettings(), FakeSecureStore())
@@ -118,6 +126,7 @@ class SettingsStoreTest {
         assertNull(store.getCalendarId("household-1"))
     }
 
+    /** El `calendarId` guardado con [SettingsStore.setCalendarId] se recupera igual con [SettingsStore.getCalendarId]. */
     @Test
     fun setCalendarId_thenGetCalendarId_returnsSameValue() {
         val store = store(FakeSettings(), FakeSecureStore())
@@ -127,6 +136,7 @@ class SettingsStoreTest {
         assertEquals("calendar-abc", store.getCalendarId("household-1"))
     }
 
+    /** El `calendarId` se guarda en un mapa por hogar: fijarlo en uno no afecta al de otro. */
     @Test
     fun setCalendarId_forMultipleHouseholds_keepsThemIndependent() {
         val store = store(FakeSettings(), FakeSecureStore())
@@ -138,6 +148,7 @@ class SettingsStoreTest {
         assertEquals("calendar-xyz", store.getCalendarId("household-2"))
     }
 
+    /** Fijar un nuevo `calendarId` para el mismo hogar reemplaza al anterior. */
     @Test
     fun setCalendarId_overwritesPreviousValueForSameHousehold() {
         val store = store(FakeSettings(), FakeSecureStore())
@@ -148,6 +159,7 @@ class SettingsStoreTest {
         assertEquals("calendar-new", store.getCalendarId("household-1"))
     }
 
+    /** Un JSON corrupto en el mapa de calendarIds (dato de una versión incompatible) no rompe la lectura: devuelve `null`. */
     @Test
     fun getCalendarId_withCorruptedStoredJson_returnsNullInsteadOfThrowing() {
         // Simula un valor corrupto (p. ej. escrito por una versión anterior
