@@ -1,3 +1,11 @@
+/**
+ * ScreenModel de gestión de hogares: crear/unirse/cargar/abandonar/borrar un
+ * hogar y el chat de mensajes del hogar. Lo usan [org.taskhub.ui.screens.HouseholdScreen],
+ * [org.taskhub.ui.screens.CreateHouseholdScreen] y [org.taskhub.ui.screens.JoinHouseholdScreen].
+ * Tras cualquier cambio en la membresía persiste el hogar en
+ * [HouseholdStore] (caché local) y sincroniza la lista en la nube vía
+ * [GoogleAuthManager.syncHouseholdsToCloud].
+ */
 package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel
@@ -21,6 +29,7 @@ import org.taskhub.platform.logAnalyticsEvent
 import org.taskhub.platform.vibrate
 import org.taskhub.ui.i18n.AppStrings
 
+/** Estados de carga/creación/unión a un hogar. */
 sealed class HouseholdUiState {
     data object Idle : HouseholdUiState()
     data object Loading : HouseholdUiState()
@@ -34,6 +43,7 @@ sealed class HouseholdUiState {
     data class Error(val message: String, val removable: Boolean = false) : HouseholdUiState()
 }
 
+/** Estados de carga del chat de mensajes del hogar. */
 sealed class MessagesUiState {
     data object Idle : MessagesUiState()
     data object Loading : MessagesUiState()
@@ -41,6 +51,11 @@ sealed class MessagesUiState {
     data class Error(val message: String) : MessagesUiState()
 }
 
+/**
+ * ScreenModel de un hogar concreto: expone [uiState] ([HouseholdUiState])
+ * para crear/unirse/cargar/abandonar/borrar y [messagesUiState] para el
+ * chat del hogar.
+ */
 class HouseholdScreenModel(
     private val repo: FirestoreRepository,
     private val householdStore: HouseholdStore,
@@ -63,6 +78,7 @@ class HouseholdScreenModel(
     /** Ver [FirestoreRepository.appreciationRemaining]. */
     fun appreciationRemaining(member: MemberResponse): Int = repo.appreciationRemaining(member)
 
+    /** Crea un hogar nuevo con [name] y lo guarda como hogar actual del usuario. */
     fun createHousehold(name: String) {
         screenModelScope.launch {
             _uiState.value = HouseholdUiState.Loading
@@ -84,6 +100,12 @@ class HouseholdScreenModel(
         }
     }
 
+    /**
+     * Se une a un hogar existente mediante [inviteCode]. Si el usuario ya era
+     * miembro (con cualquiera de sus identidades: anónima o Google) no
+     * vuelve a crear perfil, solo emite [HouseholdUiState.AlreadyMember]
+     * para que la UI navegue directo al hogar sin duplicar el alta.
+     */
     fun joinHousehold(inviteCode: String) {
         screenModelScope.launch {
             _uiState.value = HouseholdUiState.Loading
@@ -113,6 +135,11 @@ class HouseholdScreenModel(
         }
     }
 
+    /**
+     * Carga los datos de un hogar por [id]. Si Firestore responde 404/403
+     * (hogar borrado o sin acceso), marca el error como `removable` para que
+     * la UI ofrezca quitarlo de la lista local en vez de solo "reintentar".
+     */
     fun loadHousehold(id: String) {
         screenModelScope.launch {
             _uiState.value = HouseholdUiState.Loading
@@ -143,10 +170,12 @@ class HouseholdScreenModel(
         householdStore.removeHousehold(householdId)
     }
 
+    /** Vuelve [uiState] a [HouseholdUiState.Idle]. */
     fun reset() {
         _uiState.value = HouseholdUiState.Idle
     }
 
+    /** Borra el hogar [householdId] en cascada (solo el owner puede hacerlo, ver `firestore.rules`). */
     fun deleteHousehold(
         householdId: String,
         onSuccess: () -> Unit,
@@ -168,6 +197,7 @@ class HouseholdScreenModel(
         }
     }
 
+    /** El usuario actual abandona el hogar [householdId] (borra su propio miembro, no el hogar). */
     fun leaveHousehold(
         householdId: String,
         onSuccess: () -> Unit,
@@ -189,6 +219,7 @@ class HouseholdScreenModel(
         }
     }
 
+    /** ID local (anónimo) del usuario actual, independiente de si hay sesión de Google. */
     fun getLocalId(): String? = repo.getLocalId()
 
     // ── Chat de mensajes ──
@@ -199,10 +230,12 @@ class HouseholdScreenModel(
     private val _newMessageText = MutableStateFlow("")
     val newMessageText: StateFlow<String> = _newMessageText.asStateFlow()
 
+    /** Actualiza el texto del campo de nuevo mensaje (estado del input, aún sin enviar). */
     fun updateNewMessageText(text: String) {
         _newMessageText.value = text
     }
 
+    /** Carga los mensajes del chat del hogar [householdId]. */
     fun loadMessages(householdId: String) {
         screenModelScope.launch {
             if (_messagesUiState.value !is MessagesUiState.Success) {
@@ -221,6 +254,12 @@ class HouseholdScreenModel(
         }
     }
 
+    /**
+     * Envía el mensaje pendiente en [newMessageText] al chat del hogar,
+     * firmado por [memberId]. Limpia el campo de texto de forma optimista
+     * ANTES de la llamada de red para que un doble tap en "Enviar" no lea el
+     * mismo texto dos veces y lo duplique.
+     */
     fun sendMessage(householdId: String, memberId: String) {
         val text = _newMessageText.value.trim()
         if (text.isEmpty() || memberId.isEmpty()) return

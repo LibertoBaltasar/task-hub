@@ -1,3 +1,11 @@
+/**
+ * Pantalla raíz de la app tras el login (landing page principal). Usa
+ * [org.taskhub.ui.models.HomeScreenModel] para cargar todos los hogares del
+ * usuario y una previsualización de tareas de cada uno; también observa
+ * [org.taskhub.ui.models.GoogleAuthManager] para el prompt de vincular cuenta
+ * Google. Navega a [ProfileScreen], [PersonalSpaceScreen], [HouseholdScreen],
+ * [CreateHouseholdScreen] y [JoinHouseholdScreen].
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility

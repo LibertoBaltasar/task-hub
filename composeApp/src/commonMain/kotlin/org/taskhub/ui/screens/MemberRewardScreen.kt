@@ -1,3 +1,9 @@
+/**
+ * Pantalla de detalle/canje de una recompensa concreta para un miembro. Lee
+ * los puntos actuales del miembro vía [org.taskhub.ui.models.MemberScreenModel]
+ * y delega el canje en ese mismo ScreenModel (`rewardActionState`). Se navega
+ * aquí desde [RewardListScreen] al tocar una recompensa.
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -24,6 +30,13 @@ import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.i18n.AppStrings
 
+/**
+ * Pantalla de canje de la recompensa [reward] para el miembro [memberId] del
+ * hogar [householdId]. Muestra coste vs. puntos disponibles del miembro y
+ * habilita el botón de canje solo si le alcanzan los puntos; pide
+ * confirmación con [DestructiveConfirmDialog] (no destructivo: solo descuenta
+ * puntos) antes de llamar a `redeemReward`.
+ */
 data class MemberRewardScreen(
     val householdId: String,
     val memberId: String,

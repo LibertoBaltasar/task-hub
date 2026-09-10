@@ -1,3 +1,10 @@
+/**
+ * Manager (no ScreenModel) inyectado como singleton en Koin que centraliza
+ * el login con Google/anónimo, la obtención de tokens OAuth de Calendar y el
+ * borrado de cuenta. Expone [GoogleAuthManager.state] ([GoogleAuthState]),
+ * observado por [org.taskhub.ui.screens.HomeScreen] y las pantallas de
+ * ajustes/perfil; [CalendarSyncManager] depende de él para los tokens.
+ */
 package org.taskhub.ui.models
 
 import kotlinx.coroutines.CancellationException

@@ -1,3 +1,11 @@
+/**
+ * Contenido de la pestaña de recompensas de un hogar (rejilla de canjeables
+ * + gestión admin). No es un [cafe.adriel.voyager.core.screen.Screen] propio:
+ * se embebe en la pantalla combinada del hogar (p.ej. [HouseholdScreen]) vía
+ * [RewardsBody], compartiendo el [org.taskhub.ui.models.MemberScreenModel]
+ * ya creado por el contenedor. Navega a [CreateRewardScreen] y
+ * [MemberRewardScreen].
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -31,7 +39,13 @@ import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardUiState
 import org.taskhub.ui.theme.*
 
-/** Contenido reutilizable de recompensas (sin barra superior), para la pantalla combinada. */
+/**
+ * Contenido reutilizable de recompensas (sin barra superior), para la
+ * pantalla combinada. Determina permisos de administración localmente
+ * (owner del hogar o rol "admin" entre los miembros) para mostrar el botón
+ * de crear y el de borrar por recompensa; los errores de acciones
+ * (borrar/canjear) se muestran vía snackbar en vez de bloquear la lista.
+ */
 @Composable
 internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
     val navigator = LocalNavigator.currentOrThrow
@@ -217,6 +231,11 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
     }
 }
 
+/**
+ * Tarjeta individual de recompensa en la rejilla. Muestra icono, título,
+ * descripción y coste; el botón de borrar solo aparece si [isAdmin] y pide
+ * confirmación antes de invocar [onDelete].
+ */
 @Composable
 private fun RewardCard(
     reward: RewardResponse,

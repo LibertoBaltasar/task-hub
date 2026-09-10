@@ -1,3 +1,12 @@
+/**
+ * Pantalla de detalle de una tarea: info, checklist de subtareas,
+ * asignaciones pendientes/completadas, estado de sincronización con Google
+ * Calendar y comentarios. Usa [org.taskhub.ui.models.TaskScreenModel] para
+ * completar/reasignar/borrar y [org.taskhub.ui.models.TaskCommentsScreenModel]
+ * para los comentarios. Se navega aquí desde las listas de tareas
+ * ([TaskListScreen], [CalendarScreen], [HomeScreen]); desde aquí se navega a
+ * [EditTaskScreen].
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -44,6 +53,13 @@ import org.taskhub.ui.theme.*
 //  TaskDetailScreen
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Pantalla de detalle de la tarea [taskId] dentro del hogar [householdId].
+ * Determina localmente si el usuario actual es admin/owner (necesario para
+ * habilitar reasignar quién completó la tarea, ya que eso mueve puntos entre
+ * miembros — restricción reflejada también en `firestore.rules`) y navega
+ * hacia atrás automáticamente al completar/borrar la tarea con éxito.
+ */
 data class TaskDetailScreen(
     val householdId: String,
     val taskId: String
@@ -271,6 +287,14 @@ data class TaskDetailScreen(
 //  TaskDetailContent (simplified — no instances)
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Cuerpo de la pantalla de detalle (contenido puro, sin acceder a
+ * ScreenModels): tarjeta de info de la tarea, estado de completado de hoy,
+ * sincronización con Calendar, checklist de subtareas, listas de
+ * asignaciones pendientes/completadas y sección de comentarios. Todas las
+ * acciones se exponen como callbacks para que [TaskDetailScreen] las conecte
+ * con los ScreenModels correspondientes.
+ */
 @Composable
 private fun TaskDetailContent(
     task: org.taskhub.network.models.TaskResponse,
@@ -997,6 +1021,12 @@ private fun CalendarSyncStatusCard(
 //  AssignmentCard
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Tarjeta de una asignación de tarea a un miembro concreto: avatar/rol,
+ * fecha límite (resaltada en rojo si está vencida y aún pendiente), insignia
+ * de obligatoria y, si ya está completada, puntos otorgados (con distinto
+ * color si fue a tiempo o con retraso/penalización).
+ */
 @Composable
 private fun AssignmentCard(
     assignment: TaskAssignmentResponse,

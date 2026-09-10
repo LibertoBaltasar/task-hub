@@ -1,3 +1,9 @@
+/**
+ * ScreenModel de [org.taskhub.ui.screens.HomeScreen]: agrega las tareas
+ * pendientes de todos los hogares del usuario (dashboard unificado), calcula
+ * la previsualización por hogar y mantiene el widget de Android sincronizado
+ * con la lista combinada de pendientes.
+ */
 package org.taskhub.ui.models
 
 import cafe.adriel.voyager.core.model.ScreenModel

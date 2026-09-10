@@ -1,3 +1,10 @@
+/**
+ * Contenido de la pestaña de estadísticas de un miembro (rachas, gráficas de
+ * tareas/puntos por día, distribución por etiqueta y logros). No es un
+ * `Screen` propio: se embebe en la pantalla combinada del hogar, comparte el
+ * [org.taskhub.ui.models.StatsScreenModel] creado por el contenedor y dibuja
+ * las gráficas a mano con `Canvas` (sin librería de gráficos externa).
+ */
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.Canvas
@@ -164,6 +171,7 @@ internal fun StatsBody(householdId: String, memberId: String, statsModel: StatsS
 
 // ── UI Components ──────────────────────────────────────────
 
+/** Tarjeta con racha actual y mejor racha (en días consecutivos). */
 @Composable
 private fun StreakCard(currentStreak: Int, bestStreak: Int) {
     val appSettings = LocalAppSettings.current
@@ -215,6 +223,7 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
     }
 }
 
+/** Gráfica de barras (tareas completadas por día) dibujada con [Canvas]. */
 @Composable
 private fun BarChartCard(title: String, data: List<DayCount>) {
     Card(
@@ -294,6 +303,7 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
     }
 }
 
+/** Gráfica de línea (puntos ganados por día) dibujada con [Canvas]. */
 @Composable
 private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
     Card(
@@ -370,6 +380,7 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
     }
 }
 
+/** Gráfica circular (distribución de tareas por etiqueta) con leyenda. */
 @Composable
 private fun PieChartCard(title: String, data: List<TagCount>) {
     Card(
@@ -452,6 +463,7 @@ private fun PieChartCard(title: String, data: List<TagCount>) {
     }
 }
 
+/** Tarjeta resumen con totales: tareas, puntos, % a tiempo y vencidas. */
 @Composable
 private fun SummaryStatsCard(
     totalTasks: Int,
@@ -486,6 +498,7 @@ private fun SummaryStatsCard(
     }
 }
 
+/** Tarjeta de un logro; atenuada y con candado si aún no está desbloqueado. */
 @Composable
 private fun AchievementCard(achievement: Achievement) {
     Card(
