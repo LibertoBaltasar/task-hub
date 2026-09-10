@@ -403,5 +403,12 @@ service cloud.firestore {
     match /households/{hid}/messages/{mid} {
       allow read, write: if isMember(hid) || isOwner(hid);
     }
+
+    // Denegación por defecto: no hay un `match /{document=**}` de cierre.
+    // Firestore deniega implícitamente cualquier operación sobre una ruta
+    // que no case con ninguno de los `match` de arriba (no hace falta un
+    // `allow ...: if false` explícito para ello) — así que colecciones
+    // futuras sin regla propia quedan cerradas por defecto en vez de
+    // abiertas por omisión.
   }
 }
