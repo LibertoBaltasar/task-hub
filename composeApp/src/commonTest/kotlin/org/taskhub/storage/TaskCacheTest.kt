@@ -31,11 +31,13 @@ class TaskCacheTest {
 
     // ── Tasks ───────────────────────────────────────────────
 
+    /** Sin ninguna caché previa, leer tareas de un hogar devuelve `null`. */
     @Test
     fun getCachedTasks_withoutCaching_returnsNull() {
         assertNull(cache().getCachedTasks("h1"))
     }
 
+    /** Las tareas guardadas con [TaskCache.cacheTasks] se recuperan igual con [TaskCache.getCachedTasks]. */
     @Test
     fun cacheTasks_thenGetCachedTasks_returnsSameList() {
         val c = cache()
@@ -46,6 +48,7 @@ class TaskCacheTest {
         assertEquals(tasks, c.getCachedTasks("h1"))
     }
 
+    /** La caché de tareas está aislada por hogar: cachear en uno no mezcla datos con otro. */
     @Test
     fun cacheTasks_isScopedPerHousehold() {
         val c = cache()
@@ -56,6 +59,7 @@ class TaskCacheTest {
         assertEquals(listOf(task(id = "t2", householdId = "h2")), c.getCachedTasks("h2"))
     }
 
+    /** [TaskCache.clearTasks] borra solo la caché de tareas del hogar, sin tocar la del hogar en sí. */
     @Test
     fun clearTasks_removesOnlyTasksCache() {
         val c = cache()
@@ -68,6 +72,7 @@ class TaskCacheTest {
         assertEquals(household(), c.getCachedHousehold("h1")) // no afectado
     }
 
+    /** Un JSON corrupto en el almacenamiento subyacente no rompe la lectura: devuelve `null` en vez de lanzar. */
     @Test
     fun getCachedTasks_withCorruptedJson_returnsNullInsteadOfThrowing() {
         val settings = FakeCacheSettings(mutableMapOf("cache_tasks_h1" to "{not-valid-json"))
@@ -77,11 +82,13 @@ class TaskCacheTest {
 
     // ── Household ───────────────────────────────────────────
 
+    /** Sin caché previa, leer el hogar devuelve `null`. */
     @Test
     fun getCachedHousehold_withoutCaching_returnsNull() {
         assertNull(cache().getCachedHousehold("h1"))
     }
 
+    /** El hogar guardado con [TaskCache.cacheHousehold] se recupera igual con [TaskCache.getCachedHousehold]. */
     @Test
     fun cacheHousehold_thenGetCachedHousehold_returnsSameValue() {
         val c = cache()
@@ -90,6 +97,7 @@ class TaskCacheTest {
         assertEquals(household(), c.getCachedHousehold("h1"))
     }
 
+    /** [TaskCache.clearHouseholdDoc] borra solo la caché del documento de hogar, sin afectar a la de tareas. */
     @Test
     fun clearHouseholdDoc_removesOnlyHouseholdCache() {
         val c = cache()
@@ -104,11 +112,13 @@ class TaskCacheTest {
 
     // ── Members ─────────────────────────────────────────────
 
+    /** Sin caché previa, leer los miembros de un hogar devuelve `null`. */
     @Test
     fun getCachedMembers_withoutCaching_returnsNull() {
         assertNull(cache().getCachedMembers("h1"))
     }
 
+    /** Los miembros guardados con [TaskCache.cacheMembers] se recuperan igual con [TaskCache.getCachedMembers]. */
     @Test
     fun cacheMembers_thenGetCachedMembers_returnsSameList() {
         val c = cache()
@@ -119,6 +129,7 @@ class TaskCacheTest {
         assertEquals(members, c.getCachedMembers("h1"))
     }
 
+    /** [TaskCache.clearMembers] borra solo la caché de miembros, sin afectar a la del hogar. */
     @Test
     fun clearMembers_removesOnlyMembersCache() {
         val c = cache()
@@ -133,6 +144,7 @@ class TaskCacheTest {
 
     // ── clearHousehold — borra las 3 cachés a la vez ─────────
 
+    /** [TaskCache.clearHousehold] borra de golpe las 3 cachés (tareas, hogar, miembros) de ese hogar. */
     @Test
     fun clearHousehold_removesTasksHouseholdAndMembersCaches() {
         val c = cache()
@@ -147,6 +159,7 @@ class TaskCacheTest {
         assertNull(c.getCachedMembers("h1"))
     }
 
+    /** Borrar la caché de un hogar no afecta a la caché de otros hogares. */
     @Test
     fun clearHousehold_doesNotAffectOtherHouseholds() {
         val c = cache()

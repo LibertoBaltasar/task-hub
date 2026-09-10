@@ -15,6 +15,7 @@ import kotlin.test.assertNull
  */
 class SecureStoreTest {
 
+    /** Un valor guardado con [SecureStore.putString] se recupera intacto con [SecureStore.getString]. */
     @Test
     fun putThenGet_returnsSameValue() {
         val store = createSecureStore()
@@ -23,6 +24,7 @@ class SecureStoreTest {
         assertEquals("s3cr3t-value", store.getString("test_key"))
     }
 
+    /** Leer una key que nunca se escribió devuelve `null` en vez de lanzar. */
     @Test
     fun get_withoutPut_returnsNull() {
         val store = createSecureStore()
@@ -30,6 +32,7 @@ class SecureStoreTest {
         assertNull(store.getString("never_written_key"))
     }
 
+    /** [SecureStore.remove] borra el valor: una lectura posterior vuelve a devolver `null`. */
     @Test
     fun remove_clearsValue() {
         val store = createSecureStore()
@@ -40,6 +43,7 @@ class SecureStoreTest {
         assertNull(store.getString("removable_key"))
     }
 
+    /** Escribir dos veces la misma key reemplaza el valor anterior (no lo acumula). */
     @Test
     fun put_overwritesPreviousValue() {
         val store = createSecureStore()

@@ -1,3 +1,9 @@
+/**
+ * Sistema de temas de Task Hub: paletas de color (base + esquemas
+ * claro/oscuro de Material3), tipografía y el composable [TaskHubTheme] que
+ * los aplica. Los colores semánticos (éxito/aviso/info) viven aparte en
+ * [SemanticColors.kt].
+ */
 package org.taskhub.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -14,9 +20,18 @@ import androidx.compose.ui.unit.sp
 
 // ── Theme enum ────────────────────────────────────────────
 
+/**
+ * Los 3 temas visuales que el usuario elige en Ajustes (persistido en
+ * [org.taskhub.storage.SettingsStore], ver `App.kt`). Cada uno tiene su
+ * propio par de esquemas Material3 claro/oscuro más abajo (p.ej.
+ * [DefaultLightColorScheme]/[DefaultDarkColorScheme] para [DEFAULT]).
+ */
 enum class TaskHubThemeType {
+    /** Paleta de marca: teal + acentos coral. */
     DEFAULT,
+    /** Paleta verde/marrón ("Naturaleza"). */
     NATURALEZA,
+    /** Paleta monocroma blanco/negro/grises. */
     MINIMAL
 }
 
@@ -319,6 +334,13 @@ private val TaskHubTypography = Typography(
 
 // ── Theme composable ──────────────────────────────────────
 
+/**
+ * Aplica el tema Material3 correspondiente a [themeType] (claro u oscuro
+ * según [darkTheme], que por defecto sigue al sistema operativo) y provee
+ * los [SemanticColors] a juego vía [LocalSemanticColors]. Envuelve el árbol
+ * de Compose entero — se instala una única vez en `App.kt` (y en
+ * `Main.kt`/`MainViewController.kt` para el splash previo a `App`).
+ */
 @Composable
 fun TaskHubTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

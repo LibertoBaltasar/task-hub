@@ -1,8 +1,20 @@
+/**
+ * i18n de Task Hub: todos los strings visibles al usuario (ES + EN) viven
+ * en este único archivo, resueltos en runtime con [AppStrings.get].
+ */
 package org.taskhub.ui.i18n
 
 /**
- * Simple string-based i18n for Spanish / English.
- * All user-visible strings go here. Use `get(key, lang)` to resolve.
+ * Tabla de strings ES/EN indexada por clave.
+ *
+ * Estructura: [strings] es un mapa de dos niveles — `"es"`/`"en"` → (clave →
+ * texto). Cada idioma declara el mismo conjunto de claves (agrupadas por
+ * sección/pantalla mediante comentarios `//`, p.ej. "Settings", "Household
+ * list"); no hay generación automática ni comprobación de que ambos mapas
+ * tengan las mismas claves, así que una clave nueva debe añadirse a mano en
+ * los dos bloques. Usa [get] para resolver una clave al idioma vigente
+ * (normalmente `SettingsStore.getLanguage()`); nunca se accede a [strings]
+ * directamente desde fuera de este objeto.
  */
 object AppStrings {
 
@@ -1228,8 +1240,13 @@ object AppStrings {
     )
 
     /**
-     * Resolve a string key for the given language.
-     * Falls back to Spanish if the key or language is missing.
+     * Resuelve [key] en el idioma [lang] ("es"/"en").
+     *
+     * Cadena de fallback: si [lang] no existe (idioma no soportado) o la
+     * clave falta en ese idioma, cae al mapa "es"; si tampoco está ahí
+     * (typo en la clave, o clave nueva sin traducir aún), devuelve la
+     * propia [key] tal cual — visible en UI como pista de depuración en vez
+     * de un crash o una cadena vacía.
      */
     fun get(key: String, lang: String): String {
         return strings[lang]?.get(key)

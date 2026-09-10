@@ -1,3 +1,9 @@
+/**
+ * Módulo único de Koin de la app: cablea persistencia local, el cliente
+ * Firestore/REST y los repos de dominio, integraciones de plataforma
+ * (notificaciones, AdMob, Google Calendar) y los ScreenModels de Voyager.
+ * Se instala una sola vez, en el `KoinApplication` de [org.taskhub.App].
+ */
 package org.taskhub.di
 
 import com.russhwolf.settings.Settings
@@ -32,6 +38,16 @@ import org.taskhub.ui.models.StatsScreenModel
 import org.taskhub.ui.models.TaskCommentsScreenModel
 import org.taskhub.ui.models.TaskScreenModel
 
+/**
+ * Grafo de dependencias de Task Hub.
+ *
+ * `single` = una única instancia para toda la vida del proceso (stores,
+ * cliente de red, repos de dominio, managers compartidos entre pantallas).
+ * `factory` = una instancia nueva cada vez que se inyecta — usado solo para
+ * los [org.taskhub.ui.models] de Voyager, que deben nacer/morir con cada
+ * pantalla en vez de compartir estado entre navegaciones repetidas a la
+ * misma `Screen`.
+ */
 val appModule: Module = module {
     // Platform settings (SharedPreferences on Android, NSUserDefaults on iOS)
     single { Settings() }
