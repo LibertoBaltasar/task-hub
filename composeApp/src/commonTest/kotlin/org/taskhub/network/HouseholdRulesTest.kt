@@ -5,6 +5,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
+/**
+ * [HouseholdRules] decide quién hereda la propiedad (`ownerId`) de un hogar
+ * cuando el owner actual lo abandona o elimina su cuenta. Solo un miembro
+ * vinculado a una cuenta real (`userId != null`) puede ser sucesor — un
+ * perfil "hijo/a" sin cuenta no puede quedar como propietario del hogar.
+ */
 class HouseholdRulesTest {
 
     private fun member(
@@ -21,6 +27,7 @@ class HouseholdRulesTest {
         userId = userId
     )
 
+    /** Entre varios candidatos con cuenta, el sucesor es el que lleva más tiempo en el hogar (más antiguo). */
     @Test
     fun resolveOwnerSuccessor_picksOldestWithLinkedAccount() {
         val members = listOf(
@@ -31,6 +38,7 @@ class HouseholdRulesTest {
         assertEquals("m2", HouseholdRules.resolveOwnerSuccessor(members)?.id)
     }
 
+    /** Un perfil "hijo/a" sin cuenta (userId null) nunca es candidato a sucesor, aunque sea más antiguo. */
     @Test
     fun resolveOwnerSuccessor_ignoresMembersWithoutAccount() {
         val members = listOf(
@@ -40,6 +48,7 @@ class HouseholdRulesTest {
         assertEquals("adult", HouseholdRules.resolveOwnerSuccessor(members)?.id)
     }
 
+    /** Si nadie en el hogar tiene cuenta vinculada, no hay sucesor posible: null. */
     @Test
     fun resolveOwnerSuccessor_noneWithAccount_returnsNull() {
         val members = listOf(
@@ -49,6 +58,7 @@ class HouseholdRulesTest {
         assertNull(HouseholdRules.resolveOwnerSuccessor(members))
     }
 
+    /** Caso límite defensivo: hogar sin miembros no debe romper el cálculo. */
     @Test
     fun resolveOwnerSuccessor_emptyList_returnsNull() {
         assertNull(HouseholdRules.resolveOwnerSuccessor(emptyList()))

@@ -11,12 +11,19 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/**
+ * [PointsRules] cubre el sistema de "agradecimientos" (puntos que un miembro
+ * regala a otro con un tope semanal) y de donaciones (transferencia directa
+ * de puntos propios), incluyendo el cálculo del inicio de semana (lunes) que
+ * determina cuándo se resetea el presupuesto semanal.
+ */
 class PointsRulesTest {
 
     private val tz = TimeZone.currentSystemDefault()
 
     // ── mondayStartOfWeek ──────────────────────────────────────
 
+    /** El resultado siempre cae en un lunes a medianoche, y nunca es posterior al instante consultado. */
     @Test
     fun mondayStartOfWeek_resultIsMondayMidnight() {
         // Un mediodía local arbitrario, lejos de límites de DST.
@@ -32,6 +39,7 @@ class PointsRulesTest {
         assertTrue(weekStart <= someWednesdayNoon)
     }
 
+    /** Aplicar la función sobre su propio resultado no debe cambiar el valor (ya es un inicio de semana). */
     @Test
     fun mondayStartOfWeek_isIdempotent() {
         val now = LocalDateTime(2024, 3, 15, 9, 30, 0).toInstant(tz).toEpochMilliseconds()
@@ -40,6 +48,7 @@ class PointsRulesTest {
         assertEquals(weekStart, PointsRules.mondayStartOfWeek(weekStart))
     }
 
+    /** Un instante justo antes del lunes calculado pertenece, por definición, a la semana anterior. */
     @Test
     fun mondayStartOfWeek_sundayBeforeGoesToPreviousWeek() {
         val someInstant = LocalDateTime(2024, 3, 15, 9, 30, 0).toInstant(tz).toEpochMilliseconds()
@@ -55,6 +64,7 @@ class PointsRulesTest {
 
     // ── currentAppreciationBudget ───────────────────────────────
 
+    /** Dentro de la misma semana, el presupuesto ya consumido y su fecha de inicio no cambian. */
     @Test
     fun currentAppreciationBudget_withinSameWeek_keepsGivenAndWeekStart() {
         val weekStart = 1_000_000L
@@ -71,6 +81,7 @@ class PointsRulesTest {
         assertEquals(20, budget.remaining)
     }
 
+    /** Al consumir exactamente el tope semanal, el saldo restante es 0 (no negativo). */
     @Test
     fun currentAppreciationBudget_atTop_remainingIsZero() {
         val weekStart = 1_000_000L
@@ -82,6 +93,7 @@ class PointsRulesTest {
         assertEquals(0, budget.remaining)
     }
 
+    /** Un `appreciationGiven` corrupto/superior al tope (dato inconsistente) tampoco produce saldo negativo. */
     @Test
     fun currentAppreciationBudget_neverGoesNegative() {
         val weekStart = 1_000_000L
@@ -93,6 +105,7 @@ class PointsRulesTest {
         assertEquals(0, budget.remaining)
     }
 
+    /** Al cruzar a una nueva semana, el presupuesto se resetea a 0 y el saldo vuelve al tope completo. */
     @Test
     fun currentAppreciationBudget_afterWeekExpires_resets() {
         val oldWeekStart = 0L
@@ -110,6 +123,7 @@ class PointsRulesTest {
         assertEquals(PointsRules.mondayStartOfWeek(now), budget.weekStart)
     }
 
+    /** El límite exacto de una semana (weekStart + 7 días) ya cuenta como expirado, no como "todavía dentro". */
     @Test
     fun currentAppreciationBudget_exactlyAtWeekBoundary_isExpired() {
         val oldWeekStart = 0L
@@ -126,6 +140,7 @@ class PointsRulesTest {
 
     // ── validateAppreciateBasic / validateAppreciateLimit ───────
 
+    /** Nadie puede agradecerse puntos a sí mismo. */
     @Test
     fun validateAppreciateBasic_self_isRejected() {
         assertEquals(
@@ -134,6 +149,7 @@ class PointsRulesTest {
         )
     }
 
+    /** La cantidad a agradecer debe ser estrictamente positiva (0 o negativa se rechaza). */
     @Test
     fun validateAppreciateBasic_zeroOrNegativeAmount_isRejected() {
         assertEquals(
@@ -146,11 +162,13 @@ class PointsRulesTest {
         )
     }
 
+    /** Un agradecimiento entre dos miembros distintos con cantidad positiva no tiene error básico. */
     @Test
     fun validateAppreciateBasic_validInput_isNull() {
         assertNull(PointsRules.validateAppreciateBasic("m1", "m2", 10))
     }
 
+    /** Agradecer más de lo que queda de presupuesto semanal se rechaza. */
     @Test
     fun validateAppreciateLimit_amountAboveRemaining_isRejected() {
         val budget = PointsRules.AppreciationBudget(given = 45, weekStart = 0L, remaining = 5)
@@ -160,6 +178,7 @@ class PointsRulesTest {
         )
     }
 
+    /** Agradecer exactamente el saldo restante (agotarlo del todo) sí está permitido. */
     @Test
     fun validateAppreciateLimit_amountEqualToRemaining_isAllowed() {
         val budget = PointsRules.AppreciationBudget(given = 45, weekStart = 0L, remaining = 5)
@@ -168,6 +187,7 @@ class PointsRulesTest {
 
     // ── validateDonateBasic / validateDonateBalance ─────────────
 
+    /** Nadie puede donarse puntos a sí mismo. */
     @Test
     fun validateDonateBasic_self_isRejected() {
         assertEquals(
@@ -176,6 +196,7 @@ class PointsRulesTest {
         )
     }
 
+    /** La cantidad a donar debe ser estrictamente positiva. */
     @Test
     fun validateDonateBasic_zeroOrNegativeAmount_isRejected() {
         assertEquals(
@@ -184,6 +205,7 @@ class PointsRulesTest {
         )
     }
 
+    /** No se puede donar más puntos de los que el donante tiene disponibles. */
     @Test
     fun validateDonateBalance_insufficientBalance_isRejected() {
         assertEquals(
@@ -192,11 +214,13 @@ class PointsRulesTest {
         )
     }
 
+    /** Donar el saldo completo (vaciarlo del todo) sí está permitido. */
     @Test
     fun validateDonateBalance_exactBalance_isAllowed() {
         assertNull(PointsRules.validateDonateBalance(amount = 50, fromBalance = 50))
     }
 
+    /** Camino feliz: donante/receptor distintos, cantidad positiva y saldo suficiente pasan ambas validaciones. */
     @Test
     fun validateDonateBalance_validTransfer_isAllowed() {
         assertNull(PointsRules.validateDonateBasic("donor", "receptor", 20))

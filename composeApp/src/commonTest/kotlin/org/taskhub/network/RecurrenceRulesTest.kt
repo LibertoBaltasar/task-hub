@@ -12,6 +12,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+/**
+ * [RecurrenceRules] es el motor de recurrencia de tareas (diaria/semanal/
+ * mensual): cuándo "toca" una tarea hoy, cuál es su próxima ocurrencia,
+ * cómo se resuelve el turno rotatorio de asignación y el cálculo de fin de
+ * día para decidir puntualidad. Incluye casos de "completado tardío"
+ * (catch-up) y de zonas horarias explícitas distintas de la del sistema.
+ */
 class RecurrenceRulesTest {
 
     private val tz = TimeZone.currentSystemDefault()
@@ -23,49 +30,60 @@ class RecurrenceRulesTest {
         kotlinx.datetime.Instant.fromEpochMilliseconds(epochMs).toLocalDateTime(tz).date
 
     // ── clampDayOfMonth ──────────────────────────────────────────
+    // Un día de recurrencia mensual (p.ej. "día 31") puede no existir en
+    // todos los meses; estas pruebas fijan el criterio de recorte.
 
+    /** Un día que cabe en el mes no se modifica. */
     @Test
     fun clampDayOfMonth_dayFitsInMonth_isUnchanged() {
         assertEquals(15, RecurrenceRules.clampDayOfMonth(15, 2024, 1))
     }
 
+    /** El día 31 en un mes de 30 días se recorta al último día real del mes. */
     @Test
     fun clampDayOfMonth_day31InApril_clampsTo30() {
         // Abril tiene 30 días.
         assertEquals(30, RecurrenceRules.clampDayOfMonth(31, 2024, 4))
     }
 
+    /** El día 31 en febrero de un año bisiesto se recorta a 29. */
     @Test
     fun clampDayOfMonth_day31InFebruaryLeapYear_clampsTo29() {
         assertEquals(29, RecurrenceRules.clampDayOfMonth(31, 2024, 2)) // 2024 es bisiesto
     }
 
+    /** El día 31 en febrero de un año no bisiesto se recorta a 28. */
     @Test
     fun clampDayOfMonth_day31InFebruaryNonLeapYear_clampsTo28() {
         assertEquals(28, RecurrenceRules.clampDayOfMonth(31, 2023, 2))
     }
 
+    /** El día 29 en febrero de un año bisiesto SÍ existe: no se recorta. */
     @Test
     fun clampDayOfMonth_day29InFebruaryLeapYear_isUnchanged() {
         assertEquals(29, RecurrenceRules.clampDayOfMonth(29, 2024, 2)) // 2024 es bisiesto
     }
 
+    /** El día 29 en febrero de un año no bisiesto no existe: se recorta a 28. */
     @Test
     fun clampDayOfMonth_day29InFebruaryNonLeapYear_clampsTo28() {
         assertEquals(28, RecurrenceRules.clampDayOfMonth(29, 2023, 2))
     }
 
+    /** El día 30 tampoco existe en febrero en ningún año: se recorta al último día real, sea 28 o 29. */
     @Test
     fun clampDayOfMonth_day30InFebruary_clampsToLastDayOfMonth() {
         assertEquals(29, RecurrenceRules.clampDayOfMonth(30, 2024, 2)) // bisiesto
         assertEquals(28, RecurrenceRules.clampDayOfMonth(30, 2023, 2)) // no bisiesto
     }
 
+    /** El día 30 en un mes de 30 días no se modifica. */
     @Test
     fun clampDayOfMonth_day30InThirtyDayMonth_isUnchanged() {
         assertEquals(30, RecurrenceRules.clampDayOfMonth(30, 2024, 4)) // abril tiene 30 días
     }
 
+    /** El día 29 en un mes de 31 días no se modifica. */
     @Test
     fun clampDayOfMonth_day29InThirtyOneDayMonth_isUnchanged() {
         assertEquals(29, RecurrenceRules.clampDayOfMonth(29, 2024, 1)) // enero tiene 31 días
@@ -73,6 +91,7 @@ class RecurrenceRulesTest {
 
     // ── nextOccurrence: daily ────────────────────────────────────
 
+    /** Una tarea diaria siempre "vuelve a tocar" al día siguiente del instante consultado. */
     @Test
     fun nextOccurrence_daily_isTomorrow() {
         val now = epochOf(2024, 3, 15)
@@ -82,6 +101,7 @@ class RecurrenceRulesTest {
 
     // ── nextOccurrence: weekly ───────────────────────────────────
 
+    /** Si hoy es el día programado, la siguiente ocurrencia salta a la semana que viene, no a hoy mismo. */
     @Test
     fun nextOccurrence_weekly_todayIsTargetDay_jumpsForwardSevenDays() {
         // 2024-03-15 es viernes (dow=5)
@@ -90,6 +110,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 22), dateOf(next))
     }
 
+    /** Si el día objetivo cae más adelante en esta misma semana, se usa esa fecha (no la semana siguiente). */
     @Test
     fun nextOccurrence_weekly_targetDayLaterThisWeek_usesThatDay() {
         // 2024-03-15 es viernes (dow=5); pedir lunes (dow=1) siguiente
@@ -98,6 +119,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 18), dateOf(next))
     }
 
+    /** Si el día objetivo ya pasó esta semana, la ocurrencia se calcula en la semana siguiente. */
     @Test
     fun nextOccurrence_weekly_targetDayEarlierInWeek_wrapsToNextWeek() {
         // 2024-03-18 es lunes (dow=1); pedir domingo (dow=7) -> el domingo que viene
@@ -106,6 +128,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 24), dateOf(next))
     }
 
+    /** Con varios días programados por semana, se elige el más próximo de todos ellos. */
     @Test
     fun nextOccurrence_weekly_multipleDays_picksEarliestUpcoming() {
         // 2024-03-15 es viernes (dow=5); días pedidos lunes(1)+miércoles(3) -> el lunes que viene
@@ -114,6 +137,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 18), dateOf(next))
     }
 
+    /** Si hoy es uno de los días programados, se salta a la siguiente ocurrencia futura, no se repite hoy. */
     @Test
     fun nextOccurrence_weekly_multipleDays_todayIsOneOfThem_skipsToNextMatch() {
         // 2024-03-15 es viernes (dow=5); días pedidos lunes(1)+viernes(5) -> el lunes (no hoy)
@@ -122,6 +146,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 18), dateOf(next))
     }
 
+    /** Sin días configurados, se asume el mismo comportamiento que "un solo día por semana": salta 7 días. */
     @Test
     fun nextOccurrence_weekly_emptyDays_jumpsForwardSevenDays() {
         val now = epochOf(2024, 3, 15) // viernes
@@ -131,6 +156,7 @@ class RecurrenceRulesTest {
 
     // ── nextOccurrence: monthly ──────────────────────────────────
 
+    /** Si el día del mes objetivo todavía no ha llegado, la ocurrencia queda en el mismo mes. */
     @Test
     fun nextOccurrence_monthly_dayLaterThisMonth_staysInSameMonth() {
         val now = epochOf(2024, 3, 10)
@@ -138,6 +164,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 20), dateOf(next))
     }
 
+    /** Si el día del mes objetivo ya pasó, la ocurrencia salta al mes siguiente. */
     @Test
     fun nextOccurrence_monthly_dayAlreadyPassed_jumpsToNextMonth() {
         val now = epochOf(2024, 3, 20)
@@ -145,6 +172,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 4, 10), dateOf(next))
     }
 
+    /** Si hoy es exactamente el día objetivo, la próxima ocurrencia es el mes siguiente, no hoy. */
     @Test
     fun nextOccurrence_monthly_dayIsToday_jumpsToNextMonth() {
         val now = epochOf(2024, 3, 20)
@@ -152,6 +180,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 4, 20), dateOf(next))
     }
 
+    /** Al pedir un día que no existe en el mes actual, se aplica el recorte de [RecurrenceRules.clampDayOfMonth]. */
     @Test
     fun nextOccurrence_monthly_shortMonth_clampsToLastDay() {
         // Pedir día 31 en febrero (2024, bisiesto) -> 29 de febrero
@@ -160,6 +189,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 2, 29), dateOf(next))
     }
 
+    /** Al saltar de mes, el recorte de día se recalcula para el mes de destino (no arrastra el recorte del mes anterior). */
     @Test
     fun nextOccurrence_monthly_dayPassedInShortMonth_jumpsToNextMonthClamped() {
         // Ya pasó el (clamp de) día 31 en abril (30 días) -> siguiente ocurrencia en mayo, día 31 real
@@ -170,12 +200,14 @@ class RecurrenceRulesTest {
 
     // ── isDueToday: daily ────────────────────────────────────────
 
+    /** Una tarea diaria nunca completada siempre está pendiente hoy. */
     @Test
     fun isDueToday_daily_neverCompleted_isDue() {
         val now = epochOf(2024, 3, 15)
         assertTrue(RecurrenceRules.isDueToday("daily", emptyList(), null, null, now, tz))
     }
 
+    /** Una tarea diaria ya completada hoy no vuelve a estar pendiente hasta mañana. */
     @Test
     fun isDueToday_daily_completedToday_isNotDue() {
         val now = epochOf(2024, 3, 15, hour = 18)
@@ -183,6 +215,7 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueToday("daily", emptyList(), null, completedEarlierToday, now, tz))
     }
 
+    /** Completar una tarea diaria ayer no cubre la ocurrencia de hoy: vuelve a estar pendiente. */
     @Test
     fun isDueToday_daily_completedYesterday_isDue() {
         val now = epochOf(2024, 3, 15)
@@ -192,6 +225,7 @@ class RecurrenceRulesTest {
 
     // ── isDueToday: weekly ───────────────────────────────────────
 
+    /** Un día de la semana que no está en la lista de recurrencia nunca está pendiente. */
     @Test
     fun isDueToday_weekly_todayNotInRecurrenceDays_isNotDue() {
         // 2024-03-15 es viernes (dow=5); solo aplica lunes (1)
@@ -199,6 +233,7 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1), null, null, now, tz))
     }
 
+    /** Si hoy es un día programado y nunca se completó, está pendiente. */
     @Test
     fun isDueToday_weekly_todayInRecurrenceDaysAndNotCompleted_isDue() {
         val now = epochOf(2024, 3, 15) // viernes
@@ -207,6 +242,7 @@ class RecurrenceRulesTest {
 
     // ── isDueToday: weekly — VARIOS recurrenceDays a la vez (lunes+miércoles+viernes) ──
 
+    /** Con varios días programados, si hoy es uno de ellos y nunca se completó, está pendiente. */
     @Test
     fun isDueToday_weeklyMultipleDays_todayIsOneOfThem_neverCompleted_isDue() {
         // Lunes(1)+miércoles(3)+viernes(5); 2024-03-13 es miércoles.
@@ -214,6 +250,7 @@ class RecurrenceRulesTest {
         assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, null, wednesday, tz))
     }
 
+    /** Un día no incluido en la lista de recurrencia nunca está pendiente, aunque nunca se haya completado. */
     @Test
     fun isDueToday_weeklyMultipleDays_todayIsNotAnyOfThem_neverCompleted_isNotDue() {
         // Martes(2) no está en lunes+miércoles+viernes.
@@ -221,32 +258,31 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, null, tuesday, tz))
     }
 
+    /** Completar el lunes de esta semana no cubre la ocurrencia del miércoles: cada día marcado es una ocurrencia independiente. */
     @Test
     fun isDueToday_weeklyMultipleDays_completedOnMonday_stillDueOnWednesday() {
-        // Completar el lunes de esta semana no cubre la ocurrencia del
-        // miércoles: cada día marcado tiene su propia ocurrencia semanal.
         val completedMonday = epochOf(2024, 3, 11)
         val wednesday = epochOf(2024, 3, 13)
         assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, completedMonday, wednesday, tz))
     }
 
+    /** El jueves no está en la lista de días programados -> nunca toca, independientemente de compleciones previas. */
     @Test
     fun isDueToday_weeklyMultipleDays_completedOnWednesday_notDueAgainOnThursday() {
-        // Jueves no está en la lista -> nunca toca, independientemente de compleciones.
         val completedWednesday = epochOf(2024, 3, 13)
         val thursday = epochOf(2024, 3, 14)
         assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, completedWednesday, thursday, tz))
     }
 
+    /** El miércoles ya completado no bloquea el viernes: es una ocurrencia distinta de la misma semana. */
     @Test
     fun isDueToday_weeklyMultipleDays_completedOnWednesday_isDueAgainOnFriday() {
-        // El miércoles ya se completó, pero el viernes es una ocurrencia
-        // distinta de la misma semana -> vuelve a tocar.
         val completedWednesday = epochOf(2024, 3, 13)
         val friday = epochOf(2024, 3, 15)
         assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1, 3, 5), null, completedWednesday, friday, tz))
     }
 
+    /** El lunes de la semana siguiente es una ocurrencia nueva, independiente del viernes ya completado. */
     @Test
     fun isDueToday_weeklyMultipleDays_completedOnFriday_notDueUntilNextMonday() {
         val completedFriday = epochOf(2024, 3, 15)
@@ -257,18 +293,21 @@ class RecurrenceRulesTest {
 
     // ── isDueToday: monthly (con recurrenceDay) ───────────────────
 
+    /** Con un día fijo del mes configurado, cualquier otro día del mes no está pendiente. */
     @Test
     fun isDueToday_monthlyWithDay_notTargetDay_isNotDue() {
         val now = epochOf(2024, 3, 10)
         assertFalse(RecurrenceRules.isDueToday("monthly", emptyList(), 20, null, now, tz))
     }
 
+    /** El día del mes objetivo, sin compleción previa, está pendiente. */
     @Test
     fun isDueToday_monthlyWithDay_isTargetDayAndNotCompleted_isDue() {
         val now = epochOf(2024, 3, 20)
         assertTrue(RecurrenceRules.isDueToday("monthly", emptyList(), 20, null, now, tz))
     }
 
+    /** En un mes corto, el día 31 pedido se recorta al último día real del mes para decidir si toca hoy. */
     @Test
     fun isDueToday_monthlyWithDay_shortMonth_matchesClampedLastDay() {
         // Día pedido 31 en abril (30 días) -> toca el 30
@@ -278,6 +317,7 @@ class RecurrenceRulesTest {
 
     // ── isDueToday: monthly (legado, sin recurrenceDay) ────────────
 
+    /** Sin día fijo configurado (esquema legado), basta con no haberla completado ya este mes para que esté pendiente. */
     @Test
     fun isDueToday_monthlyLegacy_notCompletedThisMonth_isDue() {
         val now = epochOf(2024, 3, 15)
@@ -285,6 +325,7 @@ class RecurrenceRulesTest {
         assertTrue(RecurrenceRules.isDueToday("monthly", emptyList(), null, completedLastMonth, now, tz))
     }
 
+    /** En modo legado, ya haberla completado este mes basta para que no esté pendiente. */
     @Test
     fun isDueToday_monthlyLegacy_completedThisMonth_isNotDue() {
         val now = epochOf(2024, 3, 15)
@@ -294,6 +335,11 @@ class RecurrenceRulesTest {
 
     // ── isDueToday: weekly — completado tardío (catch-up) ─────────
 
+    /**
+     * Si el día programado de esta semana ya pasó sin marcarse y la última
+     * compleción fue en un ciclo anterior, la tarea debe seguir pendiente
+     * ("completado tardío"), no desaparecer de la lista.
+     */
     @Test
     fun isDueToday_weekly_missedScheduledDay_withPriorCompletion_isDueLate() {
         // Lunes(1) programado; hoy viernes 2024-03-15, la última vez se
@@ -305,6 +351,7 @@ class RecurrenceRulesTest {
         assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1), null, lastCompletedTwoWeeksAgo, now, tz))
     }
 
+    /** Ya haberla completado el día programado de esta semana la deja resuelta hasta el próximo ciclo. */
     @Test
     fun isDueToday_weekly_completedOnThisWeeksScheduledDay_isNotDue() {
         // Ya se completó el lunes de esta semana (2024-03-11): no debe
@@ -314,6 +361,7 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1), null, completedThisMonday, now, tz))
     }
 
+    /** Sin ninguna compleción previa registrada, no se abre la ventana de "completado tardío": conserva el comportamiento anterior. */
     @Test
     fun isDueToday_weekly_neverCompletedAndDayAlreadyPassed_staysNotDueUntilNextCycle() {
         // Nunca se completó: la ventana de "completado tardío" no se abre
@@ -325,6 +373,7 @@ class RecurrenceRulesTest {
 
     // ── isDueToday: monthly con día fijo — completado tardío ───────
 
+    /** Mismo catch-up que en semanal, pero para el día fijo mensual: si se pasó sin completar, sigue pendiente. */
     @Test
     fun isDueToday_monthlyWithDay_missedScheduledDay_withPriorCompletion_isDueLate() {
         // Día 15 programado; se completó el mes anterior (2024-02-15) pero
@@ -334,6 +383,7 @@ class RecurrenceRulesTest {
         assertTrue(RecurrenceRules.isDueToday("monthly", emptyList(), 15, completedLastMonth, now, tz))
     }
 
+    /** Ya haber completado el día fijo de este mes la deja resuelta. */
     @Test
     fun isDueToday_monthlyWithDay_completedThisMonthsScheduledDay_isNotDue() {
         val now = epochOf(2024, 3, 20)
@@ -341,6 +391,7 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueToday("monthly", emptyList(), 15, completedThisMonth, now, tz))
     }
 
+    /** Antes de llegar al día objetivo de este mes, si el ciclo anterior ya se completó a tiempo, todavía no toca nada. */
     @Test
     fun isDueToday_monthlyWithDay_beforeThisMonthsTarget_alreadyCaughtUpLastCycle_isNotDue() {
         // Antes del día 15 de este mes; el ciclo anterior (2024-02-15) ya se
@@ -352,36 +403,42 @@ class RecurrenceRulesTest {
 
     // ── isOverdueOccurrence ─────────────────────────────────────────
 
+    /** Un día distinto del programado ya cuenta como "vencido" (la ocurrencia de hoy no es la esperada). */
     @Test
     fun isOverdueOccurrence_weekly_todayNotScheduledDay_isOverdue() {
         val now = epochOf(2024, 3, 15) // viernes; solo lunes(1) programado
         assertTrue(RecurrenceRules.isOverdueOccurrence("weekly", listOf(1), null, now, tz))
     }
 
+    /** Si hoy es el día programado, la ocurrencia de hoy no está vencida. */
     @Test
     fun isOverdueOccurrence_weekly_todayIsScheduledDay_isNotOverdue() {
         val now = epochOf(2024, 3, 15) // viernes(5) programado
         assertFalse(RecurrenceRules.isOverdueOccurrence("weekly", listOf(5), null, now, tz))
     }
 
+    /** Sin días configurados no hay ocurrencia programada que pueda vencer. */
     @Test
     fun isOverdueOccurrence_weekly_emptyDays_isNeverOverdue() {
         val now = epochOf(2024, 3, 15)
         assertFalse(RecurrenceRules.isOverdueOccurrence("weekly", emptyList(), null, now, tz))
     }
 
+    /** Análogo mensual: un día distinto del día fijo configurado cuenta como vencido. */
     @Test
     fun isOverdueOccurrence_monthlyWithDay_notTargetDay_isOverdue() {
         val now = epochOf(2024, 3, 20)
         assertTrue(RecurrenceRules.isOverdueOccurrence("monthly", emptyList(), 15, now, tz))
     }
 
+    /** El propio día fijo del mes no está vencido. */
     @Test
     fun isOverdueOccurrence_monthlyWithDay_isTargetDay_isNotOverdue() {
         val now = epochOf(2024, 3, 15)
         assertFalse(RecurrenceRules.isOverdueOccurrence("monthly", emptyList(), 15, now, tz))
     }
 
+    /** El esquema mensual legado (sin día fijo) no tiene concepto de "ocurrencia vencida": nunca lo está. */
     @Test
     fun isOverdueOccurrence_monthlyLegacyNoDay_isNeverOverdue() {
         val now = epochOf(2024, 3, 20)
@@ -390,11 +447,13 @@ class RecurrenceRulesTest {
 
     // ── isDueToday: once ─────────────────────────────────────────
 
+    /** Una tarea de una sola vez, nunca completada, está pendiente cualquier día. */
     @Test
     fun isDueToday_once_neverCompleted_isDue() {
         assertTrue(RecurrenceRules.isDueToday("once", emptyList(), null, null, epochOf(2024, 3, 15), tz))
     }
 
+    /** Una tarea de una sola vez, una vez completada, no vuelve a estar pendiente nunca. */
     @Test
     fun isDueToday_once_completed_isNotDue() {
         assertFalse(
@@ -409,6 +468,7 @@ class RecurrenceRulesTest {
 
     // ── isDueOn: fecha arbitraria (usada por CalendarScreen) ──────
 
+    /** `isDueToday` debe seguir siendo un caso particular de `isDueOn` con fecha = hoy. */
     @Test
     fun isDueOn_daily_sameAsIsDueToday_whenDateIsToday() {
         // isDueToday debe seguir siendo un caso particular de isDueOn con date=hoy.
@@ -421,16 +481,19 @@ class RecurrenceRulesTest {
         )
     }
 
+    /**
+     * CalendarScreen puede consultar una fecha PASADA anterior a la última
+     * compleción (navegando a un mes anterior tras completar la tarea más
+     * tarde) — no debe marcarse como pendiente retroactivamente.
+     */
     @Test
     fun isDueOn_daily_pastDateBeforeLastCompletion_isNotDue() {
-        // CalendarScreen puede consultar una fecha PASADA anterior a la última
-        // compleción (navegando a un mes anterior tras completar la tarea más
-        // tarde) — no debe marcarse como pendiente retroactivamente.
         val lastCompleted = epochOf(2024, 3, 20)
         val pastDate = dateOf(epochOf(2024, 3, 10))
         assertFalse(RecurrenceRules.isDueOn(pastDate, "daily", emptyList(), null, lastCompleted, tz))
     }
 
+    /** Una fecha consultada posterior a la última compleción sí está pendiente. */
     @Test
     fun isDueOn_daily_dateAfterLastCompletion_isDue() {
         val lastCompleted = epochOf(2024, 3, 10)
@@ -438,6 +501,7 @@ class RecurrenceRulesTest {
         assertTrue(RecurrenceRules.isDueOn(futureDate, "daily", emptyList(), null, lastCompleted, tz))
     }
 
+    /** El mismo día exacto de la última compleción no está pendiente. */
     @Test
     fun isDueOn_daily_exactCompletionDate_isNotDue() {
         val lastCompleted = epochOf(2024, 3, 15)
@@ -445,6 +509,7 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueOn(sameDate, "daily", emptyList(), null, lastCompleted, tz))
     }
 
+    /** Mismo criterio de "no retroactivo" que en diaria, aplicado al esquema mensual legado. */
     @Test
     fun isDueOn_monthlyLegacy_pastDateBeforeLastCompletion_isNotDue() {
         val lastCompleted = epochOf(2024, 3, 20)
@@ -452,6 +517,7 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueOn(pastDate, "monthly", emptyList(), null, lastCompleted, tz))
     }
 
+    /** Sin compleción previa, cualquier lunes pasado que coincida con el día programado cuenta como pendiente en esa fecha. */
     @Test
     fun isDueOn_weekly_withRecurrenceDays_matchesScheduledDayInThePast() {
         // Lunes(1) programado, nunca completada: cualquier lunes pasado debe tocar.
@@ -459,6 +525,7 @@ class RecurrenceRulesTest {
         assertTrue(RecurrenceRules.isDueOn(pastMonday, "weekly", listOf(1), null, null, tz))
     }
 
+    /** `isDueOn` también resuelve correctamente fechas futuras para el día fijo mensual. */
     @Test
     fun isDueOn_monthlyWithDay_matchesTargetDayInAFutureMonth() {
         val targetDate = dateOf(epochOf(2024, 6, 15))
@@ -467,6 +534,7 @@ class RecurrenceRulesTest {
 
     // ── endOfDueDay ──────────────────────────────────────────────
 
+    /** El fin del día de vencimiento es la medianoche del día siguiente al de inicio. */
     @Test
     fun endOfDueDay_isMidnightOfTheFollowingDay() {
         val dueDayStart = LocalDateTime(2024, 3, 18, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
@@ -474,17 +542,21 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 19), dateOf(end))
     }
 
+    /**
+     * Regresión del bug: comparar `now <= dueDate` contra la medianoche de
+     * INICIO del día programado marcaría como "tarde" cualquier compleción
+     * real (que siempre ocurre después de las 00:00 de ese día). Completar
+     * más tarde el mismo día programado debe seguir contando como puntual.
+     */
     @Test
     fun endOfDueDay_completionLaterTheSameScheduledDay_isBeforeEnd() {
-        // Regresión del bug: comparar `now <= dueDate` contra la medianoche de
-        // INICIO del día programado marcaría como "tarde" cualquier compleción
-        // real (que siempre ocurre después de las 00:00 de ese día).
         val dueDayStart = LocalDateTime(2024, 3, 18, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
         val completedSameDayEvening = epochOf(2024, 3, 18, hour = 20)
         val end = RecurrenceRules.endOfDueDay(dueDayStart, tz)
         assertTrue(completedSameDayEvening <= end)
     }
 
+    /** Completar al día siguiente del programado ya es tarde. */
     @Test
     fun endOfDueDay_completionNextDay_isAfterEnd() {
         val dueDayStart = LocalDateTime(2024, 3, 18, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
@@ -493,6 +565,7 @@ class RecurrenceRulesTest {
         assertTrue(completedNextDay > end)
     }
 
+    /** El fin de día del último día del mes cruza correctamente al primer día del mes siguiente. */
     @Test
     fun endOfDueDay_lastDayOfMonth_crossesIntoNextMonth() {
         val dueDayStart = LocalDateTime(2024, 3, 31, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
@@ -500,6 +573,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 4, 1), dateOf(end))
     }
 
+    /** Caso límite de calendario: el 29 de febrero de un año bisiesto cruza a marzo. */
     @Test
     fun endOfDueDay_lastDayOfFebruaryLeapYear_crossesIntoMarch() {
         val dueDayStart = LocalDateTime(2024, 2, 29, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
@@ -507,6 +581,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 1), dateOf(end))
     }
 
+    /** Caso límite de calendario: el 31 de diciembre cruza al 1 de enero del año siguiente. */
     @Test
     fun endOfDueDay_lastDayOfYear_crossesIntoNextYear() {
         val dueDayStart = LocalDateTime(2024, 12, 31, 0, 0, 0).toInstant(tz).toEpochMilliseconds()
@@ -516,6 +591,7 @@ class RecurrenceRulesTest {
 
     // ── resolveRotationAssignee ────────────────────────────────────
 
+    /** Sin rotación configurada, se asigna siempre al miembro de respaldo (`fallback`). */
     @Test
     fun resolveRotationAssignee_emptyRotation_returnsFallback() {
         val nextDue = epochOf(2024, 3, 18) // lunes
@@ -525,6 +601,7 @@ class RecurrenceRulesTest {
         )
     }
 
+    /** Si la rotación tiene un slot para el día de la semana de la próxima ocurrencia, se asigna a ese miembro. */
     @Test
     fun resolveRotationAssignee_matchingSlotForDayOfWeek_returnsThatMember() {
         // 2024-03-18 es lunes (dow=1)
@@ -539,6 +616,7 @@ class RecurrenceRulesTest {
         )
     }
 
+    /** Si la rotación no cubre el día de la semana de la próxima ocurrencia, se cae al miembro de respaldo. */
     @Test
     fun resolveRotationAssignee_noSlotForDayOfWeek_returnsFallback() {
         // 2024-03-15 es viernes (dow=5); rotación solo cubre lunes(1)
@@ -552,6 +630,7 @@ class RecurrenceRulesTest {
 
     // ── purgeMemberFromRotation ───────────────────────────────────
 
+    /** Al purgar un miembro (p.ej. tras abandonar el hogar), solo se eliminan SUS slots, dejando intactos los de otros. */
     @Test
     fun purgeMemberFromRotation_removesOnlyMatchingSlots() {
         val rotation = listOf(
@@ -563,12 +642,14 @@ class RecurrenceRulesTest {
         assertEquals(listOf(AssignmentSlot(dayOfWeek = 3, memberId = "member-B")), purged)
     }
 
+    /** Purgar un miembro que no tiene slots en la rotación no modifica la lista. */
     @Test
     fun purgeMemberFromRotation_memberNotInRotation_returnsUnchanged() {
         val rotation = listOf(AssignmentSlot(dayOfWeek = 1, memberId = "member-B"))
         assertEquals(rotation, RecurrenceRules.purgeMemberFromRotation(rotation, "member-A"))
     }
 
+    /** Caso límite defensivo: purgar sobre una rotación vacía no rompe nada. */
     @Test
     fun purgeMemberFromRotation_emptyRotation_returnsEmpty() {
         assertTrue(RecurrenceRules.purgeMemberFromRotation(emptyList(), "member-A").isEmpty())
@@ -586,6 +667,7 @@ class RecurrenceRulesTest {
     private val tzFarEast = TimeZone.of("Pacific/Kiritimati") // UTC+14
     private val tzFarWest = TimeZone.of("Pacific/Pago_Pago") // UTC-11
 
+    /** Un mismo instante UTC puede caer en días de la semana distintos según la zona horaria: el resultado depende de [tz], no del reloj del sistema. */
     @Test
     fun isDueToday_explicitTz_sameInstantFallsOnDifferentLocalWeekday() {
         // 2024-03-14T23:00:00Z -> viernes 15 en Kiritimati, jueves 14 en Pago Pago.
@@ -596,6 +678,7 @@ class RecurrenceRulesTest {
         assertTrue(RecurrenceRules.isDueToday("weekly", listOf(4), null, null, instant, tzFarWest)) // jueves
     }
 
+    /** `endOfDueDay` calcula la medianoche siguiente en la zona horaria explícita pasada, no en la del sistema. */
     @Test
     fun endOfDueDay_explicitNonDefaultTz_usesThatZonesMidnight() {
         val dueDayStartInFarEast = LocalDateTime(2024, 3, 15, 0, 0, 0).toInstant(tzFarEast).toEpochMilliseconds()
@@ -605,6 +688,7 @@ class RecurrenceRulesTest {
         assertEquals(LocalDate(2024, 3, 16), endLocalDate)
     }
 
+    /** La rotación resuelve un miembro distinto para el mismo instante según la zona horaria pasada. */
     @Test
     fun resolveRotationAssignee_explicitTz_sameInstantResolvesDifferentSlot() {
         // Mismo instante que arriba: viernes(5) en Kiritimati, jueves(4) en Pago Pago.
@@ -632,6 +716,7 @@ class RecurrenceRulesTest {
         status: String = "assigned"
     ) = TaskAssignmentResponse(id = "assignment-1", taskId = "task-1", memberId = memberId, dueDate = dueDate, status = status)
 
+    /** Sin rotación configurada, la próxima asignación se crea para el miembro que acaba de completar la tarea. */
     @Test
     fun resolveNextAssignmentDecision_emptyRotation_usesFallbackAndCreates() {
         val decision = RecurrenceRules.resolveNextAssignmentDecision(
@@ -645,6 +730,7 @@ class RecurrenceRulesTest {
         assertEquals("member-A", decision.memberId)
     }
 
+    /** Si ya existe una asignación "assigned" idéntica (mismo miembro y fecha), no se duplica. */
     @Test
     fun resolveNextAssignmentDecision_matchingAssignedDuplicate_doesNotCreate() {
         val nextDue = 1_000L
@@ -659,6 +745,7 @@ class RecurrenceRulesTest {
         assertEquals("member-A", decision.memberId)
     }
 
+    /** Una asignación existente con una fecha de vencimiento distinta no cuenta como duplicado: sí se crea la nueva. */
     @Test
     fun resolveNextAssignmentDecision_existingAssignmentWithDifferentDueDate_stillCreates() {
         val decision = RecurrenceRules.resolveNextAssignmentDecision(
@@ -671,10 +758,9 @@ class RecurrenceRulesTest {
         assertTrue(decision.shouldCreate)
     }
 
+    /** Solo deduplica contra asignaciones "assigned" — una "completed" para el mismo miembro/fecha no cuenta como ya regenerada. */
     @Test
     fun resolveNextAssignmentDecision_existingAssignmentAlreadyCompleted_stillCreates() {
-        // Solo deduplica contra asignaciones "assigned" — una "completed" para
-        // el mismo miembro/fecha no cuenta como ya regenerada.
         val nextDue = 1_000L
         val decision = RecurrenceRules.resolveNextAssignmentDecision(
             assignmentRotation = emptyList(),
@@ -686,6 +772,7 @@ class RecurrenceRulesTest {
         assertTrue(decision.shouldCreate)
     }
 
+    /** Si la rotación asigna la próxima ocurrencia a otro miembro, la deduplicación se comprueba contra ESE miembro, no contra quien completó la tarea. */
     @Test
     fun resolveNextAssignmentDecision_rotationResolvesDifferentMember_dedupesAgainstThatMember() {
         // 2024-03-18 es lunes (dow=1) -> la rotación asigna a member-monday,
