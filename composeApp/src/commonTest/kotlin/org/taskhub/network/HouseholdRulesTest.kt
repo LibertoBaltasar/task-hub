@@ -109,4 +109,83 @@ class HouseholdRulesTest {
         )
         assertEquals("child-with-account", HouseholdRules.resolveOwnerSuccessor(members)?.id)
     }
+
+    // ── planOwnerSuccession — orquestación de FirestoreRepository.deleteMember
+    // (decisión de a quién transferir la propiedad al expulsar/dar de baja al
+    // owner). Extraída para poder testearla sin mocks de red.
+
+    /** Si el miembro dado de baja NO es el owner, no hay plan: no debe tocarse la propiedad del hogar. */
+    @Test
+    fun planOwnerSuccession_targetIsNotOwner_returnsNull() {
+        val remaining = listOf(member("admin-1", joinedAt = 100, role = "admin"))
+        val plan = HouseholdRules.planOwnerSuccession(
+            currentOwnerId = "uid-owner",
+            targetMemberUserId = "uid-someone-else",
+            remainingMembers = remaining
+        )
+        assertNull(plan)
+    }
+
+    /** El owner se da de baja y el sucesor calculado ya es admin: no hace falta promocionarlo, solo transferir. */
+    @Test
+    fun planOwnerSuccession_ownerLeaving_successorAlreadyAdmin_noPromotionNeeded() {
+        val remaining = listOf(
+            member("admin-1", joinedAt = 100, role = "admin"),
+            member("child-1", joinedAt = 50, role = "child")
+        )
+        val plan = HouseholdRules.planOwnerSuccession(
+            currentOwnerId = "uid-owner",
+            targetMemberUserId = "uid-owner",
+            remainingMembers = remaining
+        )
+        assertEquals(HouseholdRules.OwnerSuccessionPlan("admin-1", "admin-1", promoteToAdmin = false), plan)
+    }
+
+    /** El owner se da de baja y el único sucesor con cuenta es "child": hay que promocionarlo antes de transferir. */
+    @Test
+    fun planOwnerSuccession_ownerLeaving_successorNeedsPromotion() {
+        val remaining = listOf(member("child-1", joinedAt = 50, role = "child"))
+        val plan = HouseholdRules.planOwnerSuccession(
+            currentOwnerId = "uid-owner",
+            targetMemberUserId = "uid-owner",
+            remainingMembers = remaining
+        )
+        assertEquals(HouseholdRules.OwnerSuccessionPlan("child-1", "child-1", promoteToAdmin = true), plan)
+    }
+
+    /** El owner se da de baja pero nadie más tiene cuenta vinculada: sin sucesor posible, no hay plan. */
+    @Test
+    fun planOwnerSuccession_ownerLeaving_noSuccessorAvailable_returnsNull() {
+        val remaining = listOf(member("child-no-account", joinedAt = 50, userId = null))
+        val plan = HouseholdRules.planOwnerSuccession(
+            currentOwnerId = "uid-owner",
+            targetMemberUserId = "uid-owner",
+            remainingMembers = remaining
+        )
+        assertNull(plan)
+    }
+
+    /** Household sin ownerId resuelto (lookup fallido): defensivo, no debe intentar transferir nada. */
+    @Test
+    fun planOwnerSuccession_currentOwnerIdNull_returnsNull() {
+        val remaining = listOf(member("admin-1", joinedAt = 100, role = "admin"))
+        val plan = HouseholdRules.planOwnerSuccession(
+            currentOwnerId = null,
+            targetMemberUserId = "uid-owner",
+            remainingMembers = remaining
+        )
+        assertNull(plan)
+    }
+
+    /** Miembro dado de baja sin userId (perfil "hijo/a"): nunca puede ser el owner, no hay plan. */
+    @Test
+    fun planOwnerSuccession_targetMemberUserIdNull_returnsNull() {
+        val remaining = listOf(member("admin-1", joinedAt = 100, role = "admin"))
+        val plan = HouseholdRules.planOwnerSuccession(
+            currentOwnerId = "uid-owner",
+            targetMemberUserId = null,
+            remainingMembers = remaining
+        )
+        assertNull(plan)
+    }
 }

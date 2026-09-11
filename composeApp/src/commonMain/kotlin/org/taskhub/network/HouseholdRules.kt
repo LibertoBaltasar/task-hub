@@ -40,4 +40,38 @@ object HouseholdRules {
         val admins = withAccount.filter { it.role == "admin" }
         return admins.minByOrNull { it.joinedAt } ?: withAccount.minByOrNull { it.joinedAt }
     }
+
+    /** Acciones de I/O a ejecutar para transferir la propiedad del hogar (ver [planOwnerSuccession]). */
+    data class OwnerSuccessionPlan(
+        val successorMemberId: String,
+        val successorUserId: String,
+        val promoteToAdmin: Boolean
+    )
+
+    /**
+     * Decide si hace falta transferir la propiedad del hogar antes de dar de
+     * baja a [targetMemberUserId], y a quién — extraído de
+     * [FirestoreRepository.deleteMember] (ronda de deuda aplicable
+     * 2026-09-12: esa orquestación no tenía test propio porque mezclaba I/O
+     * real con la decisión). La orquestación en sí (leer household/members,
+     * escribir el nuevo owner) sigue necesitando red real, pero esta decisión
+     * no — queda testable en `commonTest` sin mocks.
+     *
+     * `null` si [targetMemberUserId] no es el owner actual, o si no hay
+     * ningún sucesor posible (ver [resolveOwnerSuccessor]).
+     */
+    fun planOwnerSuccession(
+        currentOwnerId: String?,
+        targetMemberUserId: String?,
+        remainingMembers: List<MemberResponse>
+    ): OwnerSuccessionPlan? {
+        if (currentOwnerId == null || targetMemberUserId == null || targetMemberUserId != currentOwnerId) return null
+        val successor = resolveOwnerSuccessor(remainingMembers) ?: return null
+        val successorUserId = successor.userId ?: return null
+        return OwnerSuccessionPlan(
+            successorMemberId = successor.id,
+            successorUserId = successorUserId,
+            promoteToAdmin = successor.role != "admin"
+        )
+    }
 }

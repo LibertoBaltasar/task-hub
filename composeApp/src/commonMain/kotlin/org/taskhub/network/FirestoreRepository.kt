@@ -806,13 +806,13 @@ class FirestoreRepository(
             } catch (_: Exception) {
                 emptyList()
             }
-            val successor = HouseholdRules.resolveOwnerSuccessor(remaining)
-            if (successor?.userId != null) {
+            val plan = HouseholdRules.planOwnerSuccession(household.ownerId, targetMember.userId, remaining)
+            if (plan != null) {
                 try {
-                    if (successor.role != "admin") {
-                        memberRepository.updateMemberRole(householdId, successor.id, "admin")
+                    if (plan.promoteToAdmin) {
+                        memberRepository.updateMemberRole(householdId, plan.successorMemberId, "admin")
                     }
-                    householdRepository.updateHouseholdOwner(householdId, successor.userId)
+                    householdRepository.updateHouseholdOwner(householdId, plan.successorUserId)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
