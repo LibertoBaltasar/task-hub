@@ -28,16 +28,14 @@ import org.taskhub.ui.i18n.AppStrings
  * [FirestoreRepository] (ver docs/refactor-arquitectura-2026-08-31.md, punto
  * 6, fase 2.3). Lógica movida tal cual, sin cambios de comportamiento.
  *
- * NO incluye `completeTask`/`completeAssignment`/`reassignTaskCompletion` ni
- * sus helpers privados tan acoplados (`resolveCompletionOutcome`,
- * `calculatePenalty`, `calculateNextDueDate`, `markAssignmentCompleted`,
- * `regenerateNextAssignment`, `updateTaskHistoryMember`,
- * `findTaskHistoryRecord`) — todos otorgan o transfieren puntos
- * (`addMemberPoints`, ahora en [MemberRepository]) a la vez que mutan la
- * tarea/asignación, así que se quedan en [FirestoreRepository] como
- * orquestación Task+Member — no por evitar un ciclo (ese motivo ya no aplica,
- * `MemberRepository` existe desde la fase 2.5), sino porque no pertenecen
- * enteros a ningún dominio.
+ * NO incluye `completeTask`/`completeAssignment`/`reassignTaskCompletion`/
+ * `undoTaskCompletion`: desde
+ * `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`, esas 4
+ * operaciones delegan en Cloud Functions (`functions/`, vía
+ * `CloudFunctionsClient`) que hacen la transacción completa (tarea +
+ * historial + puntos + asignaciones) en el servidor — [FirestoreRepository]
+ * solo llama a la función correspondiente, ya no orquesta HTTP secuencial
+ * ni necesita helpers propios para ello.
  */
 class TaskRepository(
     private val baseUrl: String,
@@ -271,103 +269,13 @@ class TaskRepository(
         return toTaskResponse(response, householdId)
     }
 
-    /**
-     * Revert a task completion — used by the undo feature.
-     * Restores the previous lastCompletedDate/completedBy/nextDueAt on the
-     * task document. [previousNextDueAt] es el `nextDueAt` que tenía la tarea
-     * ANTES de completarla (capturado por el caller antes de llamar a
-     * `completeTask`) — sin restaurarlo, deshacer una compleción recurrente
-     * dejaba el `nextDueAt` que `completeTask` ya había avanzado, afectando al
-     * cálculo de puntualidad de la siguiente compleción REAL (panel v7, Exp.
-     * 8, IMPORTANTE). `null` (tarea "once", o recurrente que nunca llegó a
-     * tener uno) limpia el campo con `NULL_VALUE`, igual que
-     * [nextDueAtField].
-     * No revierte puntos/racha/historial por sí sola — eso lo hace el caller
-     * (ver `TaskScreenModel.undoCompleteTask`: `addMemberPoints`, `updateMemberStreak`
-     * y `deleteTaskHistoryRecord`).
-     */
-    suspend fun revertTaskCompletion(
-        householdId: String,
-        taskId: String,
-        previousLastCompletedDate: Long?,
-        previousCompletedBy: String? = null,
-        previousNextDueAt: Long? = null
-    ) {
-        val lcdValue = if (previousLastCompletedDate != null) {
-            FirestoreValue(integerValue = previousLastCompletedDate.toString())
-        } else {
-            FirestoreValue(nullValue = "NULL_VALUE")
-        }
-        val cbValue = if (previousCompletedBy != null) {
-            FirestoreValue(stringValue = previousCompletedBy)
-        } else {
-            FirestoreValue(nullValue = "NULL_VALUE")
-        }
-        val fields = mapOf(
-            "lastCompletedDate" to lcdValue,
-            "completedBy" to cbValue,
-            "nextDueAt" to nextDueAtField(previousNextDueAt)
-        )
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths("lastCompletedDate", "completedBy", "nextDueAt")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-        taskCache.clearTasks(householdId)
-    }
-
-    /**
-     * Save a task completion record to Firestore taskHistory subcollection.
-     * Devuelve el ID del registro creado — usado por
-     * [org.taskhub.network.FirestoreRepository.completeTask]/[org.taskhub.network.FirestoreRepository.completeAssignment]
-     * para marcarlo con [markTaskHistoryPointsApplied] tras confirmar
-     * `addMemberPoints` (ver KDoc de [org.taskhub.network.models.TaskHistoryResponse.pointsApplied]).
-     * [pointsApplied]: `false` cuando el caller va a otorgar los puntos EN UN
-     * PASO POSTERIOR (el flujo normal de compleción); `true` (default) para
-     * escrituras donde los puntos ya se otorgaron o no aplica reconciliación.
-     */
-    suspend fun saveTaskHistory(
-        householdId: String,
-        taskId: String,
-        memberId: String,
-        points: Int,
-        completedAt: Long,
-        onTime: Boolean,
-        pointsApplied: Boolean = true
-    ): String {
-        val fields = mapOf(
-            "taskId" to FirestoreValue(stringValue = taskId),
-            "memberId" to FirestoreValue(stringValue = memberId),
-            "points" to FirestoreValue(integerValue = points.toString()),
-            "completedAt" to FirestoreValue(integerValue = completedAt.toString()),
-            "onTime" to FirestoreValue(booleanValue = onTime),
-            "pointsApplied" to FirestoreValue(booleanValue = pointsApplied)
-        )
-
-        val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/taskHistory") {
-            withAuth()
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }.body()
-
-        taskCache.clearTaskHistory(householdId)
-        return extractDocId(response.name, "saveTaskHistory")
-    }
-
-    /**
-     * Marca un registro de `taskHistory` como con los puntos ya aplicados —
-     * ver KDoc de [saveTaskHistory]/[org.taskhub.network.models.TaskHistoryResponse.pointsApplied].
-     */
-    suspend fun markTaskHistoryPointsApplied(householdId: String, historyId: String) {
-        client.patch("$baseUrl/households/$householdId/taskHistory/$historyId") {
-            withAuth()
-            updateMaskFieldPaths("pointsApplied")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(mapOf("pointsApplied" to FirestoreValue(booleanValue = true))))
-        }
-        taskCache.clearTaskHistory(householdId)
-    }
+    // NOTA (ver `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`):
+    // `revertTaskCompletion`/`saveTaskHistory`/`markTaskHistoryPointsApplied`
+    // vivían aquí y se retiraron — la Cloud Function `undoTaskCompletion`
+    // revierte `lastCompletedDate`/`completedBy`/`nextDueAt` dentro de su
+    // propia transacción, y `completeRecurringTask`/`completeAssignment`
+    // crean el registro de `taskHistory` con `pointsApplied: true` directo
+    // (ya no hace falta el patrón "false → true" de dos escrituras).
 
     /**
      * Get all task history records for a household. Paginada

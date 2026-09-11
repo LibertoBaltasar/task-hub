@@ -41,6 +41,13 @@ import org.taskhub.network.models.UserProfile
 import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
+import org.taskhub.network.models.CompleteRecurringTaskRequest
+import org.taskhub.network.models.CompleteAssignmentRequest
+import org.taskhub.network.models.ReassignTaskCompletionRequest
+import org.taskhub.network.models.ReassignTaskCompletionResult
+import org.taskhub.network.models.UndoTaskCompletionRequest
+import org.taskhub.network.models.UndoTaskCompletionResult
+import org.taskhub.network.models.TaskCompletionFunctionResult
 import org.taskhub.network.models.NotificationResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.network.models.RewardRedemption
@@ -95,6 +102,10 @@ class FirestoreRepository(
     private val taskCache: TaskCache,
     private val settingsStore: SettingsStore,
     private val firestoreClient: FirestoreClient = FirestoreClient(apiKey, settingsStore),
+    // Ver `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md` —
+    // completar/deshacer/reasignar delegan en las Cloud Functions de
+    // `functions/` en vez de orquestar HTTP secuencial contra Firestore.
+    private val cloudFunctionsClient: CloudFunctionsClient = CloudFunctionsClient(firestoreClient.client, firestoreClient),
     // ── Repos de dominio — recibidos por inyección (registrados como
     // `single` de Koin, ver AppModule.kt) en vez de construidos a mano aquí
     // dentro. Antes eran campos privados armados en el cuerpo de la clase, lo
@@ -751,9 +762,11 @@ class FirestoreRepository(
      * Da de baja a un miembro (ver [MemberRepository.deleteMember] para el
      * soft-delete en sí) y purga sus referencias en las tareas del hogar:
      * quita sus slots de `assignmentRotation` y borra sus asignaciones
-     * "assigned" pendientes, para que la siguiente regeneración
-     * ([regenerateNextAssignment]) no le cree una asignación real a alguien
-     * ya invisible en [getMembers] (panel v4, Experto 2 hallazgo #2 ALTO).
+     * "assigned" pendientes, para que la siguiente regeneración de la
+     * Cloud Function `completeRecurringTask`/`completeAssignment` (ver
+     * `functions/src/completeRecurringTask.ts`) no le cree una asignación
+     * real a alguien ya invisible en [getMembers] (panel v4, Experto 2
+     * hallazgo #2 ALTO).
      * La purga es best-effort: un fallo aquí no debe deshacer el soft-delete
      * ya confirmado, que es el efecto principal e irreversible de esta acción.
      *
@@ -1037,28 +1050,27 @@ class FirestoreRepository(
     class InsufficientBalanceException(message: String) : Exception(message)
 
     /**
-     * Mark a task as completed today. Sets lastCompletedDate, awards points
-     * (con penalización por retraso si `task.nextDueAt`/`dueDate`/`penaltyMode`
-     * aplican — ver [resolveCompletionOutcome]), records history, sincroniza la
-     * asignación de este ciclo (si existía) como completada y regenera la de
-     * la siguiente ocurrencia respetando `assignmentRotation` (ver
-     * [regenerateNextAssignment] — unificado con [completeAssignment], antes
-     * solo ese flujo regeneraba, y siempre ignorando la rotación).
+     * Completa una tarea recurrente delegando en la Cloud Function
+     * `completeRecurringTask` (ver
+     * `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`,
+     * secciones 2.1 y 4): UNA sola llamada de red, resuelta en una
+     * `runTransaction` del Admin SDK en vez de la secuencia de N escrituras
+     * HTTP directas a Firestore que había antes (evaluada y descartada la
+     * alternativa de construir el `:commit` a mano en cliente — ver
+     * `docs/atomicidad-commit-pendiente.md`). El servidor lee tarea +
+     * miembro + asignaciones del ciclo, calcula puntos/puntualidad con las
+     * MISMAS reglas (portadas a TypeScript, ver `functions/src/penalty.ts`/
+     * `rules.ts`) y escribe todo-o-nada: `lastCompletedDate`/`completedBy`/
+     * `nextDueAt` de la tarea, el registro de `taskHistory`
+     * (`pointsApplied: true` directo, sin el patrón "false → true" de antes),
+     * `totalPoints` del miembro, las asignaciones del ciclo → `completed` y
+     * la del siguiente ciclo si aplica.
      *
-     * Concurrencia optimista sobre el documento de la tarea (`currentDocument.
-     * updateTime` como precondition del primer PATCH, sin reintento — ver
-     * [TaskCompletionConflictException] para la política de conflicto):
-     * evita que dos dispositivos completando la misma tarea casi a la vez
-     * dupliquen puntos/historial.
-     *
-     * NO es atómica de extremo a extremo más allá de ese primer PATCH (las
-     * escrituras siguientes siguen siendo HTTP secuenciales): un fallo de red
-     * a mitad de secuencia deja estado parcial, mitigado por la guarda de
-     * reentrancia de `TaskScreenModel` pero no eliminado. Evaluado y
-     * descartado usar el endpoint `:commit` con `fieldTransforms` para
-     * hacerlo transaccional — ver `docs/atomicidad-commit-pendiente.md` para
-     * el motivo (no se puede verificar el payload contra la API real en este
-     * entorno) y los pasos para hacerlo con seguridad en el futuro.
+     * Concurrencia optimista: [task].`lastCompletedDate` viaja como
+     * `expectedLastCompletedDate`; si no coincide con el valor fresco que lee
+     * la transacción, la función responde `ABORTED`/`FAILED_PRECONDITION` →
+     * se mapea a [TaskCompletionConflictException] (mismo tratamiento en
+     * `TaskScreenModel` que antes, cero cambio en ese catch).
      */
     suspend fun completeTask(
         householdId: String,
@@ -1066,260 +1078,68 @@ class FirestoreRepository(
         memberId: String,
         task: TaskResponse
     ): TaskCompletionResult {
-        val now = Clock.System.now().toEpochMilliseconds()
-        // nextDueAt (si existe) es la medianoche del día programado, no una
-        // fecha límite con hora real (ver KDoc de RecurrenceRules.endOfDueDay)
-        // — sin este ajuste, completar el mismo día programado (lo normal)
-        // se marcaría siempre como "tarde".
-        val effectiveDueDate = if (task.frequency == "once") {
-            task.dueDate
-        } else {
-            task.nextDueAt?.let { RecurrenceRules.endOfDueDay(it) } ?: task.dueDate
-        }
-        val outcome = PenaltyRules.resolveCompletionOutcome(task, effectiveDueDate, now)
-        val nextDueDate = calculateNextDueDate(task, now)
-
-        // 1. Update lastCompletedDate + completedBy (+ nextDueAt si es
-        //    recurrente) on the task. completedBy registra QUIÉN marcó hecho
-        //    (quien recibe los puntos), al margen de quién esté asignado.
-        val docUrl = "$baseUrl/households/$householdId/tasks/$taskId"
-        val current: FirestoreDocumentResponse = client.get(docUrl) { withAuth() }.body()
-        // La precondition `currentDocument.updateTime` de más abajo usa el
-        // updateTime de ESTA MISMA lectura fresca, así que por sí sola SIEMPRE
-        // se cumple (es tautológica: nada puede haber cambiado el documento
-        // entre esta línea y el PATCH de milisegundos después) — no protege
-        // contra el caso real más común: el dispositivo B tenía la tarea
-        // cargada en memoria desde antes y el dispositivo A ya la completó
-        // hace unos minutos. Por eso comparamos aquí el `lastCompletedDate`
-        // recién leído contra el que tenía el CALLER (parámetro [task], la
-        // copia que el ScreenModel cargó al abrir la pantalla): si difieren,
-        // alguien más ya completó (o modificó) esta tarea desde entonces y
-        // otorgar puntos ahora los duplicaría — panel v4, Experto 12
-        // hallazgo #1 CRÍTICO.
-        val freshLastCompleted = current.fields["lastCompletedDate"]?.integerValue?.toLongOrNull()
-        if (freshLastCompleted != task.lastCompletedDate) {
-            throw TaskCompletionConflictException(
-                "La tarea se modificó en otro dispositivo justo antes de completarla. Vuelve a intentarlo."
-            )
-        }
-        val fields = mutableMapOf(
-            "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
-            "completedBy" to FirestoreValue(stringValue = memberId)
-        )
-        if (task.frequency != "once") {
-            fields["nextDueAt"] = nextDueAtValue(nextDueDate)
-        }
-        try {
-            client.patch(docUrl) {
-                withAuth()
-                updateMaskFieldPaths(fields.keys)
-                current.updateTime?.let { parameter("currentDocument.updateTime", it) }
-                contentType(ContentType.Application.Json)
-                setBody(FirestoreDocument(fields))
-            }
-        } catch (e: FirestoreException) {
-            if (e.code == "FAILED_PRECONDITION" || e.code == "ABORTED") {
-                throw TaskCompletionConflictException(
-                    "La tarea se modificó en otro dispositivo justo antes de completarla. Vuelve a intentarlo."
+        val result = try {
+            cloudFunctionsClient.call<CompleteRecurringTaskRequest, TaskCompletionFunctionResult>(
+                "completeRecurringTask",
+                CompleteRecurringTaskRequest(
+                    householdId = householdId,
+                    taskId = taskId,
+                    memberId = memberId,
+                    expectedLastCompletedDate = task.lastCompletedDate
                 )
-            }
-            throw e
+            )
+        } catch (e: CloudFunctionException) {
+            throw mapToTaskCompletionConflict(e)
         }
         taskCache.clearTasks(householdId)
-
-        // 2. Guardar el historial ANTES de otorgar los puntos, con
-        //    `pointsApplied=false` — si el paso 3 (otorgar puntos) falla, el
-        //    registro queda como rastro reparable por
-        //    `reconcileMissingTaskPoints` en vez de perderse (orden invertido
-        //    respecto a versiones previas: guardar puntos primero dejaba
-        //    "historial ausente" ambiguo entre "no se otorgaron puntos" y
-        //    "se otorgaron pero falló guardar el historial", lo que habría
-        //    hecho insegura la reconciliación automática — ver KDoc de
-        //    [TaskHistoryResponse.pointsApplied]).
-        val historyId = saveTaskHistory(
-            householdId = householdId,
-            taskId = taskId,
-            memberId = memberId,
-            points = outcome.pointsAwarded,
-            completedAt = now,
-            onTime = outcome.onTime,
-            pointsApplied = false
-        )
-
-        // 3. Add points to the member, then marcar el historial como aplicado.
-        addMemberPoints(householdId, memberId, outcome.pointsAwarded)
-        taskRepository.markTaskHistoryPointsApplied(householdId, historyId)
-
-        // 4. Sincronizar TODAS las asignaciones "assigned" de este ciclo como
-        //    completadas — antes de regenerar. "Cualquier miembro puede
-        //    completar cualquier tarea": si Alice completa una tarea también
-        //    asignada a Bob, completar la tarea descarga el ciclo para AMBOS
-        //    (no solo la de quien pulsó "completar"), o la asignación de Bob
-        //    se quedaría "assigned" para siempre — huérfana, y la siguiente
-        //    regeneración usaría a Alice como fallback de rotación en vez de
-        //    a quien realmente le tocaba (panel v4, Experto 8 hallazgo #3
-        //    ALTO). Los puntos ya se otorgaron arriba SOLO a quien completó
-        //    (`memberId`): las asignaciones de otros miembros se marcan
-        //    completadas con `pointsAwarded=0` para no inflar sus
-        //    estadísticas (StatsScreen) con puntos que nunca recibieron.
-        val assignments = try {
-            getAssignments(householdId, taskId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-        val assignedThisCycle = assignments.filter { it.status == "assigned" }
-        val existingAssignment = assignedThisCycle.find { it.memberId == memberId }
-        for (a in assignedThisCycle) {
-            try {
-                val isCompleter = a.memberId == memberId
-                markAssignmentCompleted(
-                    householdId, taskId, a.id, now,
-                    pointsAwarded = if (isCompleter) outcome.pointsAwarded else 0,
-                    onTime = outcome.onTime,
-                    // Concurrencia optimista sobre CADA asignación hermana
-                    // (mismo motivo que en completeAssignment — panel de
-                    // revisión 2026-09-03/04, Experto 12): si otro
-                    // dispositivo ya la tocó, se descarta este cierre en vez
-                    // de sobrescribirla a ciegas (best-effort, igual que el
-                    // resto de este bucle).
-                    expectedUpdateTime = a.updateTime
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) { }
-        }
-
-        // 5. Regenerar la asignación de la siguiente ocurrencia (recurrentes).
-        //    Best-effort, igual que el paso 4: para este punto los puntos ya
-        //    se otorgaron y el historial ya se guardó (pasos 2-3), así que un
-        //    fallo de red aquí NO debe propagarse como TaskActionState.Error
-        //    — eso llevaría al usuario a reintentar completeTask desde cero,
-        //    volviendo a otorgar los puntos una segunda vez (panel v4, QA
-        //    hallazgo #1 CRÍTICO: "reintentar tras un fallo en regenerar
-        //    duplica los puntos").
-        if (task.frequency != "once") {
-            try {
-                regenerateNextAssignment(
-                    householdId, taskId, task, memberId,
-                    existingAssignment?.mandatory ?: false, nextDueDate, assignments
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) { }
-        }
-
-        return TaskCompletionResult(now, outcome.pointsAwarded, outcome.onTime)
+        taskCache.clearTaskHistory(householdId)
+        taskCache.clearMembers(householdId)
+        return TaskCompletionResult(result.completedAt, result.pointsAwarded, result.onTime)
     }
+
+    /** `true` si [status] (de [CloudFunctionException]) señala un conflicto de concurrencia (perdedor de una carrera). */
+    private fun isConflictStatus(status: String) = status == "ABORTED" || status == "FAILED_PRECONDITION"
+
+    private fun mapToTaskCompletionConflict(e: CloudFunctionException): Exception =
+        if (isConflictStatus(e.status)) {
+            TaskCompletionConflictException(
+                "La tarea se modificó en otro dispositivo justo antes de completarla. Vuelve a intentarlo."
+            )
+        } else e
+
+    private fun mapToAssignmentCompletionConflict(e: CloudFunctionException): Exception =
+        if (isConflictStatus(e.status)) {
+            AssignmentCompletionConflictException(
+                "Esta asignación se completó en otro dispositivo justo antes. Vuelve a intentarlo."
+            )
+        } else e
 
     /**
-     * Revert a task completion — used by the undo feature.
-     * Restores the previous lastCompletedDate/completedBy/nextDueAt on the
-     * task document — ver KDoc de [TaskRepository.revertTaskCompletion].
-     * No revierte puntos/racha/historial por sí sola — eso lo hace el caller
-     * (ver [TaskScreenModel.undoCompleteTask]: `addMemberPoints`, `updateMemberStreak`
-     * y [deleteTaskHistoryRecord]).
-     */
-    suspend fun revertTaskCompletion(
-        householdId: String,
-        taskId: String,
-        previousLastCompletedDate: Long?,
-        previousCompletedBy: String? = null,
-        previousNextDueAt: Long? = null
-    ) = taskRepository.revertTaskCompletion(householdId, taskId, previousLastCompletedDate, previousCompletedBy, previousNextDueAt)
-
-    /**
-     * Revierte los efectos de [completeTask] sobre las asignaciones —
-     * llamado por `TaskScreenModel.undoCompleteTask` (panel de revisión
-     * 2026-09-03/04, Experto 2/8): antes deshacer una compleción solo
-     * revertía puntos/racha/historial/`lastCompletedDate` de la TAREA, pero
-     * dejaba huérfanas para siempre las asignaciones que [completeTask] había
-     * marcado "completed" (la del propio miembro y las hermanas con
-     * `pointsAwarded=0`), y — si la tarea era recurrente — la asignación del
-     * ciclo SIGUIENTE que ya se había regenerado.
+     * Deshace una compleción — delega en la Cloud Function `undoTaskCompletion`
+     * (ver diseño, sección 2.4, opción (ii) decidida por Liberto): el
+     * SERVIDOR deriva el estado previo (lastCompletedDate/completedBy/
+     * nextDueAt/puntos/asignaciones) leyendo el registro de `taskHistory`
+     * anterior a [completedAt], en vez de depender de un `UndoState` volátil
+     * en memoria del cliente — deshacer sobrevive a recargar la pantalla o
+     * cerrar la app entre completar y deshacer. Idempotente: si el registro
+     * ya no existe (undo repetido desde dos dispositivos), la función
+     * devuelve `reverted: false` en vez de fallar.
      *
-     * 1. Revierte a "assigned" (limpia `completedAt`/`pointsAwarded`/`onTime`)
-     *    cualquier asignación de este ciclo cuyo `completedAt` coincida
-     *    exactamente con [completedAt] — identifica sin ambigüedad las
-     *    asignaciones que ESTA compleción (y no otra) cerró.
-     * 2. Si la tarea es recurrente, borra la asignación del ciclo siguiente
-     *    que [regenerateNextAssignment] creó con ID determinista
-     *    (`next_{taskId}_{nextDueDate}`, recalculado igual que entonces) —
-     *    pero SOLO si sigue "assigned" (best-effort: si alguien ya la
-     *    completó entretanto, ese estado real no se toca).
-     *
-     * Best-effort por asignación: un fallo puntual no aborta el resto ni
-     * hace fallar el undo (que ya revirtió lo más importante: puntos/racha).
+     * Colapsa en UNA llamada lo que antes eran dos ([revertTaskCompletion] +
+     * [undoTaskCompletionAssignments], ya retiradas) más el
+     * `deleteTaskHistoryRecord`/`addMemberPoints` que hacía `TaskScreenModel`
+     * a mano. Streak/racha del miembro sigue siendo responsabilidad del
+     * cliente (la función no la toca) — ver `TaskScreenModel.undoCompleteTask`.
      */
-    suspend fun undoTaskCompletionAssignments(
-        householdId: String,
-        taskId: String,
-        completedAt: Long,
-        task: TaskResponse
-    ) {
-        val assignments = try {
-            getAssignments(householdId, taskId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-        for (a in assignments) {
-            if (a.status == "completed" && a.completedAt == completedAt) {
-                try {
-                    revertAssignmentCompletion(householdId, taskId, a.id)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) { }
-            }
-        }
-
-        if (task.frequency == "once") return
-        val nextDueDate = calculateNextDueDate(task, completedAt) ?: return
-        val nextAssignmentId = "next_${taskId}_$nextDueDate"
-        try {
-            val doc: FirestoreDocumentResponse = client.get(
-                "$baseUrl/households/$householdId/tasks/$taskId/assignments/$nextAssignmentId"
-            ) { withAuth() }.body()
-            if (doc.fields["status"]?.stringValue == "assigned") {
-                client.delete(
-                    "$baseUrl/households/$householdId/tasks/$taskId/assignments/$nextAssignmentId"
-                ) { withAuth() }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // No crítico: si ya no existe, o ya se completó (no se toca), o falla de red.
-        }
-    }
-
-    /** Reverso de [markAssignmentCompleted]: vuelve la asignación a "assigned" sin dueDate/mandatory/memberId. */
-    private suspend fun revertAssignmentCompletion(householdId: String, taskId: String, assignmentId: String) {
-        val fields = mapOf<String, FirestoreValue>(
-            "status" to FirestoreValue(stringValue = "assigned"),
-            "completedAt" to FirestoreValue(nullValue = "NULL_VALUE"),
-            "pointsAwarded" to FirestoreValue(nullValue = "NULL_VALUE"),
-            "onTime" to FirestoreValue(nullValue = "NULL_VALUE")
+    suspend fun undoTaskCompletion(householdId: String, taskId: String, completedAt: Long) {
+        cloudFunctionsClient.call<UndoTaskCompletionRequest, UndoTaskCompletionResult>(
+            "undoTaskCompletion",
+            UndoTaskCompletionRequest(householdId = householdId, taskId = taskId, completedAt = completedAt)
         )
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId") {
-            withAuth()
-            updateMaskFieldPaths("status", "completedAt", "pointsAwarded", "onTime")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
+        taskCache.clearTasks(householdId)
+        taskCache.clearTaskHistory(householdId)
+        taskCache.clearMembers(householdId)
     }
-
-    /** Save a task completion record to Firestore taskHistory subcollection. */
-    suspend fun saveTaskHistory(
-        householdId: String,
-        taskId: String,
-        memberId: String,
-        points: Int,
-        completedAt: Long,
-        onTime: Boolean,
-        pointsApplied: Boolean = true
-    ): String = taskRepository.saveTaskHistory(householdId, taskId, memberId, points, completedAt, onTime, pointsApplied)
 
     /** Get all task history records for a household. */
     suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = taskRepository.getTaskHistory(householdId)
@@ -1329,110 +1149,20 @@ class FirestoreRepository(
         taskRepository.purgeOldTaskHistory(householdId, all, maxAgeMillis)
 
     /**
-     * Repara tareas marcadas como completadas cuyo otorgamiento de puntos
-     * quedó a medias — mecanismo automático de reconciliación invocado desde
-     * `TaskScreenModel.loadTasks` en cada carga (ver KDoc de
-     * [TaskReconciliation] y de [completeTask] para el fallo que repara).
-     * Best-effort e idempotente por tarea (nunca duplica puntos en
-     * reintentos SALVO la ventana residual documentada en
-     * [reconcileTaskPoints]): un fallo reparando una tarea no aborta el
-     * resto. [tasks] las pasa el caller (ya las tiene cargadas de
-     * `getTasks`) para no releerlas aquí.
-     */
-    suspend fun reconcileMissingTaskPoints(householdId: String, tasks: List<TaskResponse>) {
-        val history = try {
-            getTaskHistory(householdId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            return
-        }
-        val candidates = TaskReconciliation.findTasksNeedingPointsReconciliation(tasks, history)
-        for (task in candidates) {
-            try {
-                reconcileTaskPoints(householdId, task, history)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Best-effort: se prioriza reparar el resto de candidatos.
-            }
-        }
-    }
-
-    /**
-     * Repara una única tarea candidata (ver [reconcileMissingTaskPoints]).
+     * Reasigna quién ha hecho una tarea ya completada (corrección de
+     * errores) — delega en la Cloud Function `reassignTaskCompletion` (ver
+     * diseño, sección 2.3): UNA transacción que lee `completedBy` + el
+     * registro de `taskHistory` de esa compleción (fallback a `task.points`
+     * si no hay historial, igual que antes), transfiere puntos del miembro
+     * anterior al nuevo y reasigna `completedBy` + el registro de historial +
+     * la asignación de esa misma compleción — reemplaza las 4 escrituras
+     * HTTP secuenciales de antes. Requiere llamador `isTrusted` (owner o
+     * admin), verificado por la función leyendo el rol del caller.
      *
-     * - Sin registro de historial para (taskId, completedAt): el fallo
-     *   ocurrió ANTES de guardarlo (ver el nuevo orden de pasos en
-     *   [completeTask]: historial primero, con `pointsApplied=false`, luego
-     *   puntos). Se recalcula el resultado con las reglas de penalización
-     *   ACTUALES de la tarea — best-effort: si la configuración de
-     *   penalización cambió desde la compleción original, el recálculo puede
-     *   no coincidir exacto con lo que se habría otorgado entonces; se acepta
-     *   porque la alternativa (no otorgar nada) es peor.
-     * - Con registro pero `pointsApplied=false`: se otorgan los puntos YA
-     *   calculados en ese registro (sin recalcular).
-     *
-     * En ambos casos se marca `pointsApplied=true` al terminar. Ventana
-     * residual NO cubierta (igual que el resto de escrituras
-     * multi-paso de este archivo, ver `docs/atomicidad-commit-pendiente.md`):
-     * si `addMemberPoints` tiene éxito pero el PATCH de
-     * `markTaskHistoryPointsApplied` posterior falla, una reconciliación
-     * futura vería `pointsApplied=false` de nuevo y otorgaría los puntos una
-     * segunda vez. Eliminarla del todo requeriría el `:commit` transaccional
-     * ya evaluado y descartado para este entorno.
-     */
-    private suspend fun reconcileTaskPoints(
-        householdId: String,
-        task: TaskResponse,
-        history: List<TaskHistoryResponse>
-    ) {
-        val completedAt = task.lastCompletedDate ?: return
-        val memberId = task.completedBy ?: return
-        val existing = history.find { it.taskId == task.id && it.completedAt == completedAt }
-        if (existing == null) {
-            val effectiveDueDate = if (task.frequency == "once") {
-                task.dueDate
-            } else {
-                task.nextDueAt?.let { RecurrenceRules.endOfDueDay(it) } ?: task.dueDate
-            }
-            val outcome = PenaltyRules.resolveCompletionOutcome(task, effectiveDueDate, completedAt)
-            val historyId = taskRepository.saveTaskHistory(
-                householdId = householdId,
-                taskId = task.id,
-                memberId = memberId,
-                points = outcome.pointsAwarded,
-                completedAt = completedAt,
-                onTime = outcome.onTime,
-                pointsApplied = false
-            )
-            addMemberPoints(householdId, memberId, outcome.pointsAwarded)
-            taskRepository.markTaskHistoryPointsApplied(householdId, historyId)
-        } else {
-            addMemberPoints(householdId, existing.memberId, existing.points)
-            taskRepository.markTaskHistoryPointsApplied(householdId, existing.id)
-        }
-    }
-
-    /**
-     * Reasigna quién ha hecho una tarea ya completada (corrección de errores).
-     *
-     * Transfiere los puntos: resta los puntos al miembro anterior (completedBy)
-     * y se los suma al nuevo, manteniendo coherentes totalPoints, completedBy
-     * y el registro de historial correspondiente. Si la tarea no estaba
-     * completada (completedBy null), solo fija el nuevo miembro sin transferir.
-     *
-     * La cantidad transferida es la de [findTaskHistoryRecord] (los puntos
-     * REALMENTE otorgados en esa compleción, que pueden ser menores que
-     * [taskPoints] por penalización de retraso) — antes se transfería siempre
-     * [taskPoints] (la configuración ACTUAL de la tarea, que además pudo
-     * cambiar desde que se completó), pudiendo sobre/sub-compensar al
-     * reasignar (panel v7, Exp. 8, MENOR). [taskPoints] queda como fallback
-     * para compleciones legacy sin registro de historial.
-     *
-     * NO es atómica de extremo a extremo (hasta 4 escrituras HTTP
-     * secuenciales): ver la nota de atomicidad en [completeTask] y
-     * `docs/atomicidad-commit-pendiente.md`.
+     * [taskPoints] se mantiene en la firma solo por compatibilidad con
+     * `TaskScreenModel` (no cambia de firma vista desde el ScreenModel) — ya
+     * no se reenvía a la función, que deriva el fallback de `task.points`
+     * ella misma si no hay registro de historial.
      */
     suspend fun reassignTaskCompletion(
         householdId: String,
@@ -1440,173 +1170,13 @@ class FirestoreRepository(
         taskPoints: Int,
         newMemberId: String
     ) {
-        val task = try {
-            getTask(householdId, taskId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            return
-        }
-        val oldMemberId = task.completedBy
-        val completedAt = task.lastCompletedDate ?: Clock.System.now().toEpochMilliseconds()
-        val actualPoints = findTaskHistoryRecord(householdId, taskId, completedAt)?.points ?: taskPoints
-
-        // 1. Actualizar completedBy en la tarea PRIMERO — con concurrencia
-        //    optimista (panel de revisión 2026-09-03/04, Experto 12, MENOR:
-        //    antes este PATCH era incondicional, así que una edición/
-        //    compleción concurrente de la misma tarea podía perderse
-        //    silenciosamente). Este paso va ANTES de transferir puntos (al
-        //    revés que en una versión anterior) precisamente para que un
-        //    conflicto aquí aborte limpiamente SIN haber movido puntos
-        //    todavía: si los puntos se transfirieran primero y este PATCH
-        //    fallara, un reintento del usuario (misma corrección, mismo
-        //    oldMemberId/newMemberId) duplicaría la transferencia, porque
-        //    nada en el estado remoto indica que ya se movieron — el mismo
-        //    anti-patrón "reintentar duplica puntos" que completeTask/
-        //    completeAssignment evitan poniendo su PATCH con precondición
-        //    como primer paso (panel de revisión 2026-09-04, Experto 12,
-        //    CRÍTICO). Si hay conflicto, se propaga como fallo normal (el
-        //    propio ScreenModel ya trata cualquier excepción aquí como error
-        //    recargable, sin reintento automático).
-        val currentTaskDoc: FirestoreDocumentResponse = client.get(
-            "$baseUrl/households/$householdId/tasks/$taskId"
-        ) { withAuth() }.body()
-        val fields = mapOf("completedBy" to FirestoreValue(stringValue = newMemberId))
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths("completedBy")
-            currentTaskDoc.updateTime?.let { parameter("currentDocument.updateTime", it) }
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
+        cloudFunctionsClient.call<ReassignTaskCompletionRequest, ReassignTaskCompletionResult>(
+            "reassignTaskCompletion",
+            ReassignTaskCompletionRequest(householdId = householdId, taskId = taskId, newMemberId = newMemberId)
+        )
         taskCache.clearTasks(householdId)
-
-        // 2. Transferir puntos SOLO si había un completer previo registrado.
-        //    (quien marca hecho recibe los puntos; al corregir se mueven de la
-        //    persona anterior a la nueva). Si completedBy era null (tarea legacy
-        //    completada antes de registrar quién), fijamos el nuevo sin tocar
-        //    puntos para no duplicarlos.
-        if (oldMemberId != null && oldMemberId != newMemberId) {
-            addMemberPoints(householdId, oldMemberId, -actualPoints)
-            addMemberPoints(householdId, newMemberId, actualPoints)
-        }
-
-        // 3. Reasignar el registro de historial de esa compleción para que las
-        //    estadísticas (StatsScreen) sigan coherentes.
-        if (oldMemberId != null && oldMemberId != newMemberId) {
-            updateTaskHistoryMember(householdId, taskId, completedAt, newMemberId)
-            // 4. Reasignar también el documento de `assignments` de esa MISMA
-            //    compleción (si existía) — sin esto, la compleción quedaba
-            //    contabilizada en StatsScreen de AMBOS miembros: el antiguo
-            //    vía su asignación stale (memberId sin tocar) y el nuevo vía
-            //    el historial ya corregido arriba (panel de revisión
-            //    2026-09-03/04, Experto 8, NUEVO).
-            updateAssignmentMemberForCompletion(householdId, taskId, completedAt, oldMemberId, newMemberId)
-        }
-    }
-
-    /**
-     * Localiza la asignación de una compleción concreta (taskId+completedAt,
-     * completada por [oldMemberId]) y le reasigna `memberId` a [newMemberId]
-     * — ver punto 4 de [reassignTaskCompletion]. No-op si no existe (la tarea
-     * se completó sin estar asignada a nadie, caso normal de `completeTask`
-     * sobre una tarea sin asignaciones). Concurrencia optimista igual que el
-     * resto de esta función; best-effort (un fallo aquí no debe deshacer la
-     * transferencia de puntos/historial ya confirmada arriba).
-     */
-    private suspend fun updateAssignmentMemberForCompletion(
-        householdId: String,
-        taskId: String,
-        completedAt: Long,
-        oldMemberId: String,
-        newMemberId: String
-    ) {
-        val assignments = try {
-            getAssignments(householdId, taskId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            return
-        }
-        val target = assignments.firstOrNull {
-            it.status == "completed" && it.completedAt == completedAt && it.memberId == oldMemberId
-        } ?: return
-        try {
-            client.patch("$baseUrl/households/$householdId/tasks/$taskId/assignments/${target.id}") {
-                withAuth()
-                updateMaskFieldPaths("memberId")
-                target.updateTime?.let { parameter("currentDocument.updateTime", it) }
-                contentType(ContentType.Application.Json)
-                setBody(FirestoreDocument(mapOf("memberId" to FirestoreValue(stringValue = newMemberId))))
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // No crítico: ver KDoc de reassignTaskCompletion.
-        }
-    }
-
-    /**
-     * Localiza el registro de `taskHistory` de una compleción concreta
-     * (identificada por taskId + completedAt). null si no existe.
-     */
-    private suspend fun findTaskHistoryRecord(
-        householdId: String,
-        taskId: String,
-        completedAt: Long
-    ): TaskHistoryResponse? {
-        val history = try {
-            getTaskHistory(householdId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-        return history.firstOrNull { it.taskId == taskId && it.completedAt == completedAt }
-    }
-
-    /**
-     * Actualiza el memberId del registro de historial de una compleción concreta
-     * (identificada por taskId + completedAt). Se usa al corregir quién hizo una
-     * tarea. No-op si no existe el registro.
-     */
-    private suspend fun updateTaskHistoryMember(
-        householdId: String,
-        taskId: String,
-        completedAt: Long,
-        newMemberId: String
-    ) {
-        val record = findTaskHistoryRecord(householdId, taskId, completedAt) ?: return
-        val fields = mapOf("memberId" to FirestoreValue(stringValue = newMemberId))
-        client.patch("$baseUrl/households/$householdId/taskHistory/${record.id}") {
-            withAuth()
-            updateMaskFieldPaths("memberId")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-    }
-
-    /**
-     * Borra el registro de `taskHistory` de una compleción concreta (identificada
-     * por taskId + completedAt). Se usa al deshacer una compleción (undo): sin
-     * esto, el registro queda huérfano con puntos que ya no corresponden al total
-     * real del miembro (que sí se revierte), desincronizando las estadísticas
-     * (StatsScreen) que agregan desde `taskHistory`. No-op si no existe el registro.
-     */
-    suspend fun deleteTaskHistoryRecord(householdId: String, taskId: String, completedAt: Long) {
-        val record = findTaskHistoryRecord(householdId, taskId, completedAt) ?: return
-        try {
-            client.delete("$baseUrl/households/$householdId/taskHistory/${record.id}") {
-                withAuth()
-            }
-            taskCache.clearTaskHistory(householdId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // No crítico: si ya no existe (o falla, p.ej. sin permiso de borrado
-            // de un registro ajeno bajo firestore.rules v4), el undo de
-            // puntos/racha sigue en pie.
-        }
+        taskCache.clearTaskHistory(householdId)
+        taskCache.clearMembers(householdId)
     }
 
     /** Assign a task to one or more members with a due date. */
@@ -1667,52 +1237,18 @@ class FirestoreRepository(
         taskRepository.getAllAssignments(householdId, tasks)
 
     /**
-     * Marca el documento de una asignación como completada (sin tocar puntos
-     * del miembro). Si [expectedUpdateTime] no es null, se usa como
-     * `currentDocument.updateTime` (precondition de concurrencia optimista) —
-     * usado por [completeAssignment]; los demás callers (sync interno de
-     * [completeTask]) no lo necesitan porque ya ganaron la carrera al superar
-     * la precondition del documento de la tarea.
-     */
-    private suspend fun markAssignmentCompleted(
-        householdId: String,
-        taskId: String,
-        assignmentId: String,
-        completedAt: Long,
-        pointsAwarded: Int,
-        onTime: Boolean,
-        expectedUpdateTime: String? = null
-    ) {
-        val fields = mapOf<String, FirestoreValue>(
-            "status" to FirestoreValue(stringValue = "completed"),
-            "completedAt" to FirestoreValue(integerValue = completedAt.toString()),
-            "pointsAwarded" to FirestoreValue(integerValue = pointsAwarded.toString()),
-            "onTime" to FirestoreValue(booleanValue = onTime)
-        )
-        client.patch(
-            "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
-        ) {
-            withAuth()
-            updateMaskFieldPaths("status", "completedAt", "pointsAwarded", "onTime")
-            expectedUpdateTime?.let { parameter("currentDocument.updateTime", it) }
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
-        }
-    }
-
-    /**
-     * Complete a task assignment. Calculates penalty if overdue, handles recurrence.
-     * Returns the updated assignment.
+     * Completa una asignación concreta delegando en la Cloud Function
+     * `completeAssignment` (ver diseño, sección 2.2): transacción análoga a
+     * [completeTask] pero ancla la lectura en el documento de la ASIGNACIÓN
+     * (no en `task.lastCompletedDate`) — replica exactamente lo que antes
+     * hacían `completeAssignment` + `regenerateNextAssignment` en una
+     * secuencia de escrituras HTTP.
      *
-     * Concurrencia optimista sobre el documento de la ASIGNACIÓN
-     * (`currentDocument.updateTime`, mismo patrón que [completeTask] tiene
-     * sobre el documento de la tarea desde una ronda anterior) — antes esta
-     * función no tenía ninguna protección: dos dispositivos completando la
-     * misma asignación casi a la vez duplicaban puntos/historial y podían
-     * generar DOS asignaciones distintas para la siguiente ocurrencia (cadena
-     * bifurcada). Ver [AssignmentCompletionConflictException] para la política
-     * de conflicto (idéntica a la de [completeTask]: el perdedor no reintenta
-     * solo, debe recargar y volver a intentarlo).
+     * Concurrencia optimista: la función valida `assignment.status ==
+     * "assigned"` dentro de su propia transacción; si otro dispositivo ya la
+     * completó, responde `ABORTED` → se mapea a
+     * [AssignmentCompletionConflictException] (mismo tratamiento en
+     * `TaskScreenModel` que antes).
      */
     suspend fun completeAssignment(
         householdId: String,
@@ -1721,288 +1257,23 @@ class FirestoreRepository(
         assignmentId: String,
         assignment: TaskAssignmentResponse
     ): TaskAssignmentResponse {
-        val now = Clock.System.now().toEpochMilliseconds()
-        // assignment.dueDate para tareas recurrentes es medianoche del día
-        // programado (viene de nextOccurrence vía regenerateNextAssignment),
-        // no una hora límite real — mismo ajuste que en completeTask (ver
-        // RecurrenceRules.endOfDueDay). Las "once" sí tienen una hora real
-        // elegida por el usuario, se usan tal cual.
-        val effectiveDueDate = when {
-            task.frequency == "once" -> assignment.dueDate
-            assignment.dueDate == 0L -> 0L
-            else -> RecurrenceRules.endOfDueDay(assignment.dueDate)
-        }
-        val outcome = PenaltyRules.resolveCompletionOutcome(task, effectiveDueDate, now)
-        val onTime = outcome.onTime
-        val pointsAwarded = outcome.pointsAwarded
-
-        // Update assignment — con precondition de concurrencia optimista.
-        val assignmentUrl = "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
-        val currentAssignmentDoc: FirestoreDocumentResponse = client.get(assignmentUrl) { withAuth() }.body()
-        // Mismo motivo que en [completeTask]: la precondition `currentDocument.
-        // updateTime` de más abajo usa el updateTime de ESTA MISMA lectura
-        // fresca, así que por sí sola no detecta que OTRO dispositivo ya
-        // completó esta asignación hace un rato (no en el instante exacto de
-        // esta función) — panel v4, Experto 12 hallazgo #1 CRÍTICO.
-        val freshStatus = currentAssignmentDoc.fields["status"]?.stringValue
-        if (freshStatus != assignment.status) {
-            throw AssignmentCompletionConflictException(
-                "Esta asignación se completó en otro dispositivo justo antes. Vuelve a intentarlo."
+        val result = try {
+            cloudFunctionsClient.call<CompleteAssignmentRequest, TaskCompletionFunctionResult>(
+                "completeAssignment",
+                CompleteAssignmentRequest(householdId = householdId, taskId = taskId, assignmentId = assignmentId)
             )
-        }
-        try {
-            markAssignmentCompleted(
-                householdId, taskId, assignmentId, now, pointsAwarded, onTime,
-                expectedUpdateTime = currentAssignmentDoc.updateTime
-            )
-        } catch (e: FirestoreException) {
-            if (e.code == "FAILED_PRECONDITION" || e.code == "ABORTED") {
-                throw AssignmentCompletionConflictException(
-                    "Esta asignación se completó en otro dispositivo justo antes. Vuelve a intentarlo."
-                )
-            }
-            throw e
-        }
-
-        // Award points + persist history + sincronizar completedBy/lastCompletedDate
-        // (+ nextDueAt si es recurrente) en la propia tarea, igual que
-        // [completeTask] — antes esta función solo marcaba la asignación como
-        // completada sin que los puntos llegaran al saldo real del miembro
-        // (bug crítico: la UI mostraba "+N pts" que nunca se sumaban a
-        // totalPoints ni podían canjearse por recompensas).
-        // Historial primero (pointsApplied=false), puntos después — mismo
-        // orden y mismo motivo que [completeTask] (ver su comentario y KDoc
-        // de [TaskHistoryResponse.pointsApplied]): deja un rastro reparable
-        // por `reconcileMissingTaskPoints` si el otorgamiento de puntos falla
-        // a mitad de camino.
-        val historyId = saveTaskHistory(
-            householdId = householdId,
-            taskId = taskId,
-            memberId = assignment.memberId,
-            points = pointsAwarded,
-            completedAt = now,
-            onTime = onTime,
-            pointsApplied = false
-        )
-        addMemberPoints(householdId, assignment.memberId, pointsAwarded)
-        taskRepository.markTaskHistoryPointsApplied(householdId, historyId)
-        val nextDueDate = calculateNextDueDate(task, now)
-        val taskFields = mutableMapOf(
-            "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
-            "completedBy" to FirestoreValue(stringValue = assignment.memberId)
-        )
-        if (task.frequency != "once") {
-            taskFields["nextDueAt"] = nextDueAtValue(nextDueDate)
-        }
-        // Concurrencia optimista sobre el documento de la TAREA (panel de
-        // revisión 2026-09-03/04, Experto 2/6/12, CRÍTICO): antes este PATCH
-        // era incondicional, así que dos dispositivos completando a la vez
-        // asignaciones distintas de la misma tarea (o un completeTask()
-        // concurrente) podían pisarse `lastCompletedDate`/`completedBy`/
-        // `nextDueAt` entre sí — la última escritura ganaba sin avisar. A
-        // diferencia de [completeTask] (donde este PATCH es el PRIMER paso,
-        // así que un conflicto puede abortar sin efectos secundarios), aquí
-        // los puntos y el historial YA se otorgaron arriba: un conflicto en
-        // ESTE PATCH no debe propagarse como error (evita el mismo
-        // anti-patrón de "reintentar duplica puntos" que ya documentan los
-        // pasos de abajo) — se trata como best-effort, igual que el resto de
-        // esta función, pero con precondition para no sobrescribir a ciegas
-        // un cambio más reciente si la hay.
-        val currentTaskDoc = orDefault<FirestoreDocumentResponse?>(null) {
-            client.get("$baseUrl/households/$householdId/tasks/$taskId") { withAuth() }.body()
-        }
-        try {
-            client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-                withAuth()
-                updateMaskFieldPaths(taskFields.keys)
-                currentTaskDoc?.updateTime?.let { parameter("currentDocument.updateTime", it) }
-                contentType(ContentType.Application.Json)
-                setBody(FirestoreDocument(taskFields))
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: FirestoreException) {
-            if (e.code != "FAILED_PRECONDITION" && e.code != "ABORTED") throw e
-            // Otro dispositivo ya sincronizó el documento de la tarea entre
-            // la lectura de arriba y este PATCH — se descarta esta
-            // sincronización en vez de sobrescribirla (best-effort, ver
-            // comentario de arriba). El documento remoto cambió igualmente
-            // (por el otro escritor), así que la caché local sigue estando
-            // stale — se invalida abajo, fuera del try, en ambos casos
-            // (panel de revisión 2026-09-04, Experto 12: antes solo se
-            // invalidaba en el camino feliz, dejando una ventana donde una
-            // lectura offline inmediatamente posterior a un conflicto
-            // descartado podía servir `lastCompletedDate`/`completedBy`/
-            // `nextDueAt` obsoletos desde caché).
+        } catch (e: CloudFunctionException) {
+            throw mapToAssignmentCompletionConflict(e)
         }
         taskCache.clearTasks(householdId)
-
-        // Sincronizar el resto de asignaciones "assigned" de este mismo ciclo
-        // como completadas — mismo motivo y mismo patrón que el paso 4 de
-        // [completeTask] (panel de revisión 2026-09-03, Expertos 2/6/8/12/13:
-        // completeAssignment dejaba huérfanas las asignaciones de otros
-        // miembros del mismo ciclo; si esas asignaciones se completaban por
-        // separado más tarde, duplicaban puntos/historial para la misma
-        // ocurrencia real). Los puntos ya se otorgaron arriba SOLO a
-        // `assignment.memberId`: las asignaciones hermanas se marcan
-        // completadas con `pointsAwarded=0` para no inflar las estadísticas
-        // de otros miembros con puntos que nunca recibieron.
-        val siblingAssignments = try {
-            getAssignments(householdId, taskId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-        for (sibling in AssignmentCompletionRules.siblingsToClose(siblingAssignments, assignmentId)) {
-            try {
-                markAssignmentCompleted(
-                    householdId, taskId, sibling.id, now,
-                    pointsAwarded = 0, onTime = onTime,
-                    expectedUpdateTime = sibling.updateTime
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) { }
-        }
-
-        // Handle recurrence: create next assignment respetando assignmentRotation
-        // (ver [regenerateNextAssignment] — unificado con [completeTask]; antes
-        // esta función siempre reasignaba al mismo miembro que acababa de
-        // completarla, ignorando la rotación por completo). Best-effort: los
-        // puntos ya se otorgaron arriba, así que un fallo de red aquí no debe
-        // hacer que el usuario reintente completeAssignment entero y duplique
-        // el otorgamiento — mismo motivo que el paso 5 de [completeTask]
-        // (panel v4, QA hallazgo #1 CRÍTICO).
-        if (task.frequency != "once") {
-            try {
-                regenerateNextAssignment(
-                    householdId, taskId, task, assignment.memberId, assignment.mandatory,
-                    nextDueDate, siblingAssignments
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) { }
-        }
-
+        taskCache.clearTaskHistory(householdId)
+        taskCache.clearMembers(householdId)
         return assignment.copy(
             status = "completed",
-            completedAt = now,
-            pointsAwarded = pointsAwarded,
-            onTime = onTime
+            completedAt = result.completedAt,
+            pointsAwarded = result.pointsAwarded,
+            onTime = result.onTime
         )
-    }
-
-    /**
-     * Crea (o renueva) la asignación de la SIGUIENTE ocurrencia de una tarea
-     * recurrente, respetando `assignmentRotation` si está configurada (si no,
-     * mantiene al miembro que acaba de completarla — comportamiento legado,
-     * ver [RecurrenceRules.resolveRotationAssignee]).
-     *
-     * Único punto compartido por [completeTask] y [completeAssignment] — antes
-     * solo `completeAssignment` regeneraba la siguiente asignación (dejando
-     * "huérfana" la UI de asignaciones y sin sincronizar Google Calendar a
-     * partir del segundo ciclo cuando se completaba desde la lista principal),
-     * y lo hacía siempre al mismo miembro, ignorando la rotación.
-     *
-     * No hace nada si [nextDueDate] es null (tarea "once", sin siguiente
-     * ocurrencia). Deduplica contra una asignación "assigned" ya existente
-     * para el mismo miembro+fecha límite (p.ej. si ya se pasó [existingAssignments]
-     * con una regeneración previa) para no crear duplicados por reintentos o
-     * carreras que ya cerró la concurrencia optimista de arriba.
-     *
-     * Crea la asignación con un ID DETERMINISTA (`next_{taskId}_{nextDueDate}`,
-     * vía `documentId` en el POST — mismo patrón que
-     * [HouseholdRepository.getOrCreatePersonalHousehold]) en vez de un ID
-     * autogenerado: la comprobación de arriba (deduplicar contra
-     * [existingAssignments]) es un simple "check", no protege sola contra una
-     * carrera real entre dos llamadas concurrentes a esta función para el
-     * MISMO ciclo (p.ej. completeTask y completeAssignment casi a la vez en
-     * dos dispositivos, o un reintento tras un fallo de red a mitad de
-     * camino) — ambas podían pasar el check antes de que la otra hubiera
-     * creado su documento, generando DOS asignaciones para la misma
-     * ocurrencia (cadena bifurcada, panel de revisión 2026-09-03/04, Experto
-     * 2/12, CRÍTICO). Con un ID determinista, Firestore rechaza la segunda
-     * creación con `ALREADY_EXISTS` en vez de crear el duplicado — el "TOCTOU"
-     * lo cierra el propio servidor, no el check en memoria.
-     */
-    private suspend fun regenerateNextAssignment(
-        householdId: String,
-        taskId: String,
-        task: TaskResponse,
-        completedMemberId: String,
-        mandatory: Boolean,
-        nextDueDate: Long?,
-        existingAssignments: List<TaskAssignmentResponse>? = null
-    ) {
-        if (nextDueDate == null) return
-        val assignments = existingAssignments ?: try {
-            getAssignments(householdId, taskId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            emptyList()
-        }
-        val decision = RecurrenceRules.resolveNextAssignmentDecision(
-            task.assignmentRotation, nextDueDate, completedMemberId, assignments
-        )
-        if (!decision.shouldCreate) return
-
-        val assignmentId = "next_${taskId}_$nextDueDate"
-        val now = Clock.System.now().toEpochMilliseconds()
-        val fields = mapOf(
-            "taskId" to FirestoreValue(stringValue = taskId),
-            "memberId" to FirestoreValue(stringValue = decision.memberId),
-            "mandatory" to FirestoreValue(booleanValue = mandatory),
-            "dueDate" to FirestoreValue(integerValue = nextDueDate.toString()),
-            "status" to FirestoreValue(stringValue = "assigned"),
-            "assignedAt" to FirestoreValue(integerValue = now.toString())
-        )
-        try {
-            client.post("$baseUrl/households/$householdId/tasks/$taskId/assignments") {
-                withAuth()
-                parameter("documentId", assignmentId)
-                contentType(ContentType.Application.Json)
-                setBody(FirestoreDocument(fields))
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: FirestoreException) {
-            if (e.code == "ALREADY_EXISTS" || e.statusCode == 409) {
-                // Otra llamada concurrente (u otro dispositivo) ya regeneró
-                // este mismo ciclo — idempotente, no es un fallo real (ver
-                // KDoc de arriba).
-                return
-            }
-            throw e
-        }
-
-        try {
-            val lang = settingsStore.getLanguage()
-            val messageKey = if (task.title.isNotEmpty())
-                "notification_task_assigned_body_prefix"
-            else
-                "notification_task_assigned_body_generic"
-            notificationRepository.createNotification(
-                householdId = householdId,
-                memberId = decision.memberId,
-                taskId = taskId,
-                // title/message: fallback en el idioma de quien completó (que
-                // disparó la regeneración), ver KDoc de TaskRepository.assignTask.
-                title = AppStrings.get("notification_task_assigned_title", lang),
-                message = if (task.title.isNotEmpty())
-                    AppStrings.get("notification_task_assigned_body_prefix", lang) + task.title
-                else
-                    AppStrings.get("notification_task_assigned_body_generic", lang),
-                titleKey = "notification_task_assigned_title",
-                messageKey = messageKey,
-                messageParams = if (task.title.isNotEmpty()) mapOf("taskTitle" to task.title) else null
-            )
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // No crítico: la asignación ya se creó, la notificación es un efecto secundario.
-        }
     }
 
     /**
@@ -2015,51 +1286,6 @@ class FirestoreRepository(
         assignmentId: String,
         googleEventId: String?
     ) = taskRepository.updateAssignmentGoogleEventId(householdId, taskId, assignmentId, googleEventId)
-
-    // ────────────────────────────────────────────────────────
-    //  Penalty & Recurrence Logic
-    // ────────────────────────────────────────────────────────
-    //
-    // El cálculo de puntualidad/penalización vive en [PenaltyRules] (objeto
-    // puro, sin I/O, testeado en `PenaltyRulesTest`) — antes eran métodos
-    // `private` de esta clase, sin test posible por depender del resto del
-    // repositorio (panel v4, Experto 13, hueco #1).
-    //
-    // Compartido por [completeTask] (sin asignación — usa `task.dueDate` para
-    // "once", o `task.nextDueAt` ajustado con [RecurrenceRules.endOfDueDay]
-    // para recurrentes) y [completeAssignment] (con asignación — usa
-    // `assignment.dueDate`, con el mismo ajuste si la tarea es recurrente).
-
-    /**
-     * Calculate the next due date for a recurring task.
-     *
-     * Delega en [RecurrenceRules.nextOccurrence] (testeada en
-     * `RecurrenceRulesTest`) en vez de reimplementar el cálculo — antes este
-     * método tenía su propia lógica, sin test, y con una diferencia real de
-     * comportamiento en "monthly": ignoraba `task.recurrenceDay` (el día fijo
-     * configurado por el usuario) y usaba en su lugar el día de la compleción,
-     * así que una tarea "día 28 de cada mes" completada el 5 saltaba al 28 del
-     * mes SIGUIENTE en vez de al 28 de este mes. `RecurrenceRules.nextOccurrence`
-     * sí respeta `recurrenceDay`. Nota: como efecto colateral de unificar, la
-     * hora de la fecha límite calculada pasa de las 12:00 a las 00:00 hora
-     * local (medianoche, como ya hacía `nextOccurrence` para otros usos en la
-     * app) — un cambio menor de cuándo exactamente empieza a contar como
-     * "atrasada" una tarea recurrente, aceptado como parte de tener una única
-     * fuente de verdad para este cálculo.
-     */
-    private fun calculateNextDueDate(task: TaskResponse, afterMs: Long): Long? {
-        if (task.frequency !in setOf("daily", "weekly", "monthly")) return null
-        return RecurrenceRules.nextOccurrence(
-            nowEpochMs = afterMs,
-            frequency = task.frequency,
-            day = task.recurrenceDay,
-            weeklyDays = task.recurrenceDays
-        )
-    }
-
-    /** [FirestoreValue] para el campo `nextDueAt`: entero si no es null, `NULL_VALUE` si lo es. */
-    private fun nextDueAtValue(nextDueDate: Long?): FirestoreValue =
-        if (nextDueDate != null) FirestoreValue(integerValue = nextDueDate.toString()) else FirestoreValue(nullValue = "NULL_VALUE")
 
     // ────────────────────────────────────────────────────────
     //  Task helpers

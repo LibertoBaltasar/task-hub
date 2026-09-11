@@ -10,6 +10,7 @@ import com.russhwolf.settings.Settings
 import org.koin.core.module.Module
 import org.koin.dsl.module
 import org.koin.dsl.onClose
+import org.taskhub.network.CloudFunctionsClient
 import org.taskhub.network.FirestoreClient
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.GoogleCalendarRepository
@@ -74,6 +75,12 @@ val appModule: Module = module {
     // en vez de ser la única forma de construirlos — causa raíz de por qué
     // seguía creciendo con cada refactor (panel v7, #16).
     single { FirestoreClient(apiKey = FirestoreRepository.DEFAULT_API_KEY, settingsStore = get()) }
+    // Cloud Functions "callable HTTPS" (completar/deshacer/reasignar tareas
+    // en una transacción del servidor — ver
+    // docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md). Comparte
+    // el mismo HttpClient que FirestoreClient (misma sesión/token, sin
+    // duplicar auth).
+    single { CloudFunctionsClient(client = get<FirestoreClient>().client, firestoreClient = get()) }
     single { NotificationRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
     single { RewardsRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
     single { TaskRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get(), notificationRepository = get(), settingsStore = get()) }
@@ -93,6 +100,7 @@ val appModule: Module = module {
             taskCache = get(),
             settingsStore = get(),
             firestoreClient = get(),
+            cloudFunctionsClient = get(),
             notificationRepository = get(),
             rewardsRepository = get(),
             taskRepository = get(),

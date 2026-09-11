@@ -269,22 +269,16 @@ class TaskScreenModel(
 
                 _listState.value = TaskListUiState.Success(tasks, assignments, members)
 
-                // Reconciliación automática de puntos: repara tareas que
-                // quedaron "completadas" tras un fallo parcial entre marcar
-                // la tarea completada y otorgar puntos/historial (ver KDoc
-                // de FirestoreRepository.completeTask/reconcileMissingTaskPoints).
-                // Best-effort y NUNCA debe pisar el TaskListUiState.Success
-                // ya publicado — se comprueba primero en memoria (sin I/O)
-                // si hay algún candidato para no pagar el coste de leer todo
-                // taskHistory en la carga común (colección sin techo natural
-                // de crecimiento).
-                if (tasks.any { it.completedBy != null && it.lastCompletedDate != null }) {
-                    try {
-                        repo.reconcileMissingTaskPoints(householdId, tasks)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) { }
-                }
+                // NOTA: la reconciliación automática de puntos
+                // (`reconcileMissingTaskPoints`) ya NO se dispara desde aquí
+                // — ver `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`,
+                // sección 2.5: `completeTask`/`completeAssignment` ahora son
+                // transacciones reales del servidor (todo o nada), así que el
+                // hueco entre "tarea completada" y "puntos otorgados" que
+                // reparaba esta llamada ya no puede producirse por ese flujo.
+                // La función `reconcileMissingTaskPoints` sigue existiendo
+                // como scheduled en el backend (`functions/`) para el resto
+                // de registros legacy (creados antes de esta migración).
             } catch (e: CancellationException) {
                 // Relanzar: si no, una loadTasks() más reciente que ya canceló este
                 // Job ve su propia cancelación tratada como un error normal aquí
@@ -434,25 +428,26 @@ class TaskScreenModel(
     // ── Complete task (sets lastCompletedDate) ───────────────
 
     /**
-     * Info for undo: saved before completing so we can revert not just the
-     * "completada" flag sino también los puntos/racha que otorgó completarla
-     * — de lo contrario, completar+deshacer en bucle permite farmear puntos
-     * y racha sin límite (la tarea vuelve a estar disponible mientras el
-     * usuario conserva las recompensas de cada intento).
+     * Info for undo: guarda lo mínimo para poder invocar
+     * [FirestoreRepository.undoTaskCompletion] y revertir la racha (best-effort,
+     * ver KDoc de [undoCompleteTask]) — desde
+     * `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`, ya NO
+     * se guardan `previousLastCompletedDate`/`previousCompletedBy`/
+     * `previousNextDueAt`/`pointsAwarded`: el servidor los deriva leyendo el
+     * registro de `taskHistory` anterior a `completedAt` dentro de su propia
+     * transacción, en vez de depender de este estado volátil en memoria (que
+     * antes desaparecía si el usuario recargaba la pantalla entre completar y
+     * deshacer). La racha SÍ sigue siendo responsabilidad del cliente — la
+     * función no la toca — así que sus valores previos se mantienen aquí.
      */
     data class UndoState(
         val householdId: String,
         val taskId: String,
         val memberId: String,
-        val previousLastCompletedDate: Long?,
-        val previousCompletedBy: String?,
-        /** `nextDueAt` de la tarea ANTES de completarla — ver KDoc de [FirestoreRepository.revertTaskCompletion]. */
-        val previousNextDueAt: Long?,
-        val pointsAwarded: Int,
         val previousStreak: Int,
         val previousBestStreak: Int,
         val previousLastStreakDate: Long,
-        /** `completedAt` devuelto por [FirestoreRepository.completeTask] — localiza el registro de taskHistory a borrar al deshacer. */
+        /** `completedAt` devuelto por [FirestoreRepository.completeTask] — identifica la compleción a deshacer. */
         val completedAt: Long
     )
 
@@ -478,15 +473,14 @@ class TaskScreenModel(
     /**
      * Completa una tarea desde la lista principal (a diferencia de
      * [completeAssignment], no requiere que exista una asignación previa).
-     * Guarda [UndoState] ANTES de escribir en Firestore para poder revertir
-     * puntos/racha/historial si el usuario deshace la acción, delega en
-     * [FirestoreRepository.completeTask] el otorgamiento de puntos +
-     * sincronización de asignaciones (ver su KDoc para la concurrencia
-     * optimista y la regeneración del siguiente ciclo), y encadena como
-     * efectos best-effort: cancelar el recordatorio pendiente, sincronizar
-     * Calendar y actualizar racha/logros. Ninguno de esos efectos secundarios
-     * puede convertir la acción en error una vez que el servidor ya otorgó
-     * los puntos (evita el reintento manual que los duplicaría).
+     * Guarda [UndoState] (racha previa) ANTES de completar por si el usuario
+     * deshace la acción, delega en [FirestoreRepository.completeTask] la
+     * transacción del servidor (puntos + historial + asignaciones + siguiente
+     * ciclo — ver su KDoc), y encadena como efectos best-effort: cancelar el
+     * recordatorio pendiente, sincronizar Calendar y actualizar racha/logros.
+     * Ninguno de esos efectos secundarios puede convertir la acción en error
+     * una vez que el servidor ya otorgó los puntos (evita el reintento manual
+     * que los duplicaría).
      */
     fun completeTask(householdId: String, taskId: String) {
         if (_actionState.value == TaskActionState.Loading) return // evita doble-tap / doble suma de puntos
@@ -507,15 +501,12 @@ class TaskScreenModel(
                 val task = repo.getTask(householdId, taskId)
                 val memberBefore = repo.getMembers(householdId).find { it.id == memberId }
 
-                // Save undo info BEFORE completing (puntos/racha previos incluidos)
+                // Save undo info BEFORE completing (racha previa incluida —
+                // ver KDoc de [UndoState]: el resto lo deriva el servidor).
                 _undoState.value = UndoState(
                     householdId = householdId,
                     taskId = taskId,
                     memberId = memberId,
-                    previousLastCompletedDate = task.lastCompletedDate,
-                    previousCompletedBy = task.completedBy,
-                    previousNextDueAt = task.nextDueAt,
-                    pointsAwarded = task.points,
                     previousStreak = memberBefore?.currentStreak ?: 0,
                     previousBestStreak = memberBefore?.bestStreak ?: 0,
                     previousLastStreakDate = memberBefore?.lastStreakDate ?: 0L,
@@ -529,10 +520,7 @@ class TaskScreenModel(
                     task = task
                 )
                 val completedAt = result.completedAt
-                _undoState.value = _undoState.value?.copy(
-                    completedAt = completedAt,
-                    pointsAwarded = result.pointsAwarded
-                )
+                _undoState.value = _undoState.value?.copy(completedAt = completedAt)
 
                 // Nota: sincronizar la asignación pendiente de este miembro como
                 // completada, y regenerar la de la siguiente ocurrencia respetando
@@ -631,15 +619,20 @@ class TaskScreenModel(
     }
 
     /**
-     * Undo a task completion: restore previous points, streak and lastCompletedDate.
+     * Undo a task completion: delega en la Cloud Function `undoTaskCompletion`
+     * (ver `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`,
+     * sección 2.4) para revertir puntos/historial/`lastCompletedDate`/
+     * `completedBy`/`nextDueAt`/asignaciones en UNA transacción del servidor
+     * — reemplaza las 3 llamadas secuenciales de antes
+     * (`deleteTaskHistoryRecord`/`revertTaskCompletion`/
+     * `undoTaskCompletionAssignments`, todas retiradas). Al ser una
+     * transacción real, ya no hay ventana en la que la tarea quede
+     * "completada" con los puntos ya revertidos (el riesgo que documentaba
+     * esta función antes de la migración).
      *
-     * Orden deliberado: puntos/racha/historial se revierten ANTES que el flag de
-     * completada de la tarea. Si una escritura falla a mitad de camino (red), el
-     * peor caso posible es que la tarea SIGA marcada como completada con los
-     * puntos ya revertidos (recuperable reintentando el undo) — nunca que quede
-     * "pendiente" mientras el miembro conserva los puntos, que permitiría
-     * volver a completarla y duplicar el premio (el mismo bug que UndoState fue
-     * diseñado para evitar, ver su KDoc).
+     * La racha SÍ sigue revirtiéndose desde el cliente (la función no la
+     * toca) — best-effort, un fallo aquí no deshace lo que la función ya
+     * confirmó.
      */
     fun undoCompleteTask() {
         val state = _undoState.value ?: return
@@ -647,7 +640,9 @@ class TaskScreenModel(
         buzz(HapticKind.LIGHT)
         screenModelScope.launch {
             try {
-                repo.addMemberPoints(state.householdId, state.memberId, -state.pointsAwarded)
+                if (state.completedAt != 0L) {
+                    repo.undoTaskCompletion(state.householdId, state.taskId, state.completedAt)
+                }
                 repo.updateMemberStreak(
                     householdId = state.householdId,
                     memberId = state.memberId,
@@ -655,39 +650,11 @@ class TaskScreenModel(
                     bestStreak = state.previousBestStreak,
                     lastStreakDate = state.previousLastStreakDate
                 )
-                if (state.completedAt != 0L) {
-                    repo.deleteTaskHistoryRecord(state.householdId, state.taskId, state.completedAt)
-                }
-                repo.revertTaskCompletion(
-                    state.householdId,
-                    state.taskId,
-                    state.previousLastCompletedDate,
-                    state.previousCompletedBy,
-                    state.previousNextDueAt
-                )
-                // Revertir las asignaciones que completeTask marcó "completed"
-                // (propia + hermanas) y borrar la del siguiente ciclo si ya se
-                // había regenerado — ver KDoc de
-                // [FirestoreRepository.undoTaskCompletionAssignments] (panel
-                // de revisión 2026-09-03/04, Experto 2/8): sin esto, deshacer
-                // solo revertía la tarea/puntos/historial, dejando
-                // asignaciones "completed" huérfanas para siempre. Best-effort:
-                // requiere el task fresco para conocer frequency/recurrencia.
-                if (state.completedAt != 0L) {
-                    try {
-                        val task = repo.getTask(state.householdId, state.taskId)
-                        repo.undoTaskCompletionAssignments(
-                            state.householdId, state.taskId, state.completedAt, task
-                        )
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) { }
-                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // La tarea puede quedar como completada con los puntos ya
-                // revertidos (ver KDoc arriba) — no crítico para la
+                // La tarea puede quedar como completada con la racha ya
+                // revertida (ver KDoc arriba) — no crítico para la
                 // integridad de datos, pero SÍ debe ser visible: antes no
                 // había ninguna señal observable de este fallo parcial.
                 _undoError.value = e.message ?: s("task_error_undo")

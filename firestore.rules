@@ -3,7 +3,61 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v8)
+    //  Task Hub — Reglas de seguridad (v9)
+    //
+    //  v9 editada 2026-09-11 (encargo "cliente KMP usa Cloud Functions para
+    //  completar tareas + reglas big bang", fase 2b de
+    //  docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md, sección
+    //  5 — decisión de Liberto: BIG BANG, no gradual, "sin usuarios reales en
+    //  producción no hay versiones viejas en las stores que romper"). El
+    //  cliente deja de escribir DIRECTO a Firestore el resultado de
+    //  completar/deshacer/reasignar una tarea — esas 4 operaciones
+    //  (`completeRecurringTask`/`completeAssignment`/`reassignTaskCompletion`/
+    //  `undoTaskCompletion`) pasan por Cloud Functions (`functions/`), que
+    //  usan el Admin SDK y por tanto SALTAN estas reglas por completo (no hay
+    //  rama especial para ellas abajo — no hace falta, ver nota técnica de la
+    //  sección 5 del diseño). Estas reglas ahora solo tienen que CERRAR la
+    //  ruta directa del cliente:
+    //   - tasks/{tid}: `update` ya no permite tocar
+    //     `lastCompletedDate`/`completedBy`/`nextDueAt` bajo NINGUNA rama
+    //     (ni siquiera isTrusted/reassignTaskCompletion, que ahora también es
+    //     Cloud Function) — el resto de campos (título, puntos, subtareas,
+    //     assignmentRotation manual vía updateTask...) sigue editable igual
+    //     que antes.
+    //   - taskHistory/{thid}: `create`/`update` pasan a `false` sin
+    //     excepción — antes cualquier miembro podía crear un registro (lo
+    //     hacía `completeTask`/`completeAssignment`) y voltear
+    //     `pointsApplied`; ahora solo la función escribe ahí. `read`/`delete`
+    //     NO cambian (delete ya no lo usa el cliente tras esta migración,
+    //     pero no hace falta cerrarlo explícitamente — fuera de alcance de
+    //     este encargo).
+    //   - tasks/{tid}/assignments/{aid}: `update` bloquea
+    //     `status`/`completedAt`/`pointsAwarded`/`onTime`/`memberId` (las
+    //     completaba/reasignaba el cliente antes; ahora solo la función). El
+    //     único campo que el cliente sigue actualizando ahí es
+    //     `googleEventId` (sync de Calendar, `updateAssignmentGoogleEventId`)
+    //     — sigue permitido. `create`/`delete` NO cambian: el cliente sigue
+    //     creando asignaciones directo al asignar tareas (`assignTask`/
+    //     `replaceAssignments`), eso no tiene problema de atomicidad y queda
+    //     fuera de este encargo.
+    //   - members/{mid}.totalPoints: SIN CAMBIOS, a propósito. Verificado
+    //     contra el código real: la rama `isPeerPointsTransfer` (donar/
+    //     agradecer) y la rama "dueño de su propio documento" (con la que el
+    //     cliente incrementaba `totalPoints` al completar una tarea) son
+    //     ESTRUCTURALMENTE indistinguibles en una regla — ambas son "sube el
+    //     totalPoints de un documento de miembro"; la única diferencia es la
+    //     intención del caller, que Firestore rules no puede inspeccionar
+    //     (limitación ya documentada en la cabecera v8: "sin Cloud Functions
+    //     no es posible validar que un incremento se corresponda con una
+    //     tarea realmente completada"). Cerrarla aquí rompería también
+    //     donar/agradecer. El bloqueo real del incremento por-completar-tarea
+    //     es que el CLIENTE YA NO LLAMA a `addMemberPoints` desde
+    //     completar/deshacer/reasignar (ver `FirestoreRepository.kt`) — la
+    //     Cloud Function lo hace con Admin SDK, saltándose esta regla igual
+    //     que el resto. Un cliente viejo sin migrar SÍ podría seguir
+    //     incrementando su propio `totalPoints` por esta vía — aceptado
+    //     (decisión de Liberto, cero usuarios reales, ver sección 6 del
+    //     diseño).
     //
     //  v8 editada 2026-09-12 (ronda de deuda aplicable, punto B7 — decisión
     //  de producto de Liberto: "cualquiera puede donar/agradecer puntos a
@@ -388,71 +442,49 @@ service cloud.firestore {
 
     // ── Contenido del hogar ──────────────────────────────────────
     // Cualquier miembro puede leer/crear/borrar tareas y editar sus campos
-    // habituales (título, puntos, subtareas…) igual que antes. La excepción
-    // es reasignar `completedBy` de una tarea YA completada a otra persona
-    // sin tocar `lastCompletedDate` (la firma de
-    // [FirestoreRepository.reassignTaskCompletion], que solo toca ese
-    // campo vía `updateMask`) — eso mueve puntos de un miembro a otro y
-    // ahora requiere admin/owner. Completar (completeTask) y deshacer
-    // (revertTaskCompletion) cambian `completedBy` Y `lastCompletedDate`
-    // juntos, así que no caen en esta restricción.
+    // habituales (título, puntos, subtareas, assignmentRotation manual…)
+    // igual que antes. v9 (big bang, ver cabecera): `lastCompletedDate`/
+    // `completedBy`/`nextDueAt` ya NO se pueden tocar desde el cliente bajo
+    // NINGUNA rama — completar/deshacer/reasignar una tarea pasan
+    // enteramente por Cloud Functions (Admin SDK, salta esta regla).
     match /households/{hid}/tasks/{tid} {
       allow read, create, delete: if isMember(hid) || isOwner(hid);
-      allow update: if isTrusted(hid)
-        || (
-          (isMember(hid) || isOwner(hid))
-          && !(
-            request.resource.data.get('completedBy', null) != resource.data.get('completedBy', null)
-            && request.resource.data.get('lastCompletedDate', null) == resource.data.get('lastCompletedDate', null)
-          )
-        );
+      allow update: if (isMember(hid) || isOwner(hid))
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(['lastCompletedDate', 'completedBy', 'nextDueAt']);
     }
+    // v9 (big bang, ver cabecera): `update` bloquea los campos que antes
+    // escribía el cliente al completar/reasignar (`status`/`completedAt`/
+    // `pointsAwarded`/`onTime`/`memberId`) — ahora solo la Cloud Function los
+    // toca. `googleEventId` (sync de Calendar) sigue editable. `create`/
+    // `delete` no cambian: el cliente sigue creando/borrando asignaciones al
+    // asignar tareas manualmente.
     match /households/{hid}/tasks/{tid}/assignments/{aid} {
-      allow read, write: if isMember(hid) || isOwner(hid);
+      allow read, create, delete: if isMember(hid) || isOwner(hid);
+      allow update: if (isMember(hid) || isOwner(hid))
+        && !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(['status', 'completedAt', 'pointsAwarded', 'onTime', 'memberId']);
     }
     match /households/{hid}/tasks/{tid}/comments/{cid} {
       allow read, write: if isMember(hid) || isOwner(hid);
     }
-    // El historial es el registro de auditoría de puntos/estadísticas:
-    // cualquier miembro puede CREAR una entrada (se genera al completar una
-    // tarea, en su propio dispositivo), pero editar/borrar una entrada ya
-    // existente (p.ej. para manipular StatsScreen) se restringe a admin/owner.
+    // El historial es el registro de auditoría de puntos/estadísticas. v9
+    // (big bang, ver cabecera): `create`/`update` desde el cliente se
+    // cierran del todo — antes cualquier miembro podía crear una entrada al
+    // completar una tarea (y voltear `pointsApplied`); ahora solo la Cloud
+    // Function escribe aquí (Admin SDK, salta esta regla), con
+    // `pointsApplied: true` directo dentro de su propia transacción.
     match /households/{hid}/taskHistory/{thid} {
       allow read: if isMember(hid) || isOwner(hid);
-      // v7: memberId debe ser un miembro real del hogar y points no puede
-      // ser negativo — ver cabecera del archivo (Experto 9, punto 11).
-      allow create: if (isMember(hid) || isOwner(hid))
-        && existsMemberDoc(hid, request.resource.data.memberId)
-        && request.resource.data.points >= 0;
-      // v8 (ronda de deuda aplicable 2026-09-12, punto A1): además de
-      // isTrusted(hid), cualquier miembro puede voltear `pointsApplied` de
-      // `false` a `true` — es el PATCH que `completeTask`/`completeAssignment`
-      // (y la reconciliación automática de `TaskScreenModel.loadTasks`) hacen
-      // tras confirmar `addMemberPoints`, en la compleción NORMAL de
-      // cualquier miembro, no solo admin/owner (mismo motivo que `create` de
-      // arriba: "cualquier miembro puede completar cualquier tarea"). Acotado
-      // a ESE campo y ESA dirección exacta — no permite tocar
-      // memberId/points/completedAt/onTime de un registro ya existente, ni
-      // revertir pointsApplied de true a false.
-      allow update: if isTrusted(hid)
-        || (
-          (isMember(hid) || isOwner(hid))
-          && request.resource.data.diff(resource.data).affectedKeys() == ['pointsApplied'].toSet()
-          // get(..., true): registros LEGACY sin este campo (creados antes de
-          // v8) no lo tenían nunca en `false`, así que no necesitan (ni deben
-          // poder) pasar por esta rama — ver KDoc de
-          // TaskHistoryResponse.pointsApplied.
-          && resource.data.get('pointsApplied', true) == false
-          && request.resource.data.pointsApplied == true
-        );
-      // delete: admin/owner puede borrar cualquier registro; además, el
-      // propio miembro puede borrar SU PROPIO registro (memberId ==
-      // auth.uid) — necesario para [TaskScreenModel.undoCompleteTask]:
-      // deshacer "completar tarea" es una acción de miembro normal que
-      // borra el registro de la propia compleción para no dejar
-      // taskHistory desincronizado con totalPoints (ver
-      // FirestoreRepository.deleteTaskHistoryRecord). Sigue sin permitir
-      // borrar el registro de OTRO miembro sin ser admin/owner.
+      allow create: if false;
+      allow update: if false;
+      // delete: sin cambios en v9 — admin/owner puede borrar cualquier
+      // registro; el propio miembro puede borrar SU PROPIO registro
+      // (memberId == auth.uid). Ya no lo usa el cliente para deshacer
+      // (`undoTaskCompletion`, la Cloud Function, borra el registro dentro
+      // de su transacción vía Admin SDK) — se deja sin tocar por no estar en
+      // el alcance de este encargo (ver cabecera v9); no reabre ningún
+      // problema de puntos, borrar un registro no toca `totalPoints`.
       allow delete: if isTrusted(hid)
         || (isMember(hid) && resource.data.memberId == request.auth.uid);
     }
