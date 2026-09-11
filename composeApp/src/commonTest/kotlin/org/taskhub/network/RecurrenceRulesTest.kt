@@ -463,6 +463,17 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isOverdueOccurrence("monthly", emptyList(), 15, day15, tz))
     }
 
+    /** Creada DESPUÉS de que el día objetivo de este mes ya hubiera pasado: esa ocurrencia anterior a la creación no cuenta como "perdida" (análogo mensual del caso semanal de arriba). */
+    @Test
+    fun isDueToday_monthlyWithDay_neverCompleted_createdAfterThisMonthsScheduledDayAlreadyPassed_isNotDueYet() {
+        // Día 15 programado; tarea creada el día 16 (el 15 ya había pasado
+        // antes de que la tarea existiera); hoy día 20, sin completar nunca:
+        // no debe aparecer como atrasada.
+        val now = epochOf(2024, 3, 20)
+        val createdAfterTarget = epochOf(2024, 3, 16)
+        assertFalse(RecurrenceRules.isDueToday("monthly", emptyList(), 15, null, now, tz, createdAfterTarget))
+    }
+
     /** Legado (sin `createdAt`): nunca completada, sin ventana retroactiva — solo toca el día exacto. */
     @Test
     fun isDueToday_monthlyWithDay_neverCompletedAndDayAlreadyPassed_legacyNoCreatedAt_staysNotDueUntilNextCycle() {
