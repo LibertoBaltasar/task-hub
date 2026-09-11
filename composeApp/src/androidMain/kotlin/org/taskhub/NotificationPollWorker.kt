@@ -15,6 +15,7 @@ import kotlinx.coroutines.CancellationException
 import org.taskhub.network.FirestoreClient
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.MemberRepository
+import org.taskhub.network.NotificationPollRules
 import org.taskhub.network.NotificationRepository
 import org.taskhub.network.firestoreBaseUrl
 import org.taskhub.storage.HouseholdStore
@@ -83,7 +84,7 @@ class NotificationPollWorker(
             settingsStore = settingsStore
         )
         val memberRepository = MemberRepository(firestoreBaseUrl(), firestoreClient, taskCache)
-        val notificationRepository = NotificationRepository(firestoreBaseUrl(), firestoreClient)
+        val notificationRepository = NotificationRepository(firestoreBaseUrl(), firestoreClient, taskCache)
         val lang = settingsStore.getLanguage()
 
         for (household in households) {
@@ -181,7 +182,7 @@ class NotificationPollWorker(
         // sondeo) — sin esto, algo ya gestionado en la UI podía disparar
         // igualmente la notificación local del sistema (panel de
         // notificaciones 2026-09-05, QA).
-        val newOnes = mine.filter { it.id !in seenIds && !it.read }.sortedBy { it.createdAt }
+        val newOnes = NotificationPollRules.selectNewNotifications(mine, seenIds)
         if (newOnes.isEmpty()) {
             settingsStore.setNotifiedNotificationIds(householdId, mine.map { it.id }.toSet())
             return

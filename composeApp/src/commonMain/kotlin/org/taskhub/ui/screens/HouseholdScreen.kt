@@ -205,6 +205,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
         }
         val messagesState by householdModel.messagesUiState.collectAsState()
         val newMessageText by householdModel.newMessageText.collectAsState()
+        val sendMessageError by householdModel.sendMessageError.collectAsState()
         LaunchedEffect(householdId) {
             householdModel.loadMessages(householdId)
             while (true) {
@@ -546,7 +547,6 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                                 navigator.push(CalendarScreen(householdId, currentMemberId.ifEmpty { null }))
                                             },
                                             modifier = Modifier.weight(1f),
-                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                             shape = MaterialTheme.shapes.large
                                         ) {
                                             Text(
@@ -565,7 +565,6 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                             navigator.push(ExploreScreen(householdId, currentMemberId))
                                         },
                                         modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         shape = MaterialTheme.shapes.large
                                     ) {
                                         Text(
@@ -617,7 +616,9 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                         newMessageText = newMessageText,
                                         onTextChange = householdModel::updateNewMessageText,
                                         onSend = { householdModel.sendMessage(householdId, currentMemberId) },
-                                        onRefresh = { householdModel.loadMessages(householdId) }
+                                        onRefresh = { householdModel.loadMessages(householdId) },
+                                        sendMessageError = sendMessageError,
+                                        onDismissSendMessageError = { householdModel.clearSendMessageError() }
                                     )
                                 }
 

@@ -390,7 +390,6 @@ data class EditTaskScreen(
                                         subtaskText = ""
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = s("create_task_add_item"))
                             }
@@ -636,7 +635,6 @@ data class EditTaskScreen(
                                         tagsText = ""
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = s("create_task_add_tag"))
                             }

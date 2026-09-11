@@ -317,28 +317,56 @@ class TaskRepository(
         taskCache.clearTasks(householdId)
     }
 
-    /** Save a task completion record to Firestore taskHistory subcollection. */
+    /**
+     * Save a task completion record to Firestore taskHistory subcollection.
+     * Devuelve el ID del registro creado — usado por
+     * [org.taskhub.network.FirestoreRepository.completeTask]/[org.taskhub.network.FirestoreRepository.completeAssignment]
+     * para marcarlo con [markTaskHistoryPointsApplied] tras confirmar
+     * `addMemberPoints` (ver KDoc de [org.taskhub.network.models.TaskHistoryResponse.pointsApplied]).
+     * [pointsApplied]: `false` cuando el caller va a otorgar los puntos EN UN
+     * PASO POSTERIOR (el flujo normal de compleción); `true` (default) para
+     * escrituras donde los puntos ya se otorgaron o no aplica reconciliación.
+     */
     suspend fun saveTaskHistory(
         householdId: String,
         taskId: String,
         memberId: String,
         points: Int,
         completedAt: Long,
-        onTime: Boolean
-    ) {
+        onTime: Boolean,
+        pointsApplied: Boolean = true
+    ): String {
         val fields = mapOf(
             "taskId" to FirestoreValue(stringValue = taskId),
             "memberId" to FirestoreValue(stringValue = memberId),
             "points" to FirestoreValue(integerValue = points.toString()),
             "completedAt" to FirestoreValue(integerValue = completedAt.toString()),
-            "onTime" to FirestoreValue(booleanValue = onTime)
+            "onTime" to FirestoreValue(booleanValue = onTime),
+            "pointsApplied" to FirestoreValue(booleanValue = pointsApplied)
         )
 
-        client.post("$baseUrl/households/$householdId/taskHistory") {
+        val response: FirestoreDocumentResponse = client.post("$baseUrl/households/$householdId/taskHistory") {
             withAuth()
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
+        }.body()
+
+        taskCache.clearTaskHistory(householdId)
+        return extractDocId(response.name, "saveTaskHistory")
+    }
+
+    /**
+     * Marca un registro de `taskHistory` como con los puntos ya aplicados —
+     * ver KDoc de [saveTaskHistory]/[org.taskhub.network.models.TaskHistoryResponse.pointsApplied].
+     */
+    suspend fun markTaskHistoryPointsApplied(householdId: String, historyId: String) {
+        client.patch("$baseUrl/households/$householdId/taskHistory/$historyId") {
+            withAuth()
+            updateMaskFieldPaths("pointsApplied")
+            contentType(ContentType.Application.Json)
+            setBody(FirestoreDocument(mapOf("pointsApplied" to FirestoreValue(booleanValue = true))))
         }
+        taskCache.clearTaskHistory(householdId)
     }
 
     /**
@@ -346,13 +374,70 @@ class TaskRepository(
      * ([listAllDocuments]): es la colección que más crece sin techo natural
      * (un registro por compleción, para siempre) — mismo patrón ya aplicado
      * a `getTasks`/`getAssignments`/`messages` (panel v4, Experto 7 #1).
+     *
+     * Cache-first ante fallo (ronda de deuda aplicable 2026-09-12, punto
+     * B11): antes usaba `orDefault(emptyList())`, que no distingue "el hogar
+     * de verdad no tiene historial" de "no se pudo leer" — StatsScreen
+     * (rachas/últimos 7 días) mostraba un hogar sin actividad en vez de la
+     * última foto conocida ante un fallo de red puntual. Mismo patrón que
+     * [getTasks]: un 404/403 es una señal DEFINITIVA y se relanza en vez de
+     * caer a caché stale.
      */
-    suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = orDefault(emptyList()) {
-        val documents = client.listAllDocuments("$baseUrl/households/$householdId/taskHistory") {
-            tryAuthOrApiKey()
+    suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> {
+        return try {
+            val documents = client.listAllDocuments("$baseUrl/households/$householdId/taskHistory") {
+                tryAuthOrApiKey()
+            }
+            val history = documents.map { doc -> FirestoreParsers.toTaskHistoryResponse(doc) }
+            taskCache.cacheTaskHistory(householdId, history)
+            history
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: FirestoreException) {
+            if (e.statusCode == 404 || e.statusCode == 403) throw e
+            taskCache.getCachedTaskHistory(householdId) ?: emptyList()
+        } catch (_: Exception) {
+            taskCache.getCachedTaskHistory(householdId) ?: emptyList()
         }
+    }
 
-        documents.map { doc -> FirestoreParsers.toTaskHistoryResponse(doc) }
+    /**
+     * Purga best-effort de registros de `taskHistory` con más de [maxAgeMillis]
+     * de antigüedad (por [TaskHistoryResponse.completedAt]) — mismo patrón que
+     * [NotificationRepository.purgeOldRead] (ronda de deuda aplicable
+     * 2026-09-12, punto B9): TTL de retención de 90 días, a partir de una
+     * lista ya obtenida con [getTaskHistory] (evita un segundo fetch; el
+     * caller — `StatsScreenModel.loadStats`, que ya trae la colección
+     * completa para calcular estadísticas — la pasa directamente).
+     *
+     * No rompe StatsScreen: la racha vive en el documento del miembro (no en
+     * el historial) y la serie de 7 días/tasa de puntualidad de
+     * `computeStats` solo miran compleciones RECIENTES, muy por debajo de
+     * 90 días. Coste: 1 DELETE secuencial por registro purgado, igual que
+     * [NotificationRepository.purgeOldRead] (sin límite de concurrencia: a
+     * diferencia del cascade-delete de `deleteHousehold`, aquí no hay prisa
+     * y se prioriza no saturar la cuota de escrituras) — en el primer ciclo
+     * tras desplegar puede purgar un backlog considerable (la colección
+     * creció sin límite hasta ahora); en ciclos posteriores, solo los
+     * registros que acaban de cruzar el umbral de 90 días en cada household
+     * cuyo StatsScreen se abra.
+     */
+    suspend fun purgeOldTaskHistory(householdId: String, all: List<TaskHistoryResponse>, maxAgeMillis: Long) {
+        val cutoff = Clock.System.now().toEpochMilliseconds() - maxAgeMillis
+        val stale = all.filter { it.completedAt < cutoff }
+        if (stale.isEmpty()) return
+        for (record in stale) {
+            try {
+                client.delete("$baseUrl/households/$householdId/taskHistory/${record.id}") {
+                    withAuth()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Best-effort, ver KDoc de la función.
+            }
+        }
+        taskCache.clearTaskHistory(householdId)
     }
 
     /**

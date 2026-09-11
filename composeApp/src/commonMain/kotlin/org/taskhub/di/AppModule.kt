@@ -74,8 +74,8 @@ val appModule: Module = module {
     // en vez de ser la única forma de construirlos — causa raíz de por qué
     // seguía creciendo con cada refactor (panel v7, #16).
     single { FirestoreClient(apiKey = FirestoreRepository.DEFAULT_API_KEY, settingsStore = get()) }
-    single { NotificationRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get()) }
-    single { RewardsRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get()) }
+    single { NotificationRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
+    single { RewardsRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
     single { TaskRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get(), notificationRepository = get(), settingsStore = get()) }
     single { MemberRepository(baseUrl = firestoreBaseUrl(), firestoreClient = get(), taskCache = get()) }
     single {

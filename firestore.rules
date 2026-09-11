@@ -3,7 +3,51 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v7)
+    //  Task Hub — Reglas de seguridad (v8)
+    //
+    //  v8 editada 2026-09-12 (ronda de deuda aplicable, punto B7 — decisión
+    //  de producto de Liberto: "cualquiera puede donar/agradecer puntos a
+    //  cualquier otro miembro, no solo admin/owner"). Antes, el PATCH que
+    //  acredita puntos al RECEPTOR en `appreciateMember`/`donatePoints`
+    //  (`MemberRepository.addMemberPoints` sobre el documento ajeno) solo lo
+    //  permitía `isTrusted(hid)` (owner/admin) — un miembro normal recibía
+    //  403 al intentarlo (ver los comentarios "panel de revisión 2026-09-10,
+    //  Experto 9" en `MemberRepository.appreciateMember`/`donatePoints`, que
+    //  ya manejaban ese 403 con un catch mapeado a TRANSFER_FAILED/
+    //  ROLLBACK_FAILED, pero no lo evitaban). Se añade una rama nueva a
+    //  `allow update` de `members/{mid}` (ver más abajo) que permite a
+    //  CUALQUIER `isMember(hid)` escribir en el documento de OTRO miembro,
+    //  acotada para no reabrir inflación de puntos:
+    //   - `request.auth.uid != mid`: el receptor no puede auto-acreditarse
+    //     (siempre es OTRO miembro quien escribe en su documento).
+    //   - `diff().affectedKeys()` debe ser EXACTAMENTE `{'totalPoints'}`:
+    //     nunca `role`, `userId`, `appreciationGiven`/`appreciationWeekStart`
+    //     (esos son del EMISOR, se escriben en su propio documento bajo la
+    //     rama `request.auth.uid == mid` ya existente), `leftAt`, ni ningún
+    //     otro campo.
+    //   - `totalPoints` solo puede SUBIR (nunca bajar ni resetear el saldo de
+    //     otro miembro).
+    //   - el incremento de una sola escritura está topado a 1000 (literal en
+    //     `isPeerPointsTransfer`, ver la función) — limitación conocida:
+    //     estas reglas no pueden verificar ATÓMICAMENTE que este crédito vino
+    //     acompañado del débito correspondiente en `donatePoints` (son dos
+    //     escrituras HTTP independientes, ver su KDoc de "no atómico"), así
+    //     que un cliente modificado podría acreditar puntos sin restárselos a
+    //     nadie; el tope por escritura acota el daño de ese escenario en vez
+    //     de eliminarlo del todo (eliminarlo requeriría el `:commit`
+    //     transaccional ya evaluado y descartado en
+    //     docs/atomicidad-commit-pendiente.md).
+    //
+    //  v8 también incluye (mismo encargo, punto A1 — "completar una tarea sin
+    //  otorgar puntos por un fallo parcial no tiene forma de reintentarse"):
+    //  `taskHistory/{thid}` gana un nuevo campo `pointsApplied` (ver KDoc de
+    //  `TaskHistoryResponse.pointsApplied`) y su `allow update` gana una rama
+    //  que permite a CUALQUIER miembro (no solo isTrusted) voltear ESE campo
+    //  de `false` a `true` — es el PATCH que hace la compleción NORMAL de
+    //  cualquier miembro (`completeTask`/`completeAssignment`) y la
+    //  reconciliación automática en `TaskScreenModel.loadTasks`, así que no
+    //  puede depender de ser admin/owner (mismo motivo que `create` de
+    //  taskHistory, más abajo). Acotada a ESE campo y ESA dirección exacta.
     //
     //  v7 editada 2026-09-04 (encargo "correcciones integridad/seguridad/
     //  privacidad" tras el panel de revisión 2026-09-03/04, Experto 9,
@@ -219,6 +263,22 @@ service cloud.firestore {
       return isOwner(hid) || isAdminMember(hid);
     }
 
+    // Tope de puntos que una ÚNICA escritura de "donar/agradecer entre
+    // iguales" puede acreditar al receptor (ver v8 en la cabecera del
+    // archivo) — no es un límite de producto (donatePoints no tiene tope de
+    // importe, solo el saldo del donante), es una cota de seguridad: sin
+    // ella, un cliente modificado podría llamar directamente al PATCH que
+    // acredita puntos sin pasar por el débito correspondiente. Bastante por
+    // encima de WEEKLY_APPRECIATION_BUDGET (50, ver PointsRules.kt) para no
+    // interferir con donaciones legítimas de saldo acumulado.
+    function isPeerPointsTransfer(hid, mid) {
+      return isMember(hid)
+        && request.auth.uid != mid
+        && request.resource.data.diff(resource.data).affectedKeys() == ['totalPoints'].toSet()
+        && request.resource.data.totalPoints > resource.data.totalPoints
+        && request.resource.data.totalPoints <= resource.data.totalPoints + 1000;
+    }
+
     // ── users/{uid}: solo el propio usuario ────────────────────
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
@@ -305,11 +365,17 @@ service cloud.firestore {
       // cliente los incrementa hoy sin backend propio — pero NUNCA su
       // `role`: eso solo lo cambia el admin/owner (o el propio abandono,
       // que usa `leftAt` bajo el mismo dueño y tampoco toca `role`).
+      // La tercera rama (isPeerPointsTransfer) es "donar/agradecer entre
+      // iguales" (v8, ver cabecera del archivo): cualquier miembro puede
+      // acreditar puntos a OTRO miembro, acotado a solo `totalPoints`, solo
+      // al alza y con un tope por escritura — nunca a admin/owner por sí
+      // sola (eso lo sigue cubriendo isTrusted arriba).
       allow update: if isTrusted(hid)
         || (
           request.auth.uid == mid
           && request.resource.data.role == resource.data.role
-        );
+        )
+        || isPeerPointsTransfer(hid, mid);
       // El propio dueño del documento también puede borrarlo — es la ruta que
       // usa [FirestoreRepository.leaveHousehold] (abandonar hogar / eliminar
       // cuenta) para borrar SU PROPIO miembro. Sin esta cláusula, cualquier
@@ -358,7 +424,27 @@ service cloud.firestore {
       allow create: if (isMember(hid) || isOwner(hid))
         && existsMemberDoc(hid, request.resource.data.memberId)
         && request.resource.data.points >= 0;
-      allow update: if isTrusted(hid);
+      // v8 (ronda de deuda aplicable 2026-09-12, punto A1): además de
+      // isTrusted(hid), cualquier miembro puede voltear `pointsApplied` de
+      // `false` a `true` — es el PATCH que `completeTask`/`completeAssignment`
+      // (y la reconciliación automática de `TaskScreenModel.loadTasks`) hacen
+      // tras confirmar `addMemberPoints`, en la compleción NORMAL de
+      // cualquier miembro, no solo admin/owner (mismo motivo que `create` de
+      // arriba: "cualquier miembro puede completar cualquier tarea"). Acotado
+      // a ESE campo y ESA dirección exacta — no permite tocar
+      // memberId/points/completedAt/onTime de un registro ya existente, ni
+      // revertir pointsApplied de true a false.
+      allow update: if isTrusted(hid)
+        || (
+          (isMember(hid) || isOwner(hid))
+          && request.resource.data.diff(resource.data).affectedKeys() == ['pointsApplied'].toSet()
+          // get(..., true): registros LEGACY sin este campo (creados antes de
+          // v8) no lo tenían nunca en `false`, así que no necesitan (ni deben
+          // poder) pasar por esta rama — ver KDoc de
+          // TaskHistoryResponse.pointsApplied.
+          && resource.data.get('pointsApplied', true) == false
+          && request.resource.data.pointsApplied == true
+        );
       // delete: admin/owner puede borrar cualquier registro; además, el
       // propio miembro puede borrar SU PROPIO registro (memberId ==
       // auth.uid) — necesario para [TaskScreenModel.undoCompleteTask]:

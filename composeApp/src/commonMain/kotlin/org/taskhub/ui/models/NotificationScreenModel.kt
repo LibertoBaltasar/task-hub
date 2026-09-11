@@ -97,6 +97,18 @@ class NotificationScreenModel(
                 val unread = memberNotifications.count { !it.read }
                 _unreadCount.value = unread
                 _uiState.value = NotificationUiState.Success(memberNotifications, unread)
+
+                // Purga TTL de 90 días de las notificaciones ya leídas (ver
+                // KDoc de NotificationRepository.purgeOldRead) — best-effort,
+                // DESPUÉS de publicar la lista: ya se tiene [all] (la
+                // colección completa del HOGAR, no solo las de este miembro)
+                // cargada aquí, así que no hace falta un segundo fetch (ronda
+                // de deuda aplicable 2026-09-12, punto B9).
+                try {
+                    repo.purgeOldNotifications(householdId, all)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: FirestoreException) {

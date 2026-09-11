@@ -10,6 +10,7 @@ package org.taskhub.ui.models
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -437,18 +438,31 @@ class GoogleAuthManager(
         }
     }
 
+    // Job en vuelo de syncHouseholdsToCloud() — ver su KDoc (punto B12).
+    private var syncHouseholdsJob: Job? = null
+
     /**
      * Sincroniza los hogares compartidos del usuario con Firestore (users/{uid}).
      * Solo se sincroniza si hay sesión de Google iniciada. Ignora el espacio
      * Personal: no se guarda aquí, se resuelve de forma determinista
      * (personal_{uid}) desde [FirestoreRepository.getOrCreatePersonalHousehold].
+     *
+     * Cancela la sincronización anterior en curso antes de lanzar esta (ronda
+     * de deuda aplicable 2026-09-12, punto B12; mismo patrón que
+     * `TaskScreenModel.loadTasksJob`) — se llama desde 4 sitios de
+     * `HouseholdScreenModel` (crear/eliminar/abandonar hogar, cambiar rol de
+     * miembro) que pueden dispararse casi seguidos; sin serializar, dos
+     * llamadas fire-and-forget podían resolverse fuera de orden y la
+     * respuesta más antigua (con una lista de IDs ya obsoleta) sobrescribir
+     * en `users/{uid}` el resultado de la más reciente.
      */
     fun syncHouseholdsToCloud() {
         val uid = settingsStore.getGoogleUid() ?: return
         val ids = householdStore.getSavedHouseholds()
             .filter { !it.isPersonal }
             .map { it.id }
-        scope.launch {
+        syncHouseholdsJob?.cancel()
+        syncHouseholdsJob = scope.launch {
             try {
                 repo.saveUserHouseholds(uid, ids)
             } catch (e: CancellationException) {

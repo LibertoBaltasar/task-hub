@@ -237,6 +237,22 @@ class HouseholdScreenModel(
     private val _newMessageText = MutableStateFlow("")
     val newMessageText: StateFlow<String> = _newMessageText.asStateFlow()
 
+    private val _sendMessageError = MutableStateFlow<String?>(null)
+    /**
+     * Error al ENVIAR un mensaje (distinto de [messagesUiState], que es el
+     * estado de la LISTA ya cargada) — antes un fallo al enviar sustituía
+     * [messagesUiState] por `Error`, ocultando el historial de chat ya
+     * mostrado; ahora se expone como banner independiente sin tocar la lista
+     * (ronda de deuda aplicable 2026-09-12, punto A3). La UI debe llamar
+     * [clearSendMessageError] al descartar el banner.
+     */
+    val sendMessageError: StateFlow<String?> = _sendMessageError.asStateFlow()
+
+    /** Descarta el banner de error de envío (ver [sendMessageError]). */
+    fun clearSendMessageError() {
+        _sendMessageError.value = null
+    }
+
     /** Actualiza el texto del campo de nuevo mensaje (estado del input, aún sin enviar). */
     fun updateNewMessageText(text: String) {
         _newMessageText.value = text
@@ -251,6 +267,18 @@ class HouseholdScreenModel(
             try {
                 val messages = repo.getMessages(householdId)
                 _messagesUiState.value = MessagesUiState.Success(messages)
+
+                // Purga TTL de 90 días del chat (ver KDoc de
+                // HouseholdRepository.purgeOldMessages) — best-effort, DESPUÉS
+                // de publicar la lista: ya se tiene cargada la colección
+                // completa aquí, así que no hace falta un segundo fetch para
+                // decidir qué purgar (ronda de deuda aplicable 2026-09-12,
+                // punto B9).
+                try {
+                    repo.purgeOldMessages(householdId, messages)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -265,13 +293,17 @@ class HouseholdScreenModel(
      * Envía el mensaje pendiente en [newMessageText] al chat del hogar,
      * firmado por [memberId]. Limpia el campo de texto de forma optimista
      * ANTES de la llamada de red para que un doble tap en "Enviar" no lea el
-     * mismo texto dos veces y lo duplique.
+     * mismo texto dos veces y lo duplique; si falla, se RESTAURA (en vez de
+     * perderse) y el error se expone vía [sendMessageError] sin pisar
+     * [messagesUiState] (que sigue mostrando el historial ya cargado — ronda
+     * de deuda aplicable 2026-09-12, punto A3).
      */
     fun sendMessage(householdId: String, memberId: String) {
         val text = _newMessageText.value.trim()
         if (text.isEmpty() || memberId.isEmpty()) return
         // Limpiar de forma optimista ANTES de la llamada de red: evita que un
         // doble tap en "Enviar" lea el mismo texto dos veces y lo duplique.
+        // Se restaura en el catch si el envío falla.
         _newMessageText.value = ""
         screenModelScope.launch {
             try {
@@ -279,13 +311,13 @@ class HouseholdScreenModel(
                     .firstOrNull { it.id == memberId }
                     ?.displayName ?: ""
                 repo.sendMessage(householdId, memberId, authorName, text)
+                _sendMessageError.value = null
                 loadMessages(householdId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _messagesUiState.value = MessagesUiState.Error(
-                    e.message ?: s("messages_error_sending")
-                )
+                _newMessageText.value = text
+                _sendMessageError.value = e.message ?: s("messages_error_sending")
             }
         }
     }

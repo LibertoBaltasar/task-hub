@@ -98,6 +98,7 @@ data class TaskListScreen(
         val currentMemberId by model.currentMemberId.collectAsState()
         val searchQuery by model.searchQuery.collectAsState()
         val undoState by model.undoState.collectAsState()
+        val undoError by model.undoError.collectAsState()
         val isOffline by model.isOffline.collectAsState()
 
         val snackbarHostState = remember { SnackbarHostState() }
@@ -118,6 +119,16 @@ data class TaskListScreen(
                 } else {
                     model.clearUndoState()
                 }
+            }
+        }
+
+        // Aviso de error de deshacer — ver KDoc de TaskScreenModel.undoError
+        // (ronda de deuda aplicable 2026-09-12, punto A4): antes un fallo de
+        // undoCompleteTask() era completamente silencioso.
+        LaunchedEffect(undoError) {
+            if (undoError != null) {
+                snackbarHostState.showSnackbar(message = undoError!!, duration = SnackbarDuration.Long)
+                model.clearUndoError()
             }
         }
 
@@ -680,7 +691,6 @@ private fun TaskListContent(
                         Spacer(Modifier.height(24.dp))
                         Button(
                             onClick = onCreateFirstTask,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Text(s("task_list_create_first"), fontWeight = FontWeight.SemiBold)
                         }
@@ -882,9 +892,6 @@ private fun TaskCard(
                         Button(
                             onClick = { isCompleting = true },
                             enabled = !isLoading,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            ),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         ) {
                             if (isLoading) {

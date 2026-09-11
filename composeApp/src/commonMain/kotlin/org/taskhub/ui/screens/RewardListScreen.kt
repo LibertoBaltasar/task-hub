@@ -32,6 +32,7 @@ import org.taskhub.ui.components.DestructiveConfirmDialog
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
+import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.showErrorSnackbar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
@@ -124,11 +125,12 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
 
         when (val rState = rewardState) {
             is RewardUiState.Loading -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                // ShimmerList en vez de CircularProgressIndicator genérico —
+                // mismo patrón ya usado en TaskListScreen/HouseholdScreen/
+                // HomeScreen/RankingScreen (ronda de deuda aplicable
+                // 2026-09-12, punto C15).
+                Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                    ShimmerList(count = 4, itemHeight = 88.dp)
                 }
             }
 
@@ -308,7 +310,6 @@ private fun RewardCard(
                 Button(
                     onClick = onRedeem,
                     modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     shape = MaterialTheme.shapes.medium,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                 ) {

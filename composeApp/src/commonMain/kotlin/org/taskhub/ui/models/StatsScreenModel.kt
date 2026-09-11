@@ -103,6 +103,19 @@ class StatsScreenModel(
                     val unlocked = achievementsDeferred.await()
                     val achievements = AchievementChecker.getAchievementsWithStatus(unlocked)
                     _uiState.value = StatsUiState.Success(data, achievements)
+
+                    // Purga TTL de 90 días del historial (ver KDoc de
+                    // TaskRepository.purgeOldTaskHistory) — best-effort, DESPUÉS
+                    // de publicar el estado: un fallo aquí no debe convertir una
+                    // carga de estadísticas correcta en un error, y esta es la
+                    // pantalla que ya trae la colección completa de taskHistory,
+                    // así que no hace falta un segundo fetch para decidir qué
+                    // purgar (ronda de deuda aplicable 2026-09-12, punto B9).
+                    try {
+                        repo.purgeOldTaskHistory(householdId, history)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) { }
                 } else {
                     // Miembro no encontrado: el resultado de achievementsDeferred no se
                     // necesita — se cancela para no dejarlo corriendo de fondo sin motivo.

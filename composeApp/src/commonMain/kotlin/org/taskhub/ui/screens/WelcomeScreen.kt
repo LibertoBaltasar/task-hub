@@ -131,9 +131,6 @@ class WelcomeScreen : Screen {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        ),
                         shape = MaterialTheme.shapes.large
                     ) {
                         Text(

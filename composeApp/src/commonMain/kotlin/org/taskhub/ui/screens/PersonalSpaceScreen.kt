@@ -145,7 +145,6 @@ data class PersonalSpaceScreen(
                         Button(
                             onClick = { navigator.push(CreateTaskScreen(householdId, memberId ?: "")) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text(
@@ -161,7 +160,6 @@ data class PersonalSpaceScreen(
                         Button(
                             onClick = { navigator.push(CalendarScreen(householdId, memberId)) },
                             modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text(

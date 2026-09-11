@@ -135,7 +135,6 @@ fun LazyListScope.householdMemberList(
                             Spacer(Modifier.height(16.dp))
                             Button(
                                 onClick = onInviteClick,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Text(s("household_member_list_invite_cta"), fontWeight = FontWeight.SemiBold)
                             }

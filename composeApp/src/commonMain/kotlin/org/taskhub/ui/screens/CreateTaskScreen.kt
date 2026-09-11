@@ -43,6 +43,8 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.datetime.*
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.Subtask
@@ -107,12 +109,30 @@ data class CreateTaskScreen(
         // construir este `Screen`, no se actualiza solo aunque la pantalla de
         // origen termine de resolverlo más tarde.
         var effectiveCreatedBy by remember(createdBy) { mutableStateOf(createdBy) }
+        // true si resolveCurrentMemberId falló — antes esta rama no tenía
+        // try/catch y una excepción de red podía propagarse sin control
+        // (ronda de deuda aplicable 2026-09-12, punto A5); distingue "aún
+        // resolviendo" (spinner) de "falló, hay que reintentar" (banner +
+        // botón) en el aviso de más abajo.
+        var creatorResolveError by remember { mutableStateOf(false) }
+        val coroutineScope = rememberCoroutineScope()
+
+        suspend fun resolveCreator() {
+            creatorResolveError = false
+            try {
+                effectiveCreatedBy = taskModel.resolveCurrentMemberId(householdId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                creatorResolveError = true
+            }
+        }
 
         LaunchedEffect(householdId) {
             taskModel.resetActionState()
             memberModel.loadMembers(householdId)
             if (createdBy.isBlank()) {
-                effectiveCreatedBy = taskModel.resolveCurrentMemberId(householdId)
+                resolveCreator()
             }
         }
 
@@ -263,23 +283,44 @@ data class CreateTaskScreen(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                    containerColor = if (creatorResolveError) {
+                                        MaterialTheme.colorScheme.errorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    }
                                 )
                             ) {
                                 Row(
                                     modifier = Modifier.padding(16.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        text = s("create_task_creator_not_resolved"),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    if (creatorResolveError) {
+                                        // Reintento manual — antes este banner se quedaba
+                                        // atascado en el spinner para siempre si
+                                        // resolveCurrentMemberId fallaba, sin forma de
+                                        // recuperarse sin salir de la pantalla (ronda de
+                                        // deuda aplicable 2026-09-12, punto A5).
+                                        Text(
+                                            text = s("create_task_creator_resolve_error"),
+                                            modifier = Modifier.weight(1f),
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                        TextButton(onClick = { coroutineScope.launch { resolveCreator() } }) {
+                                            Text(s("common_retry"))
+                                        }
+                                    } else {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(Modifier.width(12.dp))
+                                        Text(
+                                            text = s("create_task_creator_not_resolved"),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -389,7 +430,6 @@ data class CreateTaskScreen(
                                         subtaskText = ""
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = s("create_task_add_item"))
                             }
@@ -638,7 +678,6 @@ data class CreateTaskScreen(
                                         tagsText = ""
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = s("create_task_add_tag"))
                             }

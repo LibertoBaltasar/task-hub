@@ -11,6 +11,7 @@ import io.ktor.http.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import org.taskhub.network.models.NotificationResponse
+import org.taskhub.storage.TaskCache
 
 /**
  * Notificaciones de un hogar (subcolección `households/{id}/notifications`).
@@ -20,7 +21,8 @@ import org.taskhub.network.models.NotificationResponse
  */
 class NotificationRepository(
     private val baseUrl: String,
-    private val firestoreClient: FirestoreClient
+    private val firestoreClient: FirestoreClient,
+    private val taskCache: TaskCache
 ) {
     private val client = firestoreClient.client
 
@@ -52,7 +54,9 @@ class NotificationRepository(
         message: String,
         titleKey: String? = null,
         messageKey: String? = null,
-        messageParams: Map<String, String>? = null
+        messageParams: Map<String, String>? = null,
+        /** Ver KDoc de [NotificationResponse.authorMemberId]. */
+        authorMemberId: String? = null
     ): NotificationResponse {
         val now = Clock.System.now().toEpochMilliseconds()
         val fields = buildMap {
@@ -74,6 +78,7 @@ class NotificationRepository(
                     )
                 )
             }
+            if (authorMemberId != null) put("authorMemberId", FirestoreValue(stringValue = authorMemberId))
         }
 
         val response: FirestoreDocumentResponse = client.post(
@@ -85,21 +90,36 @@ class NotificationRepository(
         }.body()
 
         val id = extractDocId(response.name, "createNotification")
+        taskCache.clearNotifications(householdId)
         return NotificationResponse(
             id, memberId, taskId, title, message, now, read = false,
-            titleKey = titleKey, messageKey = messageKey, messageParams = messageParams
+            titleKey = titleKey, messageKey = messageKey, messageParams = messageParams,
+            authorMemberId = authorMemberId
         )
     }
 
-    /** Lista todas las notificaciones de un hogar. Lectura pública (auth opcional vía API key). */
-    suspend fun getNotifications(householdId: String): List<NotificationResponse> = orDefault(emptyList()) {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/notifications"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        response.documents.map { doc -> FirestoreParsers.toNotificationResponse(doc) }
+    /**
+     * Lista todas las notificaciones de un hogar. Lectura pública (auth
+     * opcional vía API key). Cache-first ante fallo (ronda de deuda aplicable
+     * 2026-09-12, punto B11): antes usaba `orDefault(emptyList())`, que
+     * vaciaba el badge/lista ante un fallo de red puntual en vez de servir la
+     * última foto conocida.
+     */
+    suspend fun getNotifications(householdId: String): List<NotificationResponse> {
+        return try {
+            val response: FirestoreListResponse = client.get(
+                "$baseUrl/households/$householdId/notifications"
+            ) {
+                tryAuthOrApiKey()
+            }.body()
+            val notifications = response.documents.map { doc -> FirestoreParsers.toNotificationResponse(doc) }
+            taskCache.cacheNotifications(householdId, notifications)
+            notifications
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            taskCache.getCachedNotifications(householdId) ?: emptyList()
+        }
     }
 
     /**
@@ -119,6 +139,7 @@ class NotificationRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        taskCache.clearNotifications(householdId)
     }
 
     /**
@@ -135,6 +156,7 @@ class NotificationRepository(
     suspend fun purgeOldRead(householdId: String, all: List<NotificationResponse>, maxAgeMillis: Long) {
         val cutoff = Clock.System.now().toEpochMilliseconds() - maxAgeMillis
         val stale = all.filter { it.read && it.createdAt < cutoff }
+        if (stale.isEmpty()) return
         for (n in stale) {
             try {
                 client.delete("$baseUrl/households/$householdId/notifications/${n.id}") {
@@ -146,5 +168,6 @@ class NotificationRepository(
                 // Best-effort, ver KDoc de la función.
             }
         }
+        taskCache.clearNotifications(householdId)
     }
 }

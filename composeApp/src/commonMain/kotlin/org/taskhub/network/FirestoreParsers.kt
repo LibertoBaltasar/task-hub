@@ -196,7 +196,8 @@ object FirestoreParsers {
             memberId = f["memberId"]?.stringValue ?: "",
             points = f["points"]?.integerValue?.toIntOrNull() ?: 0,
             completedAt = f["completedAt"]?.integerValue?.toLongOrNull() ?: 0L,
-            onTime = f["onTime"]?.booleanValue ?: true
+            onTime = f["onTime"]?.booleanValue ?: true,
+            pointsApplied = f["pointsApplied"]?.booleanValue ?: true
         )
     }
 
@@ -221,7 +222,8 @@ object FirestoreParsers {
             titleKey = f["titleKey"]?.stringValue,
             messageKey = f["messageKey"]?.stringValue,
             messageParams = f["messageParams"]?.mapValue?.fields
-                ?.mapValues { it.value.stringValue ?: "" }
+                ?.mapValues { it.value.stringValue ?: "" },
+            authorMemberId = f["authorMemberId"]?.stringValue
         )
     }
 

@@ -183,7 +183,6 @@ class HomeScreen : Screen {
                             authManager.signIn()
                         },
                         enabled = authState !is GoogleAuthState.SigningIn,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text(s("settings_account_sign_in_google"))
                     }
@@ -307,7 +306,6 @@ class HomeScreen : Screen {
                         Spacer(Modifier.height(24.dp))
                         Button(
                             onClick = { navigator.push(CreateHouseholdScreen()) },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))

@@ -57,6 +57,22 @@ class TaskCommentsScreenModel(
     /** Texto del campo de "nuevo comentario", controlado por la UI (`TextField`). */
     val newCommentText: StateFlow<String> = _newCommentText.asStateFlow()
 
+    private val _sendCommentError = MutableStateFlow<String?>(null)
+    /**
+     * Error al PUBLICAR un comentario (distinto de [commentsState], que es el
+     * estado de la LISTA ya cargada) — antes un fallo al enviar sustituía
+     * [commentsState] por `Error`, ocultando el historial de comentarios ya
+     * mostrado; ahora el error se muestra como banner independiente sin
+     * tocar la lista (ronda de deuda aplicable 2026-09-12, punto A3). La UI
+     * debe llamar [clearSendCommentError] al descartar el banner.
+     */
+    val sendCommentError: StateFlow<String?> = _sendCommentError.asStateFlow()
+
+    /** Descarta el banner de error de envío (ver [sendCommentError]). */
+    fun clearSendCommentError() {
+        _sendCommentError.value = null
+    }
+
     /** Actualiza el borrador de comentario, descartando cualquier exceso por encima de 200 caracteres. */
     fun setNewCommentText(text: String) {
         if (text.length <= 200) {
@@ -89,28 +105,33 @@ class TaskCommentsScreenModel(
      * Tras publicar con éxito, recarga la lista completa vía [loadComments]
      * en vez de insertar el comentario en memoria: es más simple y evita
      * duplicar la lógica de orden/formato que ya aplica el repositorio.
+     *
+     * Si falla, el borrador se RESTAURA (en vez de perderse) y el error se
+     * expone vía [sendCommentError] sin tocar [commentsState] — antes un
+     * fallo aquí perdía el texto escrito Y sustituía la lista ya cargada por
+     * el estado de error (ronda de deuda aplicable 2026-09-12, punto A3).
      */
     fun addComment(householdId: String, taskId: String, currentMemberId: String?) {
         val text = _newCommentText.value.trim()
         if (text.isEmpty()) return
         // Limpiar el campo de forma optimista, ANTES de la llamada de red: si no,
         // un doble tap en "Enviar" antes de que la primera petición complete lee
-        // el mismo texto dos veces y envía el comentario duplicado.
+        // el mismo texto dos veces y envía el comentario duplicado. Se restaura
+        // en el catch si la publicación falla.
         _newCommentText.value = ""
         screenModelScope.launch {
-            _commentsState.value = CommentsUiState.Loading
             try {
                 val memberId = currentMemberId ?: repo.resolveCurrentMember(householdId)
                 val authorName = resolveCurrentMemberName(householdId, memberId)
                 repo.addComment(householdId, taskId, memberId, authorName, text)
+                _sendCommentError.value = null
                 // Reload comments
                 loadComments(householdId, taskId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _commentsState.value = CommentsUiState.Error(
-                    e.message ?: s("task_comment_error_adding")
-                )
+                _newCommentText.value = text
+                _sendCommentError.value = e.message ?: s("task_comment_error_adding")
             }
         }
     }

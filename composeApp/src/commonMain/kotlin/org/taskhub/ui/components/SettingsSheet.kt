@@ -173,7 +173,6 @@ fun SettingsSheet(
                     Button(
                         onClick = { authManager.signIn() },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Text(s("settings_account_sign_in_google"))
                     }
@@ -283,7 +282,6 @@ fun SettingsSheet(
                     },
                     enabled = !isLinkingCalendar,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     if (isLinkingCalendar) {
                         CircularProgressIndicator(
@@ -480,7 +478,6 @@ fun SettingsSheet(
                     callbacks.onExportCsv()
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                 shape = MaterialTheme.shapes.large
             ) {
                 Text(

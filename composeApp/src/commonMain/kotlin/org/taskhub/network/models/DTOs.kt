@@ -305,7 +305,19 @@ data class TaskHistoryResponse(
     val memberId: String,
     val points: Int = 0,
     val completedAt: Long = 0,
-    val onTime: Boolean = true
+    val onTime: Boolean = true,
+    /**
+     * `false` mientras `completeTask`/`completeAssignment` aún no han
+     * confirmado el `addMemberPoints` correspondiente a este registro — el
+     * rastro que permite a `TaskReconciliation`/`FirestoreRepository.
+     * reconcileMissingTaskPoints` detectar y reparar una tarea "completada
+     * sin puntos" (fallo parcial entre marcar la tarea completada y otorgar
+     * los puntos) sin volver a otorgarlos si el registro ya quedó en `true`.
+     * `true` por defecto para registros ANTIGUOS sin este campo: el código
+     * previo otorgaba los puntos ANTES de guardar el historial, así que su
+     * sola existencia ya implicaba puntos aplicados.
+     */
+    val pointsApplied: Boolean = true
 )
 
 // ── Notification DTO ──────────────────────────────────────
@@ -332,7 +344,22 @@ data class NotificationResponse(
     val read: Boolean = false,
     val titleKey: String? = null,
     val messageKey: String? = null,
-    val messageParams: Map<String, String>? = null
+    val messageParams: Map<String, String>? = null,
+    /**
+     * ID del miembro AUTOR de un mensaje de chat que generó esta
+     * notificación (`null` para notificaciones de tarea, y para chat
+     * ANTIGUO creado antes de este campo). Junto con
+     * `messageParams["preview"]`, permite a [org.taskhub.ui.i18n.NotificationText.message]
+     * resolver el nombre del autor CONTRA EL ESTADO ACTUAL de la lista de
+     * miembros en vez del `message` ya congelado con el nombre de cuando se
+     * envió — así, si el autor abandona/es expulsado del hogar después
+     * (`anonymizeMemberMessages` reescribe `messages.authorName`, pero antes
+     * de este campo no había forma de re-resolver TAMBIÉN el nombre ya
+     * mostrado en notificaciones ya generadas), el nombre mostrado se
+     * actualiza solo, sin tener que reescribir notificaciones ya creadas —
+     * ronda de deuda aplicable 2026-09-12, punto B10.
+     */
+    val authorMemberId: String? = null
 )
 
 // ── Reward DTOs ────────────────────────────────────────────

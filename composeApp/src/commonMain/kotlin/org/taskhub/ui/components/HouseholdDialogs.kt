@@ -88,7 +88,6 @@ fun QrShareDialog(
                         s("household_share_subject")
                     )
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text(s("household_share"))
             }

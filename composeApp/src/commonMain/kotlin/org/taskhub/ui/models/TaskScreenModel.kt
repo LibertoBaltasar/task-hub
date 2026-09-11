@@ -268,6 +268,23 @@ class TaskScreenModel(
                 _allTags.value = tagSet.toList().sorted()
 
                 _listState.value = TaskListUiState.Success(tasks, assignments, members)
+
+                // Reconciliación automática de puntos: repara tareas que
+                // quedaron "completadas" tras un fallo parcial entre marcar
+                // la tarea completada y otorgar puntos/historial (ver KDoc
+                // de FirestoreRepository.completeTask/reconcileMissingTaskPoints).
+                // Best-effort y NUNCA debe pisar el TaskListUiState.Success
+                // ya publicado — se comprueba primero en memoria (sin I/O)
+                // si hay algún candidato para no pagar el coste de leer todo
+                // taskHistory en la carga común (colección sin techo natural
+                // de crecimiento).
+                if (tasks.any { it.completedBy != null && it.lastCompletedDate != null }) {
+                    try {
+                        repo.reconcileMissingTaskPoints(householdId, tasks)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) { }
+                }
             } catch (e: CancellationException) {
                 // Relanzar: si no, una loadTasks() más reciente que ya canceló este
                 // Job ve su propia cancelación tratada como un error normal aquí
@@ -441,6 +458,22 @@ class TaskScreenModel(
 
     private val _undoState = MutableStateFlow<UndoState?>(null)
     val undoState: StateFlow<UndoState?> = _undoState.asStateFlow()
+
+    private val _undoError = MutableStateFlow<String?>(null)
+    /**
+     * Error de [undoCompleteTask] — antes un fallo ahí quedaba silencioso
+     * (solo un comentario documentando que la tarea podía quedar
+     * "completada" con los puntos ya revertidos), sin ninguna señal
+     * observable para que la UI informe al usuario o le permita reintentar
+     * manualmente recargando (ronda de deuda aplicable 2026-09-12, punto
+     * A4). La UI debe llamar [clearUndoError] al mostrar/descartar el aviso.
+     */
+    val undoError: StateFlow<String?> = _undoError.asStateFlow()
+
+    /** Descarta el error de deshacer ya mostrado (ver [undoError]). */
+    fun clearUndoError() {
+        _undoError.value = null
+    }
 
     /**
      * Completa una tarea desde la lista principal (a diferencia de
@@ -652,8 +685,12 @@ class TaskScreenModel(
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
-                // Non-critical — la tarea puede quedar como completada (ver KDoc arriba)
+            } catch (e: Exception) {
+                // La tarea puede quedar como completada con los puntos ya
+                // revertidos (ver KDoc arriba) — no crítico para la
+                // integridad de datos, pero SÍ debe ser visible: antes no
+                // había ninguna señal observable de este fallo parcial.
+                _undoError.value = e.message ?: s("task_error_undo")
             }
         }
     }

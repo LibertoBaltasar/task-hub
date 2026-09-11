@@ -13,6 +13,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.Clock
 import org.taskhub.network.models.RewardRedemption
 import org.taskhub.network.models.RewardResponse
+import org.taskhub.storage.TaskCache
 
 /**
  * Recompensas de un hogar (subcolección `households/{id}/rewards` y
@@ -33,7 +34,8 @@ import org.taskhub.network.models.RewardResponse
  */
 class RewardsRepository(
     private val baseUrl: String,
-    private val firestoreClient: FirestoreClient
+    private val firestoreClient: FirestoreClient,
+    private val taskCache: TaskCache
 ) {
     private val client = firestoreClient.client
 
@@ -42,15 +44,29 @@ class RewardsRepository(
     private fun extractDocId(resourceName: String, operation: String): String =
         firestoreClient.extractDocId(resourceName, operation)
 
-    /** Lista todas las recompensas de un hogar. Lectura pública (auth opcional vía API key). */
-    suspend fun getRewards(householdId: String): List<RewardResponse> = orDefault(emptyList()) {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/rewards"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        response.documents.map { doc -> FirestoreParsers.toRewardResponse(doc, householdId) }
+    /**
+     * Lista todas las recompensas de un hogar. Lectura pública (auth opcional
+     * vía API key). Cache-first ante fallo (ronda de deuda aplicable
+     * 2026-09-12, punto B11): antes usaba `orDefault(emptyList())`, que no
+     * distingue "el hogar de verdad no tiene recompensas" de "no se pudo
+     * leer" — un fallo de red puntual vaciaba la lista de recompensas
+     * canjeables en vez de mostrar la última foto conocida.
+     */
+    suspend fun getRewards(householdId: String): List<RewardResponse> {
+        return try {
+            val response: FirestoreListResponse = client.get(
+                "$baseUrl/households/$householdId/rewards"
+            ) {
+                tryAuthOrApiKey()
+            }.body()
+            val rewards = response.documents.map { doc -> FirestoreParsers.toRewardResponse(doc, householdId) }
+            taskCache.cacheRewards(householdId, rewards)
+            rewards
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            taskCache.getCachedRewards(householdId) ?: emptyList()
+        }
     }
 
     /** Crea una recompensa nueva en el hogar. Requiere auth (escritura). */
@@ -83,6 +99,7 @@ class RewardsRepository(
         }.body()
 
         val id = extractDocId(response.name, "createReward")
+        taskCache.clearRewards(householdId)
         return RewardResponse(id, householdId, title, description, cost, icon, createdBy, now)
     }
 
@@ -91,17 +108,29 @@ class RewardsRepository(
         client.delete("$baseUrl/households/$householdId/rewards/$rewardId") {
             withAuth()
         }
+        taskCache.clearRewards(householdId)
     }
 
-    /** Lista todos los canjes de recompensas de un hogar. Lectura pública (auth opcional vía API key). */
-    suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> = orDefault(emptyList()) {
-        val response: FirestoreListResponse = client.get(
-            "$baseUrl/households/$householdId/rewardRedemptions"
-        ) {
-            tryAuthOrApiKey()
-        }.body()
-
-        response.documents.map { doc -> FirestoreParsers.toRewardRedemption(doc) }
+    /**
+     * Lista todos los canjes de recompensas de un hogar. Lectura pública
+     * (auth opcional vía API key). Cache-first ante fallo — mismo motivo que
+     * [getRewards] (punto B11).
+     */
+    suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> {
+        return try {
+            val response: FirestoreListResponse = client.get(
+                "$baseUrl/households/$householdId/rewardRedemptions"
+            ) {
+                tryAuthOrApiKey()
+            }.body()
+            val redemptions = response.documents.map { doc -> FirestoreParsers.toRewardRedemption(doc) }
+            taskCache.cacheRewardRedemptions(householdId, redemptions)
+            redemptions
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            taskCache.getCachedRewardRedemptions(householdId) ?: emptyList()
+        }
     }
 
     /**
@@ -134,6 +163,24 @@ class RewardsRepository(
         }.body()
 
         val id = extractDocId(response.name, "redeemReward")
+        taskCache.clearRewardRedemptions(householdId)
         return RewardRedemption(id, rewardId, memberId, redeemedAt, pointsSpent)
+    }
+
+    /**
+     * Borra un registro de canje huérfano — usado por
+     * [FirestoreRepository.redeemReward] para compensar cuando
+     * [createRedemption] tuvo éxito pero el descuento de puntos posterior
+     * falló (ver su KDoc): sin esto, un reintento del usuario creaba un
+     * SEGUNDO registro de canje con un solo descuento real. Best-effort: si
+     * el borrado también falla, el caller relanza igualmente la excepción
+     * original (el registro huérfano queda para limpieza manual, pero el
+     * usuario no pierde puntos).
+     */
+    suspend fun deleteRedemption(householdId: String, redemptionId: String) {
+        client.delete("$baseUrl/households/$householdId/rewardRedemptions/$redemptionId") {
+            withAuth()
+        }
+        taskCache.clearRewardRedemptions(householdId)
     }
 }

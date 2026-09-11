@@ -106,6 +106,17 @@ class MemberRepository(
      * Check if any of the given [userIds] (identidades del usuario) ya es
      * miembro del hogar. Acepta una lista porque un mismo usuario puede tener
      * UID anónimo y UID de Google, y el miembro pudo crearse con cualquiera.
+     *
+     * SIN caché de respaldo propia a propósito (ronda de deuda aplicable
+     * 2026-09-12, punto B11 — evaluado y descartado): esta función gatea
+     * acceso (p.ej. si se puede entrar a un hogar), así que "no se pudo
+     * comprobar" debe FALLAR CERRADO (`false`, tratar como no-miembro) en vez
+     * de servir un `true` cacheado potencialmente obsoleto — un miembro
+     * expulsado hace un momento no debe seguir pasando esta comprobación
+     * solo porque el dispositivo aún tiene la respuesta anterior en caché.
+     * `getMembers` (que sí cachea) puede seguir sirviendo offline para
+     * lectura/listado; esta capa de decisión de acceso no debe heredar esa
+     * caché.
      */
     suspend fun isMember(householdId: String, userIds: List<String>): Boolean = orDefault(false) {
         getMembers(householdId).any { it.userId != null && it.userId in userIds }
@@ -282,22 +293,13 @@ class MemberRepository(
             emptyList()
         }
 
-        // 1. Miembro vinculado a cualquiera de las identidades del usuario
+        // 1-2. Resolución pura y testeada (ver [MemberResolutionRules] y su
+        // test): miembro vinculado a cualquiera de las identidades del
+        // usuario, o el primer miembro SIN cuenta vinculada como fallback.
+        // Si no hay ningún perfil sin reclamar, se cae al paso 3 de abajo
+        // (crear un miembro "Yo" nuevo) en vez de adivinar.
         val identities = firestoreClient.currentUserIdentities()
-        members.firstOrNull { it.userId != null && it.userId in identities }?.let { return it.id }
-
-        // 2. Fallback: primer miembro SIN cuenta vinculada (perfil "child" sin
-        // userId, el caso típico de onboarding de JoinHouseholdScreen) —
-        // NUNCA uno cuyo userId ya pertenece a OTRA identidad real: antes se
-        // devolvía `members.first()` sin condición, así que un usuario cuya
-        // identidad local dejara de coincidir con ningún miembro (p.ej. tras
-        // el escenario de `ownerId` sin limpiar de `leaveHousehold`, ver
-        // docs/auditoria-completa-2026-09-06.md hallazgo CRÍTICO #2) heredaba
-        // en silencio la identidad de OTRO miembro real, sin ningún error
-        // visible (panel 2026-09-11, IMPORTANTE). Si no hay ningún perfil sin
-        // reclamar, se cae al paso 3 (crear un miembro "Yo" nuevo) en vez de
-        // adivinar.
-        members.firstOrNull { it.userId == null }?.let { return it.id }
+        MemberResolutionRules.resolveExistingMemberId(members, identities)?.let { return it }
 
         // 3. Sin miembros: crear uno "Yo" vinculado al usuario actual.
         // Si createMember falla (p. ej. Firestore devuelve una respuesta sin
@@ -389,7 +391,19 @@ class MemberRepository(
     //  User profile (perfilado global, colección users/{userId})
     // ────────────────────────────────────────────────────────
 
-    /** Lee el perfil global de un usuario, o null si aún no existe. */
+    /**
+     * Lee el perfil global de un usuario, o null si aún no existe.
+     *
+     * SIN caché de respaldo propia a propósito (punto B11, evaluado y
+     * descartado): `null` ya es un resultado válido y frecuente ("perfil aún
+     * no creado", p.ej. justo tras el alta) — cachear haría indistinguibles
+     * "no se pudo leer" de "de verdad no existe todavía", que es justo la
+     * ambigüedad que esta ronda busca resolver en OTRAS lecturas (rewards/
+     * historial), no introducirla aquí. El perfil además se usa para
+     * mostrar/editar datos del USUARIO ACTUAL en la sesión en curso — no hay
+     * un escenario offline realista de "abrir mi perfil sin red" que
+     * justifique el coste de mantener esta caché sincronizada.
+     */
     suspend fun getUserProfile(userId: String): UserProfile? = orDefault(null) {
         val response: FirestoreDocumentResponse = client.get("$baseUrl/users/$userId") {
             tryAuthOrApiKey()
@@ -722,7 +736,21 @@ class MemberRepository(
         )
     }
 
-    /** Get member's unlocked achievement IDs. */
+    /**
+     * Get member's unlocked achievement IDs.
+     *
+     * SIN caché de respaldo propia a propósito (punto B11, evaluado y
+     * descartado): a diferencia de rewards/taskHistory (colecciones que se
+     * acumulan y se LEEN para mostrar datos), esta lectura alimenta
+     * [org.taskhub.ui.models.checkAndAwardAchievements] — un `emptySet()`
+     * ante fallo de red ya es el comportamiento seguro por diseño (evita
+     * volver a "otorgar" un logro que en realidad ya estaba desbloqueado
+     * porque la lectura de comprobación falló); servir un `Set` cacheado
+     * obsoleto en ese punto de ESCRITURA condicional sería más arriesgado
+     * (podría ocultar un logro nuevo real) que útil, y StatsScreen (la
+     * pantalla de LECTURA de logros) ya tolera mostrar el estado vacío hasta
+     * el siguiente refresco.
+     */
     suspend fun getMemberAchievements(householdId: String, memberId: String): Set<String> = orDefault(emptySet()) {
         val response: FirestoreDocumentResponse = client.get(
             "$baseUrl/households/$householdId/members/$memberId/achievements/_meta"

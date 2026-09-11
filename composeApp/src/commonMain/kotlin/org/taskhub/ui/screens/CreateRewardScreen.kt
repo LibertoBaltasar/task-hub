@@ -352,7 +352,6 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = isValid && !isCreating,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         shape = MaterialTheme.shapes.large,
                         contentPadding = PaddingValues(16.dp)
                     ) {

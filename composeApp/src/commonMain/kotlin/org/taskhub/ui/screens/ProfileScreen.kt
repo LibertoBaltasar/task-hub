@@ -141,7 +141,6 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
                     Button(
                         onClick = { navigator.push(CreateHouseholdScreen()) },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = s("create_household_title"))
                         Spacer(Modifier.width(8.dp))

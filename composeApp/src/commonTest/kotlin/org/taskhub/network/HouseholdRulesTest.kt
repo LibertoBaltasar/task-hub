@@ -63,4 +63,50 @@ class HouseholdRulesTest {
     fun resolveOwnerSuccessor_emptyList_returnsNull() {
         assertNull(HouseholdRules.resolveOwnerSuccessor(emptyList()))
     }
+
+    /**
+     * Un admin con cuenta hereda ANTES que un "child" con cuenta más antiguo
+     * — decisión de producto (ronda de deuda aplicable 2026-09-12, punto B8):
+     * el rol pesa más que la antigüedad.
+     */
+    @Test
+    fun resolveOwnerSuccessor_prefersAdminOverOlderNonAdmin() {
+        val members = listOf(
+            member("child-oldest", joinedAt = 10, role = "child"),
+            member("admin-newer", joinedAt = 500, role = "admin")
+        )
+        assertEquals("admin-newer", HouseholdRules.resolveOwnerSuccessor(members)?.id)
+    }
+
+    /** Entre varios admins con cuenta, el sucesor es el admin más antiguo. */
+    @Test
+    fun resolveOwnerSuccessor_amongAdmins_picksOldest() {
+        val members = listOf(
+            member("admin-1", joinedAt = 300, role = "admin"),
+            member("admin-2", joinedAt = 100, role = "admin"),
+            member("child-1", joinedAt = 50, role = "child")
+        )
+        assertEquals("admin-2", HouseholdRules.resolveOwnerSuccessor(members)?.id)
+    }
+
+    /** Sin ningún admin con cuenta, cae al miembro con cuenta más antiguo de cualquier rol. */
+    @Test
+    fun resolveOwnerSuccessor_noAdmins_fallsBackToOldestWithAccount() {
+        val members = listOf(
+            member("child-newer", joinedAt = 300, role = "child"),
+            member("child-older", joinedAt = 100, role = "child"),
+            member("no-account", joinedAt = 10, role = "child", userId = null)
+        )
+        assertEquals("child-older", HouseholdRules.resolveOwnerSuccessor(members)?.id)
+    }
+
+    /** Un admin SIN cuenta vinculada no es candidato — mismo motivo que cualquier otro rol sin userId. */
+    @Test
+    fun resolveOwnerSuccessor_adminWithoutAccount_isIgnored() {
+        val members = listOf(
+            member("admin-no-account", joinedAt = 10, role = "admin", userId = null),
+            member("child-with-account", joinedAt = 200, role = "child")
+        )
+        assertEquals("child-with-account", HouseholdRules.resolveOwnerSuccessor(members)?.id)
+    }
 }

@@ -36,7 +36,10 @@ import org.taskhub.ui.models.MessagesUiState
  * @param newMessageText texto actual del campo de envío (controlado por el caller).
  * @param onTextChange callback al escribir en el campo de envío.
  * @param onSend callback al pulsar enviar (con [newMessageText] ya validado como no vacío).
- * @param onRefresh callback al pulsar el icono de refrescar.
+ * @param onRefresh callback al pulsar el icono de refrescar (también sirve de "Reintentar").
+ * @param sendMessageError error al ENVIAR un mensaje (independiente de [messagesState], que
+ *   sigue mostrando la lista ya cargada — ver KDoc de `HouseholdScreenModel.sendMessageError`).
+ * @param onDismissSendMessageError callback al descartar el banner de [sendMessageError].
  */
 @Composable
 fun HouseholdChatSection(
@@ -45,7 +48,9 @@ fun HouseholdChatSection(
     newMessageText: String,
     onTextChange: (String) -> Unit,
     onSend: () -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    sendMessageError: String? = null,
+    onDismissSendMessageError: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -83,21 +88,29 @@ fun HouseholdChatSection(
                 }
 
                 is MessagesUiState.Error -> {
-                    Row(
-                        modifier = Modifier.padding(vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = s("error_icon_content_desc"),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = messagesState.message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                    Column(modifier = Modifier.padding(vertical = 16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = s("error_icon_content_desc"),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = messagesState.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // Botón de reintentar — antes esta pantalla se quedaba sin
+                        // forma de recuperar el chat tras un error de carga, a
+                        // diferencia de NotificationListScreen (ronda de deuda
+                        // aplicable 2026-09-12, punto A6: unificar el patrón de
+                        // error+retry entre pantallas).
+                        Button(onClick = onRefresh) {
+                            Text(s("common_retry"))
+                        }
                     }
                 }
 
@@ -128,6 +141,34 @@ fun HouseholdChatSection(
             }
 
             Spacer(Modifier.height(12.dp))
+
+            if (sendMessageError != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "⚠️ $sendMessageError",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        IconButton(onClick = onDismissSendMessageError) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = s("common_dismiss"),
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

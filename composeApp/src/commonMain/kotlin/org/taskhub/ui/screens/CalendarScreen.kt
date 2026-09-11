@@ -289,10 +289,20 @@ data class CalendarScreen(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = s("calendar_error_prefix").replace("%s", state.message),
-                                color = MaterialTheme.colorScheme.error
-                            )
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = s("calendar_error_prefix").replace("%s", state.message),
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                // Botón de reintentar — antes esta pantalla se quedaba
+                                // sin forma de recuperarse tras un error de carga, a
+                                // diferencia de NotificationListScreen (ronda de deuda
+                                // aplicable 2026-09-12, punto A6).
+                                Button(onClick = { model.loadTasks(householdId) }) {
+                                    Text(s("common_retry"))
+                                }
+                            }
                         }
                     }
 

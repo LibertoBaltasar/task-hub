@@ -9,6 +9,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.NotificationResponse
+import org.taskhub.network.models.RewardRedemption
+import org.taskhub.network.models.RewardResponse
+import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 
 /**
@@ -86,6 +90,103 @@ class TaskCache(private val settings: Settings) {
         }
     }
 
+    // ── Task history ────────────────────────────────────────
+    // Añadida en la ronda de deuda aplicable 2026-09-12 (punto B11): antes
+    // `TaskRepository.getTaskHistory` usaba `orDefault(emptyList())`, que no
+    // distingue "el hogar de verdad no tiene historial" de "no se pudo leer"
+    // — StatsScreen (rachas/gráficas de 7 días) y el ranking mostraban un
+    // hogar vacío en vez de la última foto conocida ante cualquier fallo de
+    // red puntual. Mismo patrón cache-first que tareas/miembros arriba.
+
+    /** Sobrescribe la caché de historial de [householdId] con [history] (llamado tras cada lectura exitosa de red). */
+    fun cacheTaskHistory(householdId: String, history: List<TaskHistoryResponse>) {
+        settings.putString("cache_task_history_$householdId", json.encodeToString(history))
+    }
+
+    /** Historial cacheado de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
+    fun getCachedTaskHistory(householdId: String): List<TaskHistoryResponse>? {
+        val raw = settings.getStringOrNull("cache_task_history_$householdId") ?: return null
+        return try {
+            json.decodeFromString<List<TaskHistoryResponse>>(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Invalida la caché de historial de un hogar. Ver [clearTasks]. */
+    fun clearTaskHistory(householdId: String) {
+        settings.remove("cache_task_history_$householdId")
+    }
+
+    // ── Rewards & redemptions ───────────────────────────────
+    // Mismo motivo/patrón que el historial de arriba (punto B11).
+
+    /** Sobrescribe la caché de recompensas de [householdId] con [rewards] (llamado tras cada lectura exitosa de red). */
+    fun cacheRewards(householdId: String, rewards: List<RewardResponse>) {
+        settings.putString("cache_rewards_$householdId", json.encodeToString(rewards))
+    }
+
+    /** Recompensas cacheadas de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
+    fun getCachedRewards(householdId: String): List<RewardResponse>? {
+        val raw = settings.getStringOrNull("cache_rewards_$householdId") ?: return null
+        return try {
+            json.decodeFromString<List<RewardResponse>>(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Invalida la caché de recompensas de un hogar. Ver [clearTasks]. */
+    fun clearRewards(householdId: String) {
+        settings.remove("cache_rewards_$householdId")
+    }
+
+    /** Sobrescribe la caché de canjes de [householdId] con [redemptions] (llamado tras cada lectura exitosa de red). */
+    fun cacheRewardRedemptions(householdId: String, redemptions: List<RewardRedemption>) {
+        settings.putString("cache_reward_redemptions_$householdId", json.encodeToString(redemptions))
+    }
+
+    /** Canjes cacheados de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
+    fun getCachedRewardRedemptions(householdId: String): List<RewardRedemption>? {
+        val raw = settings.getStringOrNull("cache_reward_redemptions_$householdId") ?: return null
+        return try {
+            json.decodeFromString<List<RewardRedemption>>(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Invalida la caché de canjes de un hogar. Ver [clearTasks]. */
+    fun clearRewardRedemptions(householdId: String) {
+        settings.remove("cache_reward_redemptions_$householdId")
+    }
+
+    // ── Notifications ───────────────────────────────────────
+    // Mismo motivo/patrón que el historial de arriba (punto B11): antes
+    // `NotificationRepository.getNotifications` usaba `orDefault(emptyList())`,
+    // vaciando el badge/lista ante un fallo de red puntual en vez de servir
+    // la última foto conocida.
+
+    /** Sobrescribe la caché de notificaciones de [householdId] con [notifications] (llamado tras cada lectura exitosa de red). */
+    fun cacheNotifications(householdId: String, notifications: List<NotificationResponse>) {
+        settings.putString("cache_notifications_$householdId", json.encodeToString(notifications))
+    }
+
+    /** Notificaciones cacheadas de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
+    fun getCachedNotifications(householdId: String): List<NotificationResponse>? {
+        val raw = settings.getStringOrNull("cache_notifications_$householdId") ?: return null
+        return try {
+            json.decodeFromString<List<NotificationResponse>>(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Invalida la caché de notificaciones de un hogar. Ver [clearTasks]. */
+    fun clearNotifications(householdId: String) {
+        settings.remove("cache_notifications_$householdId")
+    }
+
     // ── Invalidation ────────────────────────────────────────
 
     /**
@@ -99,6 +200,10 @@ class TaskCache(private val settings: Settings) {
         clearTasks(householdId)
         clearHouseholdDoc(householdId)
         clearMembers(householdId)
+        clearTaskHistory(householdId)
+        clearRewards(householdId)
+        clearRewardRedemptions(householdId)
+        clearNotifications(householdId)
     }
 
     /**

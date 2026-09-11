@@ -61,6 +61,15 @@ import org.taskhub.ui.i18n.AppStrings
 private const val MAX_CONCURRENT_DELETES = 20
 
 /**
+ * TTL de retención compartido por las purgas best-effort de colecciones sin
+ * techo natural de crecimiento (`taskHistory`, mensajes de chat,
+ * notificaciones ya leídas) — ver [FirestoreRepository.purgeOldTaskHistory]/
+ * [FirestoreRepository.purgeOldMessages]/[FirestoreRepository.purgeOldNotifications]
+ * (ronda de deuda aplicable 2026-09-12, punto B9, mismo tope para las tres).
+ */
+const val RETENTION_90_DAYS_MILLIS = 90L * 24 * 60 * 60 * 1000
+
+/**
  * Talks directly to Firestore REST API — no Ktor server needed.
  *
  * Firestore REST API docs:
@@ -95,8 +104,8 @@ class FirestoreRepository(
     // aquí — causa raíz diagnosticada en el panel de revisión 2026-09-03/04,
     // Experto 7 (panel v7, #16). Los valores por defecto solo cubren el caso
     // de construir esta clase fuera de Koin (tests, previews).
-    private val notificationRepository: NotificationRepository = NotificationRepository(firestoreBaseUrl(projectId), firestoreClient),
-    private val rewardsRepository: RewardsRepository = RewardsRepository(firestoreBaseUrl(projectId), firestoreClient),
+    private val notificationRepository: NotificationRepository = NotificationRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache),
+    private val rewardsRepository: RewardsRepository = RewardsRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache),
     private val taskRepository: TaskRepository = TaskRepository(firestoreBaseUrl(projectId), firestoreClient, taskCache, notificationRepository, settingsStore),
     // MemberRepository propio (no el parámetro de abajo): un default solo se
     // puede referenciar a sí mismo o a parámetros ANTERIORES en la lista, y
@@ -273,6 +282,17 @@ class FirestoreRepository(
     /**
      * Recupera de Firestore los IDs de hogares guardados para el usuario.
      * Devuelve lista vacía si no existe el documento users/{uid}.
+     *
+     * SIN caché de respaldo propia (punto B11, evaluado y descartado): el
+     * único caller es [org.taskhub.ui.models.GoogleAuthManager.syncHouseholdsToCloud]
+     * — un mecanismo de DESCUBRIMIENTO de hogares añadidos desde OTRO
+     * dispositivo, no la lista local del dispositivo actual (esa ya vive,
+     * persistida y con su propia resiliencia offline, en
+     * [org.taskhub.storage.HouseholdStore]). Un fallo aquí solo significa
+     * "no se descubrieron hogares nuevos de otro dispositivo en ESTE
+     * arranque" — autocorregible en el siguiente sync exitoso; cachear esta
+     * lista duplicaría la responsabilidad de `HouseholdStore` sin un
+     * escenario real que lo justifique.
      */
     suspend fun loadUserHouseholds(uid: String): List<String> = orDefault(emptyList()) {
         val response: FirestoreDocumentResponse = client.get("$baseUrl/users/$uid") {
@@ -1032,18 +1052,28 @@ class FirestoreRepository(
         }
         taskCache.clearTasks(householdId)
 
-        // 2. Add points to the member
-        addMemberPoints(householdId, memberId, outcome.pointsAwarded)
-
-        // 3. Save task history record
-        saveTaskHistory(
+        // 2. Guardar el historial ANTES de otorgar los puntos, con
+        //    `pointsApplied=false` — si el paso 3 (otorgar puntos) falla, el
+        //    registro queda como rastro reparable por
+        //    `reconcileMissingTaskPoints` en vez de perderse (orden invertido
+        //    respecto a versiones previas: guardar puntos primero dejaba
+        //    "historial ausente" ambiguo entre "no se otorgaron puntos" y
+        //    "se otorgaron pero falló guardar el historial", lo que habría
+        //    hecho insegura la reconciliación automática — ver KDoc de
+        //    [TaskHistoryResponse.pointsApplied]).
+        val historyId = saveTaskHistory(
             householdId = householdId,
             taskId = taskId,
             memberId = memberId,
             points = outcome.pointsAwarded,
             completedAt = now,
-            onTime = outcome.onTime
+            onTime = outcome.onTime,
+            pointsApplied = false
         )
+
+        // 3. Add points to the member, then marcar el historial como aplicado.
+        addMemberPoints(householdId, memberId, outcome.pointsAwarded)
+        taskRepository.markTaskHistoryPointsApplied(householdId, historyId)
 
         // 4. Sincronizar TODAS las asignaciones "assigned" de este ciclo como
         //    completadas — antes de regenerar. "Cualquier miembro puede
@@ -1212,11 +1242,102 @@ class FirestoreRepository(
         memberId: String,
         points: Int,
         completedAt: Long,
-        onTime: Boolean
-    ) = taskRepository.saveTaskHistory(householdId, taskId, memberId, points, completedAt, onTime)
+        onTime: Boolean,
+        pointsApplied: Boolean = true
+    ): String = taskRepository.saveTaskHistory(householdId, taskId, memberId, points, completedAt, onTime, pointsApplied)
 
     /** Get all task history records for a household. */
     suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = taskRepository.getTaskHistory(householdId)
+
+    /** Ver [TaskRepository.purgeOldTaskHistory]. */
+    suspend fun purgeOldTaskHistory(householdId: String, all: List<TaskHistoryResponse>, maxAgeMillis: Long = RETENTION_90_DAYS_MILLIS) =
+        taskRepository.purgeOldTaskHistory(householdId, all, maxAgeMillis)
+
+    /**
+     * Repara tareas marcadas como completadas cuyo otorgamiento de puntos
+     * quedó a medias — mecanismo automático de reconciliación invocado desde
+     * `TaskScreenModel.loadTasks` en cada carga (ver KDoc de
+     * [TaskReconciliation] y de [completeTask] para el fallo que repara).
+     * Best-effort e idempotente por tarea (nunca duplica puntos en
+     * reintentos SALVO la ventana residual documentada en
+     * [reconcileTaskPoints]): un fallo reparando una tarea no aborta el
+     * resto. [tasks] las pasa el caller (ya las tiene cargadas de
+     * `getTasks`) para no releerlas aquí.
+     */
+    suspend fun reconcileMissingTaskPoints(householdId: String, tasks: List<TaskResponse>) {
+        val history = try {
+            getTaskHistory(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        val candidates = TaskReconciliation.findTasksNeedingPointsReconciliation(tasks, history)
+        for (task in candidates) {
+            try {
+                reconcileTaskPoints(householdId, task, history)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Best-effort: se prioriza reparar el resto de candidatos.
+            }
+        }
+    }
+
+    /**
+     * Repara una única tarea candidata (ver [reconcileMissingTaskPoints]).
+     *
+     * - Sin registro de historial para (taskId, completedAt): el fallo
+     *   ocurrió ANTES de guardarlo (ver el nuevo orden de pasos en
+     *   [completeTask]: historial primero, con `pointsApplied=false`, luego
+     *   puntos). Se recalcula el resultado con las reglas de penalización
+     *   ACTUALES de la tarea — best-effort: si la configuración de
+     *   penalización cambió desde la compleción original, el recálculo puede
+     *   no coincidir exacto con lo que se habría otorgado entonces; se acepta
+     *   porque la alternativa (no otorgar nada) es peor.
+     * - Con registro pero `pointsApplied=false`: se otorgan los puntos YA
+     *   calculados en ese registro (sin recalcular).
+     *
+     * En ambos casos se marca `pointsApplied=true` al terminar. Ventana
+     * residual NO cubierta (igual que el resto de escrituras
+     * multi-paso de este archivo, ver `docs/atomicidad-commit-pendiente.md`):
+     * si `addMemberPoints` tiene éxito pero el PATCH de
+     * `markTaskHistoryPointsApplied` posterior falla, una reconciliación
+     * futura vería `pointsApplied=false` de nuevo y otorgaría los puntos una
+     * segunda vez. Eliminarla del todo requeriría el `:commit` transaccional
+     * ya evaluado y descartado para este entorno.
+     */
+    private suspend fun reconcileTaskPoints(
+        householdId: String,
+        task: TaskResponse,
+        history: List<TaskHistoryResponse>
+    ) {
+        val completedAt = task.lastCompletedDate ?: return
+        val memberId = task.completedBy ?: return
+        val existing = history.find { it.taskId == task.id && it.completedAt == completedAt }
+        if (existing == null) {
+            val effectiveDueDate = if (task.frequency == "once") {
+                task.dueDate
+            } else {
+                task.nextDueAt?.let { RecurrenceRules.endOfDueDay(it) } ?: task.dueDate
+            }
+            val outcome = PenaltyRules.resolveCompletionOutcome(task, effectiveDueDate, completedAt)
+            val historyId = taskRepository.saveTaskHistory(
+                householdId = householdId,
+                taskId = task.id,
+                memberId = memberId,
+                points = outcome.pointsAwarded,
+                completedAt = completedAt,
+                onTime = outcome.onTime,
+                pointsApplied = false
+            )
+            addMemberPoints(householdId, memberId, outcome.pointsAwarded)
+            taskRepository.markTaskHistoryPointsApplied(householdId, historyId)
+        } else {
+            addMemberPoints(householdId, existing.memberId, existing.points)
+            taskRepository.markTaskHistoryPointsApplied(householdId, existing.id)
+        }
+    }
 
     /**
      * Reasigna quién ha hecho una tarea ya completada (corrección de errores).
@@ -1403,6 +1524,7 @@ class FirestoreRepository(
             client.delete("$baseUrl/households/$householdId/taskHistory/${record.id}") {
                 withAuth()
             }
+            taskCache.clearTaskHistory(householdId)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -1573,15 +1695,22 @@ class FirestoreRepository(
         // completada sin que los puntos llegaran al saldo real del miembro
         // (bug crítico: la UI mostraba "+N pts" que nunca se sumaban a
         // totalPoints ni podían canjearse por recompensas).
-        addMemberPoints(householdId, assignment.memberId, pointsAwarded)
-        saveTaskHistory(
+        // Historial primero (pointsApplied=false), puntos después — mismo
+        // orden y mismo motivo que [completeTask] (ver su comentario y KDoc
+        // de [TaskHistoryResponse.pointsApplied]): deja un rastro reparable
+        // por `reconcileMissingTaskPoints` si el otorgamiento de puntos falla
+        // a mitad de camino.
+        val historyId = saveTaskHistory(
             householdId = householdId,
             taskId = taskId,
             memberId = assignment.memberId,
             points = pointsAwarded,
             completedAt = now,
-            onTime = onTime
+            onTime = onTime,
+            pointsApplied = false
         )
+        addMemberPoints(householdId, assignment.memberId, pointsAwarded)
+        taskRepository.markTaskHistoryPointsApplied(householdId, historyId)
         val nextDueDate = calculateNextDueDate(task, now)
         val taskFields = mutableMapOf(
             "lastCompletedDate" to FirestoreValue(integerValue = now.toString()),
@@ -1935,6 +2064,13 @@ class FirestoreRepository(
     suspend fun getMessages(householdId: String): List<org.taskhub.network.models.MessageResponse> =
         householdRepository.getMessages(householdId)
 
+    /** Ver [HouseholdRepository.purgeOldMessages]. */
+    suspend fun purgeOldMessages(
+        householdId: String,
+        all: List<org.taskhub.network.models.MessageResponse>,
+        maxAgeMillis: Long = RETENTION_90_DAYS_MILLIS
+    ) = householdRepository.purgeOldMessages(householdId, all, maxAgeMillis)
+
     // ────────────────────────────────────────────────────────
     //  Notifications — delegado en NotificationRepository (fase 2.1 del
     //  refactor). Facade temporal: firma pública idéntica, sin lógica propia.
@@ -1953,6 +2089,16 @@ class FirestoreRepository(
 
     suspend fun markNotificationRead(householdId: String, notificationId: String) =
         notificationRepository.markNotificationRead(householdId, notificationId)
+
+    /**
+     * Ver [NotificationRepository.purgeOldRead]. Delegado aquí por primera vez
+     * (ronda de deuda aplicable 2026-09-12, punto B9): existía en
+     * `NotificationRepository` desde el panel de notificaciones 2026-09-05
+     * pero ningún caller llegó a invocarlo a través de la fachada —
+     * `NotificationScreenModel.loadNotifications` ya lo dispara ahora.
+     */
+    suspend fun purgeOldNotifications(householdId: String, all: List<NotificationResponse>, maxAgeMillis: Long = RETENTION_90_DAYS_MILLIS) =
+        notificationRepository.purgeOldRead(householdId, all, maxAgeMillis)
 
     // ────────────────────────────────────────────────────────
     //  Rewards — delegado en RewardsRepository (fase 2.2 del refactor), salvo
@@ -2002,8 +2148,29 @@ class FirestoreRepository(
         //    vez de puntos perdidos sin ningún rastro de en qué se gastaron.
         val redemption = rewardsRepository.createRedemption(householdId, rewardId, memberId, pointsSpent, now)
 
-        // 2. Descontar los puntos del miembro.
-        addMemberPoints(householdId, memberId, -pointsSpent)
+        // 2. Descontar los puntos del miembro. Si esto falla, el registro de
+        //    canje del paso 1 queda huérfano (recompensa "canjeada" sin
+        //    descuento real) y un reintento del usuario duplicaría el
+        //    registro con un solo descuento — se compensa borrándolo aquí
+        //    antes de relanzar, en vez de dejarlo para un segundo intento
+        //    (garantía que cambia: ya no queda rastro auditable de un intento
+        //    fallido, pero tampoco puede haber doble registro con un único
+        //    descuento).
+        try {
+            addMemberPoints(householdId, memberId, -pointsSpent)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            try {
+                rewardsRepository.deleteRedemption(householdId, redemption.id)
+            } catch (cleanupError: CancellationException) {
+                throw cleanupError
+            } catch (_: Exception) {
+                // Best-effort: si el borrado también falla, se prioriza relanzar
+                // el error original en vez de ocultarlo tras un fallo de limpieza.
+            }
+            throw e
+        }
 
         return redemption
     }

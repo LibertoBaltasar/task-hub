@@ -83,6 +83,7 @@ data class TaskDetailScreen(
         val myAssignment by model.myAssignment.collectAsState()
         val commentsState by commentsModel.commentsState.collectAsState()
         val newCommentText by commentsModel.newCommentText.collectAsState()
+        val sendCommentError by commentsModel.sendCommentError.collectAsState()
 
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
@@ -186,6 +187,8 @@ data class TaskDetailScreen(
                             isAdmin = isAdmin,
                             commentsState = commentsState,
                             newCommentText = newCommentText,
+                            sendCommentError = sendCommentError,
+                            onDismissSendCommentError = { commentsModel.clearSendCommentError() },
                             s = s,
                             myAssignment = myAssignment,
                             isGoogleLinked = isGoogleLinked,
@@ -306,6 +309,8 @@ private fun TaskDetailContent(
     isAdmin: Boolean = false,
     commentsState: CommentsUiState,
     newCommentText: String,
+    sendCommentError: String? = null,
+    onDismissSendCommentError: () -> Unit = {},
     s: (String) -> String = { it },
     myAssignment: TaskAssignmentResponse? = null,
     isGoogleLinked: Boolean = false,
@@ -523,7 +528,6 @@ private fun TaskDetailContent(
                     Button(
                         onClick = onCompleteTask,
                         enabled = actionState !is TaskActionState.Loading,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         if (actionState is TaskActionState.Loading) {
                             CircularProgressIndicator(
@@ -721,6 +725,42 @@ private fun TaskDetailContent(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
+        }
+
+        // Banner de error al ENVIAR un comentario — independiente de
+        // commentsState (que sigue mostrando la lista ya cargada, ver KDoc
+        // de TaskCommentsScreenModel.sendCommentError).
+        if (sendCommentError != null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "⚠️ $sendCommentError",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        IconButton(onClick = onDismissSendCommentError) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = s("common_dismiss"),
+                                tint = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         // Comment input
@@ -1125,10 +1165,7 @@ private fun AssignmentCard(
             if (showComplete && onComplete != null) {
                 Button(
                     onClick = onComplete,
-                    enabled = !isLoading,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
+                    enabled = !isLoading
                 ) {
                     if (isLoading) {
                         CircularProgressIndicator(

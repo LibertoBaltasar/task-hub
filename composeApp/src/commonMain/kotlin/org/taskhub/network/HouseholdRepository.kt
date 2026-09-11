@@ -416,7 +416,18 @@ class HouseholdRepository(
                         // $preview") es contenido de usuario, no traducible.
                         title = title,
                         message = body,
-                        titleKey = "notification_new_message_title"
+                        titleKey = "notification_new_message_title",
+                        // authorMemberId + messageParams["preview"]: permiten a
+                        // NotificationText.message resolver el nombre del autor
+                        // contra el estado ACTUAL de la lista de miembros en vez
+                        // de quedarse fijado al `authorName` de este instante —
+                        // si el autor abandona/es expulsado después, el nombre
+                        // mostrado se actualiza solo (ver KDoc de
+                        // NotificationResponse.authorMemberId, ronda de deuda
+                        // aplicable 2026-09-12, punto B10). `message` (arriba)
+                        // sigue siendo el fallback si no se puede resolver.
+                        messageParams = mapOf("preview" to preview),
+                        authorMemberId = memberId
                     )
                 } catch (e: CancellationException) {
                     throw e
@@ -443,6 +454,34 @@ class HouseholdRepository(
 
         return documents.map { doc -> FirestoreParsers.toMessageResponse(doc) }
             .sortedBy { it.createdAt }
+    }
+
+    /**
+     * Purga best-effort de mensajes de chat con más de [maxAgeMillis] de
+     * antigüedad (por [MessageResponse.createdAt]) — mismo patrón que
+     * [NotificationRepository.purgeOldRead] (ronda de deuda aplicable
+     * 2026-09-12, punto B9): TTL de retención de 90 días, a partir de una
+     * lista ya obtenida con [getMessages] (evita un segundo fetch; el
+     * caller — `HouseholdScreenModel.loadMessages`, que ya trae la
+     * colección completa para pintar el chat — la pasa directamente). A
+     * diferencia de las notificaciones (que solo purgan las YA LEÍDAS),
+     * aquí no hay equivalente a "leído": se purga por antigüedad sin más
+     * condición, igual que [TaskRepository.purgeOldTaskHistory].
+     */
+    suspend fun purgeOldMessages(householdId: String, all: List<MessageResponse>, maxAgeMillis: Long) {
+        val cutoff = Clock.System.now().toEpochMilliseconds() - maxAgeMillis
+        val stale = all.filter { it.createdAt < cutoff }
+        for (message in stale) {
+            try {
+                client.delete("$baseUrl/households/$householdId/messages/${message.id}") {
+                    withAuth()
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Best-effort, ver KDoc de la función.
+            }
+        }
     }
 
     /**

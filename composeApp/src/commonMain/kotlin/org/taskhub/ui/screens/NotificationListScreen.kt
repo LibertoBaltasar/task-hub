@@ -28,6 +28,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.NotificationResponse
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.i18n.NotificationText
@@ -35,6 +36,8 @@ import org.taskhub.ui.models.NotificationScreenModel
 import org.taskhub.ui.models.NotificationUiState
 import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.models.HouseholdScreenModel
+import org.taskhub.ui.models.MemberScreenModel
+import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.theme.*
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -62,8 +65,25 @@ data class NotificationListScreen(
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
 
+        // Miembros del hogar, para resolver el nombre del autor de una
+        // notificación de chat contra su estado ACTUAL (ver KDoc de
+        // NotificationText.message) en vez del nombre ya congelado en
+        // `message` — ronda de deuda aplicable 2026-09-12, punto B10.
+        val memberModel = koinScreenModel<MemberScreenModel>()
+        val memberState by memberModel.uiState.collectAsState()
+        val resolveAuthorName = remember(memberState) {
+            val members = (memberState as? MemberUiState.Success)?.members
+            if (members != null) {
+                val byId = members.associateBy { it.id }
+                ({ id: String -> byId[id]?.displayName })
+            } else {
+                null
+            }
+        }
+
         LaunchedEffect(householdId, memberId) {
             model.loadNotifications(householdId, memberId)
+            memberModel.loadMembers(householdId)
         }
 
         Surface(
@@ -81,11 +101,12 @@ data class NotificationListScreen(
                 // Content
                 when (val st = state) {
                     is NotificationUiState.Loading -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        // ShimmerList en vez de CircularProgressIndicator genérico —
+                        // mismo patrón ya usado en TaskListScreen/HouseholdScreen/
+                        // HomeScreen/RankingScreen para listas cargando de red
+                        // (ronda de deuda aplicable 2026-09-12, punto C15).
+                        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                            ShimmerList(count = 5, itemHeight = 72.dp)
                         }
                     }
 
@@ -130,6 +151,7 @@ data class NotificationListScreen(
                                 items(st.notifications, key = { it.id }) { notification ->
                                     NotificationCard(
                                         notification = notification,
+                                        resolveAuthorName = resolveAuthorName,
                                         onMarkRead = {
                                             model.markAsRead(householdId, notification.id)
                                         },
@@ -193,7 +215,8 @@ data class NotificationListScreen(
 private fun NotificationCard(
     notification: NotificationResponse,
     onMarkRead: () -> Unit,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    resolveAuthorName: ((String) -> String?)? = null
 ) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -208,8 +231,8 @@ private fun NotificationCard(
     val displayTitle = remember(notification, appSettings.currentLanguage) {
         NotificationText.title(notification, appSettings.currentLanguage)
     }
-    val displayMessage = remember(notification, appSettings.currentLanguage) {
-        NotificationText.message(notification, appSettings.currentLanguage)
+    val displayMessage = remember(notification, appSettings.currentLanguage, resolveAuthorName) {
+        NotificationText.message(notification, appSettings.currentLanguage, resolveAuthorName)
     }
 
     Card(
