@@ -223,9 +223,9 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
     }
 }
 
-/** Gráfica de barras (tareas completadas por día) dibujada con [Canvas]. */
+/** Wrapper común de las tarjetas de gráfica: `Card` + título en negrita + separador. */
 @Composable
-private fun BarChartCard(title: String, data: List<DayCount>) {
+private fun ChartCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large
@@ -233,71 +233,78 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
+            content()
+        }
+    }
+}
 
-            val maxCount = (data.maxOfOrNull { it.count } ?: 1).coerceAtLeast(1)
-            val barColor = MaterialTheme.colorScheme.primary
-            val textMeasurer = rememberTextMeasurer()
-            val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
-            // Los Canvas de esta pantalla no tienen ningún texto alternativo:
-            // para un lector de pantalla, las tres tarjetas de estadísticas son
-            // invisibles/mudas sin esto.
-            val chartDescription = remember(data) {
-                data.joinToString(", ") { "${it.dayLabel}: ${it.count}" }
-            }
+/** Gráfica de barras (tareas completadas por día) dibujada con [Canvas]. */
+@Composable
+private fun BarChartCard(title: String, data: List<DayCount>) {
+    ChartCard(title) {
+        val maxCount = (data.maxOfOrNull { it.count } ?: 1).coerceAtLeast(1)
+        val barColor = MaterialTheme.colorScheme.primary
+        val textMeasurer = rememberTextMeasurer()
+        val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Los Canvas de esta pantalla no tienen ningún texto alternativo:
+        // para un lector de pantalla, las tres tarjetas de estadísticas son
+        // invisibles/mudas sin esto.
+        val chartDescription = remember(data) {
+            data.joinToString(", ") { "${it.dayLabel}: ${it.count}" }
+        }
 
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .semantics { contentDescription = "$title. $chartDescription" }
-            ) {
-                val chartWidth = size.width
-                val chartHeight = size.height - 30f
-                val barCount = data.size
-                if (barCount == 0) return@Canvas
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .semantics { contentDescription = "$title. $chartDescription" }
+        ) {
+            val chartWidth = size.width
+            val chartHeight = size.height - 30f
+            val barCount = data.size
+            if (barCount == 0) return@Canvas
 
-                val barWidth = (chartWidth / barCount) * 0.6f
-                val gap = (chartWidth / barCount) * 0.4f
+            val barWidth = (chartWidth / barCount) * 0.6f
+            val gap = (chartWidth / barCount) * 0.4f
 
-                data.forEachIndexed { index, dayCount ->
-                    val barHeight = if (maxCount > 0) (dayCount.count.toFloat() / maxCount) * chartHeight else 0f
-                    val x = index * (barWidth + gap) + gap / 2
+            data.forEachIndexed { index, dayCount ->
+                val barHeight = if (maxCount > 0) (dayCount.count.toFloat() / maxCount) * chartHeight else 0f
+                val x = index * (barWidth + gap) + gap / 2
 
-                    // Bar
-                    drawRect(
-                        color = barColor,
-                        topLeft = Offset(x, chartHeight - barHeight),
-                        size = Size(barWidth, barHeight.coerceAtLeast(2f))
-                    )
+                // Bar
+                drawRect(
+                    color = barColor,
+                    topLeft = Offset(x, chartHeight - barHeight),
+                    size = Size(barWidth, barHeight.coerceAtLeast(2f))
+                )
 
-                    // Count on top
-                    if (dayCount.count > 0) {
-                        val textLayout = textMeasurer.measure(
-                            "${dayCount.count}",
-                            labelTextStyle
-                        )
-                        drawText(
-                            textLayout,
-                            topLeft = Offset(
-                                x + barWidth / 2 - textLayout.size.width / 2,
-                                chartHeight - barHeight - textLayout.size.height - 4f
-                            )
-                        )
-                    }
-
-                    // Label
-                    val labelLayout = textMeasurer.measure(
-                        dayCount.dayLabel,
+                // Count on top
+                if (dayCount.count > 0) {
+                    val textLayout = textMeasurer.measure(
+                        "${dayCount.count}",
                         labelTextStyle
                     )
                     drawText(
-                        labelLayout,
+                        textLayout,
                         topLeft = Offset(
-                            x + barWidth / 2 - labelLayout.size.width / 2,
-                            chartHeight + 5f
+                            x + barWidth / 2 - textLayout.size.width / 2,
+                            chartHeight - barHeight - textLayout.size.height - 4f
                         )
                     )
                 }
+
+                // Label
+                val labelLayout = textMeasurer.measure(
+                    dayCount.dayLabel,
+                    labelTextStyle
+                )
+                drawText(
+                    labelLayout,
+                    topLeft = Offset(
+                        x + barWidth / 2 - labelLayout.size.width / 2,
+                        chartHeight + 5f
+                    )
+                )
             }
         }
     }
@@ -306,79 +313,71 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
 /** Gráfica de línea (puntos ganados por día) dibujada con [Canvas]. */
 @Composable
 private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
+    ChartCard(title) {
+        val maxPoints = (dailyPoints.maxOfOrNull { it.points } ?: 10).coerceAtLeast(1)
+        val textMeasurer = rememberTextMeasurer()
+        val lineColor = MaterialTheme.colorScheme.tertiary
+        val pointColor = MaterialTheme.colorScheme.tertiary
+        // "Agujero" del punto: antes Color.White fijo, se veía como un
+        // punto blanco incrustado sobre la card oscura en modo oscuro
+        // (panel v7 2026-09-10, Exp. 1/4, MENOR, SIGUE ABIERTO).
+        val surfaceColor = MaterialTheme.colorScheme.surface
+        val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val chartDescription = remember(dailyPoints) {
+            dailyPoints.joinToString(", ") { "${it.dayLabel}: ${it.points}" }
+        }
 
-            val maxPoints = (dailyPoints.maxOfOrNull { it.points } ?: 10).coerceAtLeast(1)
-            val textMeasurer = rememberTextMeasurer()
-            val lineColor = MaterialTheme.colorScheme.tertiary
-            val pointColor = MaterialTheme.colorScheme.tertiary
-            // "Agujero" del punto: antes Color.White fijo, se veía como un
-            // punto blanco incrustado sobre la card oscura en modo oscuro
-            // (panel v7 2026-09-10, Exp. 1/4, MENOR, SIGUE ABIERTO).
-            val surfaceColor = MaterialTheme.colorScheme.surface
-            val labelTextStyle = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
-            val chartDescription = remember(dailyPoints) {
-                dailyPoints.joinToString(", ") { "${it.dayLabel}: ${it.points}" }
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+                .semantics { contentDescription = "$title. $chartDescription" }
+        ) {
+            val chartWidth = size.width
+            val chartHeight = size.height - 30f
+            val padding = 20f
+            val usableWidth = chartWidth - padding * 2
+            val usableHeight = chartHeight
+
+            if (dailyPoints.isEmpty()) return@Canvas
+
+            val points = dailyPoints.mapIndexed { index, dp ->
+                val x = padding + (index.toFloat() / (dailyPoints.size - 1).coerceAtLeast(1)) * usableWidth
+                val y = usableHeight - (dp.points.toFloat() / maxPoints) * usableHeight
+                Offset(x, y)
             }
 
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .semantics { contentDescription = "$title. $chartDescription" }
-            ) {
-                val chartWidth = size.width
-                val chartHeight = size.height - 30f
-                val padding = 20f
-                val usableWidth = chartWidth - padding * 2
-                val usableHeight = chartHeight
+            // Draw line
+            for (i in 0 until points.size - 1) {
+                drawLine(
+                    color = lineColor,
+                    start = points[i],
+                    end = points[i + 1],
+                    strokeWidth = 3f,
+                    cap = StrokeCap.Round
+                )
+            }
 
-                if (dailyPoints.isEmpty()) return@Canvas
+            // Draw points
+            points.forEach { point ->
+                drawCircle(color = pointColor, radius = 5f, center = point)
+                drawCircle(color = surfaceColor, radius = 3f, center = point)
+            }
 
-                val points = dailyPoints.mapIndexed { index, dp ->
-                    val x = padding + (index.toFloat() / (dailyPoints.size - 1).coerceAtLeast(1)) * usableWidth
-                    val y = usableHeight - (dp.points.toFloat() / maxPoints) * usableHeight
-                    Offset(x, y)
-                }
-
-                // Draw line
-                for (i in 0 until points.size - 1) {
-                    drawLine(
-                        color = lineColor,
-                        start = points[i],
-                        end = points[i + 1],
-                        strokeWidth = 3f,
-                        cap = StrokeCap.Round
+            // Labels
+            dailyPoints.forEachIndexed { index, dp ->
+                val labelLayout = textMeasurer.measure(
+                    dp.dayLabel,
+                    labelTextStyle
+                )
+                val x = padding + (index.toFloat() / (dailyPoints.size - 1).coerceAtLeast(1)) * usableWidth
+                drawText(
+                    labelLayout,
+                    topLeft = Offset(
+                        x - labelLayout.size.width / 2,
+                        chartHeight + 5f
                     )
-                }
-
-                // Draw points
-                points.forEach { point ->
-                    drawCircle(color = pointColor, radius = 5f, center = point)
-                    drawCircle(color = surfaceColor, radius = 3f, center = point)
-                }
-
-                // Labels
-                dailyPoints.forEachIndexed { index, dp ->
-                    val labelLayout = textMeasurer.measure(
-                        dp.dayLabel,
-                        labelTextStyle
-                    )
-                    val x = padding + (index.toFloat() / (dailyPoints.size - 1).coerceAtLeast(1)) * usableWidth
-                    drawText(
-                        labelLayout,
-                        topLeft = Offset(
-                            x - labelLayout.size.width / 2,
-                            chartHeight + 5f
-                        )
-                    )
-                }
+                )
             }
         }
     }
@@ -387,79 +386,71 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
 /** Gráfica circular (distribución de tareas por etiqueta) con leyenda. */
 @Composable
 private fun PieChartCard(title: String, data: List<TagCount>) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
+    ChartCard(title) {
+        // Paleta categórica de 6 tonos, uno por rol de MaterialTheme.colorScheme:
+        // antes 6 hex fijos (Teal/Coral), iguales en los 3 temas — ahora sigue
+        // el tema activo (Naturaleza/Minimal) manteniendo 6 tonos distinguibles.
+        val colors = listOf(
+            MaterialTheme.colorScheme.primary,
+            MaterialTheme.colorScheme.tertiary,
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.tertiaryContainer,
+            MaterialTheme.colorScheme.secondary,
+            MaterialTheme.colorScheme.secondaryContainer
+        )
+        val total = data.sumOf { it.count }.toFloat().coerceAtLeast(1f)
+        val chartDescription = remember(data) {
+            data.joinToString(", ") { "${it.tag}: ${it.count}" }
+        }
 
-            // Paleta categórica de 6 tonos, uno por rol de MaterialTheme.colorScheme:
-            // antes 6 hex fijos (Teal/Coral), iguales en los 3 temas — ahora sigue
-            // el tema activo (Naturaleza/Minimal) manteniendo 6 tonos distinguibles.
-            val colors = listOf(
-                MaterialTheme.colorScheme.primary,
-                MaterialTheme.colorScheme.tertiary,
-                MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.colorScheme.tertiaryContainer,
-                MaterialTheme.colorScheme.secondary,
-                MaterialTheme.colorScheme.secondaryContainer
-            )
-            val total = data.sumOf { it.count }.toFloat().coerceAtLeast(1f)
-            val chartDescription = remember(data) {
-                data.joinToString(", ") { "${it.tag}: ${it.count}" }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Pie chart
+            Canvas(
+                modifier = Modifier
+                    .size(140.dp)
+                    .semantics { contentDescription = "$title. $chartDescription" }
+            ) {
+                var startAngle = -90f
+                data.forEachIndexed { index, tagCount ->
+                    val sweep = (tagCount.count.toFloat() / total) * 360f
+                    drawArc(
+                        color = colors[index % colors.size],
+                        startAngle = startAngle,
+                        sweepAngle = sweep,
+                        useCenter = true,
+                        size = Size(size.width, size.height)
+                    )
+                    startAngle += sweep
+                }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Spacer(Modifier.width(16.dp))
+
+            // Legend — Modifier.weight(1f) para que la columna se ajuste al
+            // ancho disponible en vez de poder desbordar la card con etiquetas
+            // largas (frecuente en español); TextOverflow.Ellipsis para que el
+            // texto se corte con "…" en vez de a mitad de carácter.
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Pie chart
-                Canvas(
-                    modifier = Modifier
-                        .size(140.dp)
-                        .semantics { contentDescription = "$title. $chartDescription" }
-                ) {
-                    var startAngle = -90f
-                    data.forEachIndexed { index, tagCount ->
-                        val sweep = (tagCount.count.toFloat() / total) * 360f
-                        drawArc(
-                            color = colors[index % colors.size],
-                            startAngle = startAngle,
-                            sweepAngle = sweep,
-                            useCenter = true,
-                            size = Size(size.width, size.height)
+                data.forEachIndexed { index, tagCount ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .background(colors[index % colors.size], CircleShape)
                         )
-                        startAngle += sweep
-                    }
-                }
-
-                Spacer(Modifier.width(16.dp))
-
-                // Legend — Modifier.weight(1f) para que la columna se ajuste al
-                // ancho disponible en vez de poder desbordar la card con etiquetas
-                // largas (frecuente en español); TextOverflow.Ellipsis para que el
-                // texto se corte con "…" en vez de a mitad de carácter.
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    data.forEachIndexed { index, tagCount ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .background(colors[index % colors.size], CircleShape)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "${tagCount.tag} (${tagCount.count})",
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "${tagCount.tag} (${tagCount.count})",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }
