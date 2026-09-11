@@ -26,15 +26,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.storage.SavedHousehold
+import org.taskhub.ui.components.HouseholdSettingsDialog
 import org.taskhub.ui.components.LocalAppSettings
-import org.taskhub.ui.components.SettingsCallbacks
-import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.i18n.AppStrings
 
@@ -58,27 +55,13 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
         var showSettings by remember { mutableStateOf(false) }
 
         if (showSettings) {
-            Dialog(
-                onDismissRequest = { showSettings = false },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .fillMaxHeight(0.85f),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    SettingsSheet(
-                        callbacks = SettingsCallbacks(
-                            onExportCsv = { },
-                            onDismiss = { showSettings = false },
-                            onEditProfile = { navigator.push(EditProfileScreen()) },
-                            showExportCsv = false // exportar disponible desde la lista de tareas
-                        )
-                    )
+            HouseholdSettingsDialog(
+                onDismiss = { showSettings = false },
+                onEditProfile = {
+                    showSettings = false
+                    navigator.push(EditProfileScreen())
                 }
-            }
+            )
         }
 
         Scaffold(

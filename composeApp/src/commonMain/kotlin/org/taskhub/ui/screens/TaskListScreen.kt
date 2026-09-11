@@ -42,8 +42,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -59,13 +57,12 @@ import org.taskhub.ui.models.*
 import org.taskhub.ui.components.EmptyTasksIllustration
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.ExpandableSectionHeader
+import org.taskhub.ui.components.HouseholdSettingsDialog
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.filterChipCheckIcon
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.components.TaskHubTopBar
-import org.taskhub.ui.components.SettingsCallbacks
-import org.taskhub.ui.components.SettingsSheet
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.components.showErrorSnackbar
@@ -170,26 +167,15 @@ data class TaskListScreen(
 
         // Settings dialog
         if (showSettings) {
-            Dialog(
-                onDismissRequest = { showSettings = false },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .fillMaxHeight(0.85f),
-                    shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    SettingsSheet(
-                        callbacks = SettingsCallbacks(
-                            onExportCsv = exportCsv,
-                            onDismiss = { showSettings = false },
-                            onEditProfile = { navigator.push(EditProfileScreen()) }
-                        )
-                    )
-                }
-            }
+            HouseholdSettingsDialog(
+                onDismiss = { showSettings = false },
+                onEditProfile = {
+                    showSettings = false
+                    navigator.push(EditProfileScreen())
+                },
+                onExportCsv = exportCsv,
+                showExportCsv = true
+            )
         }
 
         Surface(

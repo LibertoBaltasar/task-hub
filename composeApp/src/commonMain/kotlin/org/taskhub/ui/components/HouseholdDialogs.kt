@@ -162,16 +162,21 @@ fun LeaveHouseholdDialog(
 /**
  * Hoja de ajustes de la app, mostrada como diálogo a pantalla casi completa.
  *
- * Envuelve [SettingsSheet] con `showExportCsv = false`: la exportación CSV
- * solo está disponible desde la lista de tareas, que sí tiene los datos.
+ * Por defecto oculta la exportación CSV (`showExportCsv = false`): solo la
+ * lista de tareas tiene los datos para exportar, y es la única pantalla que
+ * pasa [onExportCsv] y `showExportCsv = true` explícitamente.
  *
  * @param onDismiss callback al cerrar el diálogo.
  * @param onEditProfile callback al pulsar "Editar perfil" (cierra este diálogo primero).
+ * @param onExportCsv acción de exportar tareas a CSV (solo se invoca si [showExportCsv] es `true`).
+ * @param showExportCsv si `true`, muestra el botón de exportar CSV.
  */
 @Composable
 fun HouseholdSettingsDialog(
     onDismiss: () -> Unit,
-    onEditProfile: () -> Unit
+    onEditProfile: () -> Unit,
+    onExportCsv: () -> Unit = { },
+    showExportCsv: Boolean = false
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -186,10 +191,10 @@ fun HouseholdSettingsDialog(
         ) {
             SettingsSheet(
                 callbacks = SettingsCallbacks(
-                    onExportCsv = { },
+                    onExportCsv = onExportCsv,
                     onDismiss = onDismiss,
                     onEditProfile = onEditProfile,
-                    showExportCsv = false // CSV export available from task list
+                    showExportCsv = showExportCsv
                 )
             )
         }
