@@ -361,14 +361,58 @@ class RecurrenceRulesTest {
         assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1), null, completedThisMonday, now, tz))
     }
 
-    /** Sin ninguna compleción previa registrada, no se abre la ventana de "completado tardío": conserva el comportamiento anterior. */
+    /**
+     * CAMBIO DE COMPORTAMIENTO (2026-09-12): una tarea nunca completada
+     * también abre la ventana de "atrasada" una vez pasa su día programado,
+     * igual que la rama ya-completada — ancla en [createdAt] en vez de en
+     * `lastCompletedDate`. Antes esta tarea desaparecía el martes y volvía a
+     * aparecer el lunes siguiente sin rastro del día perdido (test previo:
+     * `isDueToday_weekly_neverCompletedAndDayAlreadyPassed_staysNotDueUntilNextCycle`,
+     * ahora sustituido por este + el caso legado de abajo).
+     */
     @Test
-    fun isDueToday_weekly_neverCompletedAndDayAlreadyPassed_staysNotDueUntilNextCycle() {
-        // Nunca se completó: la ventana de "completado tardío" no se abre
-        // (no hay ocurrencia previa real que se haya "perdido"), se mantiene
-        // el comportamiento exacto de antes.
+    fun isDueToday_weekly_neverCompletedAndDayAlreadyPassed_withCreatedAtBeforeSchedule_isDueLate() {
+        // Lunes(1) programado; tarea creada antes (2024-02-01), nunca
+        // completada; hoy viernes 2024-03-15, el lunes de esta semana
+        // (2024-03-11) se pasó sin marcar: debe seguir pendiente (atrasada).
+        val now = epochOf(2024, 3, 15) // viernes
+        val createdAt = epochOf(2024, 2, 1)
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1), null, null, now, tz, createdAt))
+    }
+
+    /** Creada el MISMO día programado: toca hoy con normalidad, no como "atrasada" (caso protegido). */
+    @Test
+    fun isDueToday_weekly_neverCompleted_createdOnScheduledDayItself_isDueNotOverdue() {
+        // 2024-03-11 es lunes; recurrenceDays=[1]; creada ese mismo lunes.
+        val monday = epochOf(2024, 3, 11)
+        assertTrue(RecurrenceRules.isDueToday("weekly", listOf(1), null, null, monday, tz, createdAt = monday))
+        // Y no se marca como ocurrencia atrasada (el día de hoy SÍ es el programado).
+        assertFalse(RecurrenceRules.isOverdueOccurrence("weekly", listOf(1), null, monday, tz))
+    }
+
+    /** Creada DESPUÉS de que el día programado de esa semana ya hubiera pasado: esa ocurrencia anterior a la creación no cuenta como "perdida". */
+    @Test
+    fun isDueToday_weekly_neverCompleted_createdAfterThisWeeksScheduledDayAlreadyPassed_isNotDueYet() {
+        // Lunes(1) programado (2024-03-11); tarea creada el martes siguiente
+        // (2024-03-12) — el lunes ya había pasado antes de que la tarea
+        // existiera, así que el martes no debe aparecer como atrasada.
+        val tuesday = epochOf(2024, 3, 12)
+        val createdOnTuesday = epochOf(2024, 3, 12)
+        assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1), null, null, tuesday, tz, createdOnTuesday))
+    }
+
+    /**
+     * Comportamiento legado: tareas sin `createdAt` conocido (0 = tareas
+     * creadas antes de que este campo existiera) NO abren la ventana de
+     * "atrasada" en la rama nunca-completada — se mantiene el comportamiento
+     * previo (solo toca el día exacto programado) para no generar falsos
+     * atrasos retroactivos sobre tareas antiguas cuya fecha real de creación
+     * se desconoce. Ver decisión de ancla en el informe adjunto.
+     */
+    @Test
+    fun isDueToday_weekly_neverCompletedAndDayAlreadyPassed_legacyNoCreatedAt_staysNotDueUntilNextCycle() {
         val now = epochOf(2024, 3, 15) // viernes; lunes ya pasó
-        assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1), null, null, now, tz))
+        assertFalse(RecurrenceRules.isDueToday("weekly", listOf(1), null, null, now, tz)) // createdAt=0 por defecto
     }
 
     // ── isDueToday: monthly con día fijo — completado tardío ───────
@@ -399,6 +443,31 @@ class RecurrenceRulesTest {
         val now = epochOf(2024, 3, 10)
         val completedLastMonth = epochOf(2024, 2, 15)
         assertFalse(RecurrenceRules.isDueToday("monthly", emptyList(), 15, completedLastMonth, now, tz))
+    }
+
+    /** Mismo cambio de comportamiento que en semanal, para el día fijo mensual: nunca completada, ancla en [createdAt]. */
+    @Test
+    fun isDueToday_monthlyWithDay_neverCompletedMissedScheduledDay_withCreatedAtBeforeSchedule_isDueLate() {
+        // Día 15 programado; tarea creada antes (2024-01-01), nunca
+        // completada; ya estamos a día 20 (pasado el 15): sigue pendiente.
+        val now = epochOf(2024, 3, 20)
+        val createdAt = epochOf(2024, 1, 1)
+        assertTrue(RecurrenceRules.isDueToday("monthly", emptyList(), 15, null, now, tz, createdAt))
+    }
+
+    /** Creada el mismo día objetivo del mes: toca hoy con normalidad, no como "atrasada". */
+    @Test
+    fun isDueToday_monthlyWithDay_neverCompleted_createdOnScheduledDayItself_isDueNotOverdue() {
+        val day15 = epochOf(2024, 3, 15)
+        assertTrue(RecurrenceRules.isDueToday("monthly", emptyList(), 15, null, day15, tz, createdAt = day15))
+        assertFalse(RecurrenceRules.isOverdueOccurrence("monthly", emptyList(), 15, day15, tz))
+    }
+
+    /** Legado (sin `createdAt`): nunca completada, sin ventana retroactiva — solo toca el día exacto. */
+    @Test
+    fun isDueToday_monthlyWithDay_neverCompletedAndDayAlreadyPassed_legacyNoCreatedAt_staysNotDueUntilNextCycle() {
+        val now = epochOf(2024, 3, 20)
+        assertFalse(RecurrenceRules.isDueToday("monthly", emptyList(), 15, null, now, tz)) // createdAt=0 por defecto
     }
 
     // ── isOverdueOccurrence ─────────────────────────────────────────

@@ -53,18 +53,23 @@ object RecurrenceRules {
      *   [lastCompletedDate]) y desde entonces pasó un día programado sin
      *   completar, sigue tocando en modo "atrasada" hasta que se complete
      *   (completado tardío) — así una ocurrencia no marcada a tiempo no
-     *   desaparece de la lista al día siguiente.
+     *   desaparece de la lista al día siguiente. Si NUNCA se completó, se
+     *   aplica la misma ventana pero anclada a [createdAt] en vez de a
+     *   [lastCompletedDate] (ver [isDueOn]).
      * - monthly: si [recurrenceDay] no es null, toca ese día del mes
      *   (ajustado con [clampDayOfMonth]); igual que weekly, si ya hubo un
-     *   completado previo y desde entonces pasó el día objetivo sin marcar,
-     *   sigue tocando en modo atrasado. Si [recurrenceDay] es null,
-     *   comportamiento legado: toca una vez al mes, cualquier día.
+     *   completado previo (o, si nunca se completó, desde su creación) y
+     *   desde entonces pasó el día objetivo sin marcar, sigue tocando en
+     *   modo atrasado. Si [recurrenceDay] es null, comportamiento legado:
+     *   toca una vez al mes, cualquier día.
      * - once: toca si nunca se completó.
      *
-     * Nota: la ventana de "completado tardío" solo se abre si la tarea ya
-     * se había completado alguna vez ([lastCompletedDate] no nulo) — así una
-     * tarea recién creada, cuyo primer día programado aún no llegó, no
-     * aparece falsamente como "atrasada" el mismo día que se crea.
+     * Nota: la ventana de "atrasada" para una tarea nunca completada solo se
+     * abre si se conoce [createdAt] (> 0) — así una tarea recién creada, cuyo
+     * primer día programado aún no llegó, no aparece falsamente como
+     * "atrasada" el mismo día que se crea. Tareas legadas sin [createdAt]
+     * (0 = desconocido) conservan el comportamiento previo: solo tocan el
+     * día exacto programado, sin ventana retroactiva.
      */
     fun isDueToday(
         frequency: String,
@@ -72,10 +77,11 @@ object RecurrenceRules {
         recurrenceDay: Int?,
         lastCompletedDate: Long?,
         nowEpochMs: Long,
-        tz: TimeZone = TimeZone.currentSystemDefault()
+        tz: TimeZone = TimeZone.currentSystemDefault(),
+        createdAt: Long = 0
     ): Boolean {
         val today = Instant.fromEpochMilliseconds(nowEpochMs).toLocalDateTime(tz).date
-        return isDueOn(today, frequency, recurrenceDays, recurrenceDay, lastCompletedDate, tz)
+        return isDueOn(today, frequency, recurrenceDays, recurrenceDay, lastCompletedDate, tz, createdAt)
     }
 
     /**
@@ -92,11 +98,18 @@ object RecurrenceRules {
         recurrenceDays: List<Int>,
         recurrenceDay: Int?,
         lastCompletedDate: Long?,
-        tz: TimeZone = TimeZone.currentSystemDefault()
+        tz: TimeZone = TimeZone.currentSystemDefault(),
+        createdAt: Long = 0
     ): Boolean {
         val lastCompletedLocalDate = lastCompletedDate?.let {
             Instant.fromEpochMilliseconds(it).toLocalDateTime(tz).date
         }
+        // Ancla de la ventana de "atrasada" para una serie NUNCA completada:
+        // fecha de creación de la tarea, si se conoce (> 0). null = tarea
+        // legada sin `createdAt` — no se abre ventana, ver KDoc de [isDueToday].
+        val createdLocalDate = if (createdAt > 0) {
+            Instant.fromEpochMilliseconds(createdAt).toLocalDateTime(tz).date
+        } else null
 
         // "Sin recurrenceDays/recurrenceDay concreto": due si nunca se completó,
         // o si [date] es estrictamente posterior a la última compleción. Con
@@ -113,12 +126,23 @@ object RecurrenceRules {
             "daily" -> dueAfterLastCompletion()
             "weekly" -> {
                 if (recurrenceDays.isEmpty()) return dueAfterLastCompletion()
-                if (lastCompletedLocalDate == null) {
-                    val dow = date.dayOfWeek.ordinal + 1 // 1=Lunes
-                    dow in recurrenceDays
-                } else {
-                    val mostRecentTarget = mostRecentWeeklyOccurrence(date, recurrenceDays)
-                    lastCompletedLocalDate < mostRecentTarget
+                when {
+                    lastCompletedLocalDate != null -> {
+                        val mostRecentTarget = mostRecentWeeklyOccurrence(date, recurrenceDays)
+                        lastCompletedLocalDate < mostRecentTarget
+                    }
+                    createdLocalDate != null -> {
+                        // Due si el día programado más reciente (<= date) cae en o
+                        // después de la creación de la tarea — `<=` (no `<`, a
+                        // diferencia de la rama ya-completada): creada justo el día
+                        // programado, ese día sigue tocando normal, no "atrasada".
+                        val mostRecentTarget = mostRecentWeeklyOccurrence(date, recurrenceDays)
+                        createdLocalDate <= mostRecentTarget
+                    }
+                    else -> {
+                        val dow = date.dayOfWeek.ordinal + 1 // 1=Lunes
+                        dow in recurrenceDays
+                    }
                 }
             }
             "monthly" -> {
@@ -127,19 +151,19 @@ object RecurrenceRules {
                         date.year, date.monthNumber,
                         clampDayOfMonth(recurrenceDay, date.year, date.monthNumber)
                     )
-                    if (lastCompletedLocalDate == null) {
-                        date == thisMonthTarget
+                    fun mostRecentMonthlyTarget(): LocalDate = if (date >= thisMonthTarget) {
+                        thisMonthTarget
                     } else {
-                        val mostRecentTarget = if (date >= thisMonthTarget) {
-                            thisMonthTarget
-                        } else {
-                            val prevMonth = date.minus(1, DateTimeUnit.MONTH)
-                            LocalDate(
-                                prevMonth.year, prevMonth.monthNumber,
-                                clampDayOfMonth(recurrenceDay, prevMonth.year, prevMonth.monthNumber)
-                            )
-                        }
-                        lastCompletedLocalDate < mostRecentTarget
+                        val prevMonth = date.minus(1, DateTimeUnit.MONTH)
+                        LocalDate(
+                            prevMonth.year, prevMonth.monthNumber,
+                            clampDayOfMonth(recurrenceDay, prevMonth.year, prevMonth.monthNumber)
+                        )
+                    }
+                    when {
+                        lastCompletedLocalDate != null -> lastCompletedLocalDate < mostRecentMonthlyTarget()
+                        createdLocalDate != null -> createdLocalDate <= mostRecentMonthlyTarget()
+                        else -> date == thisMonthTarget
                     }
                 } else {
                     // Legado: sin día fijado, toca una vez al mes (cualquier día).

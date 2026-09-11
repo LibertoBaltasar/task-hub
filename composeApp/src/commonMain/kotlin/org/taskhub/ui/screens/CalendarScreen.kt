@@ -910,8 +910,9 @@ private fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): B
         recurrenceDays = task.recurrenceDays,
         recurrenceDay = task.recurrenceDay,
         lastCompletedDate = task.lastCompletedDate,
-        tz = tz
-    )
+        tz = tz,
+        createdAt = task.createdAt
+)
 }
 
 /**
