@@ -24,6 +24,20 @@ object PointsRules {
     const val WEEKLY_APPRECIATION_BUDGET = 50
     private const val WEEK_MILLIS = 7L * 24 * 60 * 60 * 1000
 
+    /**
+     * Tope de puntos que una única escritura de "donar/agradecer entre
+     * iguales" puede acreditar al receptor — debe coincidir EXACTAMENTE con
+     * el literal `1000` de `isPeerPointsTransfer` en `firestore.rules`
+     * (cota de seguridad server-side, no un límite de producto: ver
+     * comentario de esa función). Usado por [MemberRepository.donatePoints]
+     * solo para CLASIFICAR el error tras un 403 esperado, no para bloquear
+     * la donación antes de intentarla — un donante owner/admin del hogar no
+     * está sujeto a este tope (su escritura pasa por `isTrusted(hid)`), así
+     * que validar aquí de forma ciega bloquearía donaciones grandes que SÍ
+     * son válidas para ellos.
+     */
+    const val MAX_PEER_TRANSFER_AMOUNT = 1000
+
     /** Motivos por los que un agradecimiento no es válido. */
     enum class AppreciateError { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED }
 

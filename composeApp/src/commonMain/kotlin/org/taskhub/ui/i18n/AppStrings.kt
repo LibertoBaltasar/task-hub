@@ -244,6 +244,7 @@ object AppStrings {
             "transfer_error_rollback_failed" to "No se pudo completar la transferencia y no se pudo revertir el descuento. Contacta con el administrador del hogar para revisar tu saldo de puntos.",
             "appreciate_error_limit" to "Límite semanal alcanzado",
             "donate_error_insufficient_balance" to "Saldo insuficiente",
+            "donate_error_exceeds_limit" to "No se pueden donar más de 1000 puntos de una vez. Prueba a dividir la donación en varias partes.",
 
             // Fallbacks de error de dominio (antes hardcodeados en español vía
             // `e.message ?: "..."`, sin pasar por AppStrings — panel v7, #23).
@@ -865,6 +866,7 @@ object AppStrings {
             "transfer_error_rollback_failed" to "The transfer couldn't be completed and the deduction couldn't be reverted. Contact your household admin to review your points balance.",
             "appreciate_error_limit" to "Weekly limit reached",
             "donate_error_insufficient_balance" to "Insufficient balance",
+            "donate_error_exceeds_limit" to "You can't donate more than 1000 points at once. Try splitting the donation into smaller parts.",
 
             // Domain error fallbacks (previously hardcoded in Spanish via
             // `e.message ?: "..."`, bypassing AppStrings — panel v7, #23).

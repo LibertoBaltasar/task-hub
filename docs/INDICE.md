@@ -80,11 +80,16 @@ entender *por qué* el código quedó como quedó en ciertos puntos.
   `analisis-target-publico-2026-09-06.md`.
 - **[review-panel-expertos-2026-08-31.md](review-panel-expertos-2026-08-31.md)**
   (+ `-v2-2026-08-31`, `-v3-2026-09-01`, `-v4`, `-2026-09-02`, `-2026-09-03`,
-  `-2026-09-04`, `-notificaciones-2026-09-05`) — sucesivas rondas del panel
-  de expertos (subagentes en paralelo simulando especialistas) sobre UI/UX,
+  `-2026-09-04`, `-notificaciones-2026-09-05`, `-2026-09-10`, `-2026-09-11`,
+  `-2026-09-12`, `-2026-09-13`) — sucesivas rondas del panel de expertos
+  (subagentes en paralelo simulando especialistas) sobre UI/UX,
   accesibilidad, funcionalidad, arquitectura, rendimiento, seguridad,
   recurrencia y notificaciones. Cada archivo es una ronda distinta;
-  ordenados cronológicamente por la fecha en el nombre.
+  ordenados cronológicamente por la fecha en el nombre. Las rondas
+  `-2026-09-12` y `-2026-09-13` documentan que el panel de 13 subagentes en
+  paralelo falló por completo (límite de sesión de la API) dos veces
+  seguidas — sin hallazgos de panel en esos dos informes, solo verificación
+  directa del coordinador.
 - **[correcciones-2026-09-04-integridad-seguridad.md](correcciones-2026-09-04-integridad-seguridad.md)**
   y **[correcciones-2026-09-04-arquitectura-ux-tests.md](correcciones-2026-09-04-arquitectura-ux-tests.md)**
   — aplicación de los hallazgos de los paneles del 04-sep (integridad,

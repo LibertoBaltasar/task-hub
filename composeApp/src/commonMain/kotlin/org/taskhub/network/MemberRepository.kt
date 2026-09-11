@@ -568,8 +568,20 @@ class MemberRepository(
      * la reversión del débito al donante TAMBIÉN falló, así que sus puntos sí
      * pueden haberse visto afectados — a diferencia de [TRANSFER_FAILED], cuyo
      * mensaje afirma lo contrario (panel 2026-09-11, IMPORTANTE).
+     * [AMOUNT_EXCEEDS_LIMIT]: caso concreto de fallo en el acreditado al
+     * receptor cuando `amount` supera [PointsRules.MAX_PEER_TRANSFER_AMOUNT]
+     * — `firestore.rules` `isPeerPointsTransfer` topa cada escritura de
+     * "donar/agradecer entre iguales" a +1000 puntos (ver cabecera del
+     * archivo), pero ni [PointsRules.validateDonateBalance] ni ningún otro
+     * punto del cliente lo comprobaban antes de intentar la donación — un
+     * donante con más de 1000 puntos acumulados que donara todo su saldo de
+     * una vez recibía el mismo mensaje genérico "transferencia fallida" que
+     * un fallo de red real (panel de expertos 2026-09-13). Distinguirlo dejó
+     * a un donante SIN CAPACIDAD DE ADMIN atrapado en el 403 de la regla;
+     * quien SÍ es owner/admin del hogar no llega a este `catch` (su propia
+     * escritura pasa por `isTrusted(hid)`, sin tope).
      */
-    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND, TRANSFER_FAILED, ROLLBACK_FAILED }
+    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND, TRANSFER_FAILED, ROLLBACK_FAILED, AMOUNT_EXCEEDS_LIMIT }
 
     /** Traduce el error de dominio (sin dependencias de red) de [PointsRules] al tipo público de este repo. */
     private fun PointsRules.DonateError.toRepoReason(): DonateErrorReason = when (this) {
@@ -716,6 +728,11 @@ class MemberRepository(
             // acreditarse a nadie (panel de revisión 2026-09-10, Experto 9,
             // CRÍTICO). Revertimos el débito para dejar la operación sin
             // efecto en vez de perder puntos.
+            // Ver KDoc de [DonateErrorReason.AMOUNT_EXCEEDS_LIMIT]: distingue el
+            // 403 esperado por superar el tope de la regla de un fallo de
+            // transferencia genérico, ANTES de intentar la reversión (el tipo
+            // de fallo no cambia qué reversión intentar, solo el mensaje final).
+            val exceedsPeerLimit = amount > PointsRules.MAX_PEER_TRANSFER_AMOUNT
             try {
                 addMemberPoints(householdId, fromMemberId, amount)
             } catch (e2: CancellationException) {
@@ -727,7 +744,9 @@ class MemberRepository(
                 // TRANSFER_FAILED para no afirmarle lo contrario en la UI.
                 return DonateResult.Error(DonateErrorReason.ROLLBACK_FAILED)
             }
-            return DonateResult.Error(DonateErrorReason.TRANSFER_FAILED)
+            return DonateResult.Error(
+                if (exceedsPeerLimit) DonateErrorReason.AMOUNT_EXCEEDS_LIMIT else DonateErrorReason.TRANSFER_FAILED
+            )
         }
 
         return DonateResult.Ok(

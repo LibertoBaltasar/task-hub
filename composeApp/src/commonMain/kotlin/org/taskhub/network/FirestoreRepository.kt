@@ -734,8 +734,61 @@ class FirestoreRepository(
      * ya invisible en [getMembers] (panel v4, Experto 2 hallazgo #2 ALTO).
      * La purga es best-effort: un fallo aquí no debe deshacer el soft-delete
      * ya confirmado, que es el efecto principal e irreversible de esta acción.
+     *
+     * Si [memberId] es el propio `ownerId` del hogar (la UI de
+     * `HouseholdMemberList` permite a cualquier admin expulsar a cualquier
+     * otro miembro, incluido el owner, sin gate específico — panel de
+     * expertos 2026-09-13), transfiere la propiedad al mismo sucesor que
+     * [leaveHousehold] (miembro con cuenta vinculada más antiguo, admin
+     * primero — ver [HouseholdRules.resolveOwnerSuccessor]) ANTES del
+     * soft-delete. Sin esto, `households/{hid}.ownerId` seguía apuntando al
+     * UID del miembro ya expulsado: `firestore.rules` `isOwner(hid)` solo
+     * compara ese campo contra `request.auth.uid`, así que el expulsado
+     * conservaba permisos de owner (borrar el hogar, gestionar roles) pese a
+     * ya no aparecer como miembro — y nadie más podía sucederle nunca por
+     * esta vía.
      */
     suspend fun deleteMember(householdId: String, memberId: String): Boolean {
+        val household = try {
+            getHousehold(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        val targetMember = try {
+            getMembers(householdId).find { it.id == memberId }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        if (household != null && targetMember != null && targetMember.userId == household.ownerId) {
+            val remaining = try {
+                getMembers(householdId).filterNot { it.id == memberId }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val successor = HouseholdRules.resolveOwnerSuccessor(remaining)
+            if (successor?.userId != null) {
+                try {
+                    if (successor.role != "admin") {
+                        memberRepository.updateMemberRole(householdId, successor.id, "admin")
+                    }
+                    householdRepository.updateHouseholdOwner(householdId, successor.userId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // No crítico: mejor completar la expulsión que bloquearla
+                    // por un fallo al transferir la propiedad (best-effort,
+                    // igual que en leaveHousehold).
+                }
+            }
+            // Si nadie más tiene cuenta vinculada, el hogar queda sin owner
+            // operable — misma limitación conocida que en leaveHousehold.
+        }
         val result = memberRepository.deleteMember(householdId, memberId)
         try {
             purgeMemberFromTasks(householdId, memberId)
