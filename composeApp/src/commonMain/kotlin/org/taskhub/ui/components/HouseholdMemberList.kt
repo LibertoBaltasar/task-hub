@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.MemberUiState
@@ -34,6 +35,10 @@ import org.taskhub.ui.models.MemberUiState
  * @param memberState estado de carga de los miembros del hogar.
  * @param isMemberActionPending si hay una acción de miembro en curso (deshabilita botones para evitar dobles envíos).
  * @param isAdmin si el usuario actual es admin del hogar (habilita cambiar rol / eliminar miembro).
+ * @param ownerUserId el `userId` del owner actual del hogar, para no ofrecer degradar de rol
+ * ni expulsar al propio owner (ver [MemberCard]: ambas acciones dejarían el hogar en un estado
+ * inconsistente — expulsarlo no puede transferir `ownerId` de verdad porque `firestore.rules`
+ * solo permite ese PATCH al propio owner, panel de expertos 2026-09-11 v9 reintento).
  * @param myMember el miembro correspondiente al usuario actual, o `null` si aún no se resolvió.
  * @param s resolutor de claves i18n ya fijado al idioma actual.
  * @param onAppreciateClick callback al pulsar "Agradecer" sobre un miembro.
@@ -50,6 +55,7 @@ fun LazyListScope.householdMemberList(
     memberState: MemberUiState,
     isMemberActionPending: Boolean = false,
     isAdmin: Boolean,
+    ownerUserId: String?,
     myMember: MemberResponse?,
     s: (String) -> String,
     onAppreciateClick: (MemberResponse) -> Unit,
@@ -147,6 +153,7 @@ fun LazyListScope.householdMemberList(
                         member = member,
                         isAdmin = isAdmin,
                         isSelf = myMember?.id == member.id,
+                        isOwner = ownerUserId != null && member.userId == ownerUserId,
                         canTransfer = myMember != null,
                         actionPending = isMemberActionPending,
                         s = s,
@@ -188,6 +195,7 @@ private fun MemberCard(
     member: MemberResponse,
     isAdmin: Boolean,
     isSelf: Boolean,
+    isOwner: Boolean,
     canTransfer: Boolean,
     actionPending: Boolean = false,
     s: (String) -> String,
@@ -233,7 +241,9 @@ private fun MemberCard(
                     Text(
                         text = member.displayName,
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = if (member.role == "admin") s("member_role_admin_full") else s("member_role_child_full"),
@@ -260,7 +270,17 @@ private fun MemberCard(
                 // Nunca sobre uno mismo: un admin que se auto-degrada a "Miembro"
                 // (y era el único admin) deja el hogar sin nadie que pueda volver
                 // a abrir este menú para revertirlo — bloqueo permanente evitable.
-                if (isAdmin && !isSelf) {
+                // Nunca sobre el owner: ni degradar su rol (badge quedaría
+                // incorrecto y solo él podría revertirlo, pero el menú está
+                // oculto sobre uno mismo) ni expulsarlo son reversibles de
+                // verdad — `firestore.rules` solo permite reasignar `ownerId`
+                // al propio owner, así que un admin expulsándolo no puede
+                // completar la sucesión y el hogar queda en un estado
+                // inconsistente (panel de expertos 2026-09-11 v9 reintento,
+                // hallazgo convergente QA/seguridad). Quien quiera dejar de
+                // ser owner debe abandonar el hogar voluntariamente
+                // (leaveHousehold), que sí transfiere la propiedad primero.
+                if (isAdmin && !isSelf && !isOwner) {
                     var roleMenuExpanded by remember { mutableStateOf(false) }
                     var pendingRole by remember { mutableStateOf<String?>(null) }
                     Box {
@@ -321,7 +341,7 @@ private fun MemberCard(
                     ) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = s("member_remove_action"),
+                            contentDescription = s("member_remove_action_named").replace("%s", member.displayName),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }

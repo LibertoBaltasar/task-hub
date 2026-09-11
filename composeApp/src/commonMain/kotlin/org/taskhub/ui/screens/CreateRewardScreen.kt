@@ -228,6 +228,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 2,
                         maxLines = 3,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         colors = taskHubTextFieldColors()
                     )
 

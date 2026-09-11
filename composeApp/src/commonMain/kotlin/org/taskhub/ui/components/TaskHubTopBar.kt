@@ -14,6 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import org.taskhub.ui.i18n.AppStrings
@@ -51,6 +54,11 @@ fun TaskHubTopBar(
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    // Marca el título como encabezado para el gesto de
+                    // "navegar por encabezados" de TalkBack/VoiceOver —
+                    // ausente en toda la app antes de este fix (panel de
+                    // expertos 2026-09-11 v9 reintento, accesibilidad).
+                    modifier = Modifier.semantics { heading() },
                 )
             } else {
                 Column {
@@ -59,6 +67,7 @@ fun TaskHubTopBar(
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() },
                     )
                     Text(
                         text = subtitle,

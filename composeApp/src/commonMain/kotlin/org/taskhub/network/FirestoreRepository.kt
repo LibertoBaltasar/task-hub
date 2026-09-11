@@ -233,6 +233,7 @@ class FirestoreRepository(
         )
         client.patch("$baseUrl/users/$uid") {
             withAuth()
+            updateMaskFieldPaths("householdIds", "updatedAt")
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
@@ -666,6 +667,27 @@ class FirestoreRepository(
                 throw e
             } catch (_: Exception) {
                 // No crítico: si el doc ya no existe, seguimos.
+            }
+            // Borra también los logros del miembro y lo purga de
+            // assignmentRotation/asignaciones pendientes — mismo tratamiento
+            // que [deleteMember] (expulsión por admin); sin esto, quien
+            // abandona (o cuya cuenta se borra vía GoogleAuthManager.deleteAccount,
+            // que reutiliza esta función) dejaba `members/{uid}/achievements`
+            // huérfano e indexado por su propio UID (Art. 17 RGPD, panel de
+            // expertos 2026-09-11 v9 reintento, privacidad).
+            try {
+                deleteAllDocuments("$baseUrl/households/$householdId/members/${member.id}/achievements")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // No crítico: ver comentario de arriba (best-effort).
+            }
+            try {
+                purgeMemberFromTasks(householdId, member.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // No crítico: ver comentario de arriba (best-effort).
             }
         }
         if (toDelete.isNotEmpty()) {

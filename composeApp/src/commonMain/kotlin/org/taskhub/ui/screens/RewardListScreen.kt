@@ -326,7 +326,7 @@ private fun RewardCard(
                     ) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = s("reward_delete_title"),
+                            contentDescription = s("reward_delete_action_named").replace("%s", reward.title),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }

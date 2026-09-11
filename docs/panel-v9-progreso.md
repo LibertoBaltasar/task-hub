@@ -23,10 +23,17 @@ inventar hallazgos.
 
 - [x] Oleada A — COMPLETADA (4/4 subagentes con hallazgos verificados: estética 3 nuevos/3 ya resueltos, funcionalidad 1 nuevo/3 ya resueltos/1 abierto, accesibilidad 5 nuevos/1 abierto/8 patrones ya resueltos, UI/componentes 3 nuevos/1 abierto)
 - [x] Oleada B — COMPLETADA (5/5: UX 2 nuevos/4 ya resueltos, programador senior 1 nuevo/3 abiertos, arquitectura 0 nuevos puros/2 ya resueltos/3 abiertos, QA/bugs 1 nuevo CRÍTICO, seguridad MASVS 2 nuevos/4 ya resueltos/3 abiertos). HALLAZGO CLAVE convergente (QA + seguridad, independientes): el fix de sucesión de ownerId al expulsar al owner (ronda 09-13) NO funciona en la práctica — firestore.rules:307 exige isOwner(hid) para el PATCH de households/{hid}, pero el caller de deleteMember en ese escenario siempre es un admin no-owner, así que el PATCH de updateHouseholdOwner recibe 403 silencioso. El bug original sigue abierto pese a estar marcado [APLICADO].
-- [ ] Oleada C — lanzada / resultado
-- [ ] Consolidación final + informe `docs/review-panel-expertos-2026-09-11.md`
-- [ ] Verificación (`compileDebugKotlinAndroid`, `jvmTest`)
-- [ ] Commit único
+- [x] Oleada C — COMPLETADA en el reintento (falló 4/4 la primera vez por `session limit`, se reintentó UNA vez y los 4 subagentes produjeron hallazgos: privacidad/RGPD 2 nuevos/2 abiertos/2 resueltos, rendimiento 2 nuevos/4 abiertos, red/offline/sync 1 nuevo CRÍTICO/3 abiertos/1 resuelto, cobertura de tests 3 nuevos/2 resueltos/1 abierto)
+- [x] Consolidación final + informe `docs/review-panel-expertos-v9-reintento-2026-09-11.md` (nombre corregido para no colisionar con el informe preexistente de la cadena 2026-09-11)
+- [x] Verificación: `compileDebugKotlinAndroid` BUILD SUCCESSFUL, `jvmTest` BUILD SUCCESSFUL (216 tests, 0 fallos, sin regresión)
+- [x] Commit único
+
+**RONDA COMPLETADA.** Panel de 13 expertos ejecutado por entero en 3 oleadas
+(9/9 a la primera en A+B, 4/4 tras un reintento en C). 8 correcciones
+aplicadas (2 críticas: pérdida de perfil por falta de updateMask, bloqueo de
+acciones sobre el owner del hogar; 1 RGPD; resto accesibilidad/UI/UX/seguridad
+menor), resto documentado como propuesta. Ver informe final para el detalle
+completo.
 
 (Este archivo se actualiza tras cada oleada para poder retomar si la sesión
 se corta a mitad.)

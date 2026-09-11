@@ -735,13 +735,12 @@ data class EditTaskScreen(
                                         ) {
                                             Checkbox(
                                                 checked = member.id in selectedMembers,
-                                                onCheckedChange = { checked ->
-                                                    selectedMembers = if (checked) {
-                                                        selectedMembers + member.id
-                                                    } else {
-                                                        selectedMembers - member.id
-                                                    }
-                                                },
+                                                // La Row exterior ya es clicable con role=Checkbox
+                                                // (línea 726): con onCheckedChange no-nulo aquí,
+                                                // TalkBack expone dos nodos interactivos superpuestos
+                                                // sobre el mismo control (panel de expertos
+                                                // 2026-09-11 v9 reintento, accesibilidad).
+                                                onCheckedChange = null,
                                                 colors = CheckboxDefaults.colors(
                                                     checkedColor = MaterialTheme.colorScheme.primary
                                                 )

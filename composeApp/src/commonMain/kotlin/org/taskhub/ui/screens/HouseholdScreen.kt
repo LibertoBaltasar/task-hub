@@ -581,6 +581,7 @@ data class HouseholdScreen(val householdId: String) : Screen {
                                     memberState = memberState,
                                     isMemberActionPending = memberActionState is MemberActionState.Loading,
                                     isAdmin = isAdmin,
+                                    ownerUserId = ownerHousehold?.ownerId,
                                     myMember = myMember,
                                     s = s,
                                     onAppreciateClick = { member -> appreciateTarget = member },

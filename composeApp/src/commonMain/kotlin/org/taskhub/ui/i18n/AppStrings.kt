@@ -302,6 +302,7 @@ object AppStrings {
             "member_role_change_confirm_btn" to "Cambiar rol",
             "member_create_task_short" to "+ Tarea",
             "member_remove_action" to "Eliminar miembro",
+            "member_remove_action_named" to "Eliminar a %s",
             "member_remove_confirm_title" to "¿Eliminar miembro?",
             "member_remove_confirm_text" to "%s dejará de formar parte de este espacio y sus tareas asignadas quedarán a nombre de \"Miembro eliminado\" (deberás reasignarlas a mano). Esta acción no se puede deshacer.",
             "member_remove_confirm_btn" to "Eliminar",
@@ -425,6 +426,7 @@ object AppStrings {
             "reward_list_empty_admin" to "Crea la primera recompensa con +",
             "reward_list_empty_member" to "El admin aún no ha creado recompensas",
             "reward_delete_title" to "Eliminar recompensa",
+            "reward_delete_action_named" to "Eliminar %s",
             "reward_delete_confirm" to "¿Eliminar '%s'?",
 
             // Nueva recompensa (CreateRewardScreen.kt)
@@ -919,6 +921,7 @@ object AppStrings {
             "member_role_change_confirm_btn" to "Change role",
             "member_create_task_short" to "+ Task",
             "member_remove_action" to "Remove member",
+            "member_remove_action_named" to "Remove %s",
             "member_remove_confirm_title" to "Remove member?",
             "member_remove_confirm_text" to "%s will no longer be part of this space and their assigned tasks will be left under \"Removed member\" (you'll need to reassign them by hand). This action cannot be undone.",
             "member_remove_confirm_btn" to "Remove",
@@ -1037,6 +1040,7 @@ object AppStrings {
             "reward_list_empty_admin" to "Create the first reward with +",
             "reward_list_empty_member" to "The admin hasn't created any rewards yet",
             "reward_delete_title" to "Delete reward",
+            "reward_delete_action_named" to "Delete %s",
             "reward_delete_confirm" to "Delete '%s'?",
 
             // New reward (CreateRewardScreen.kt)

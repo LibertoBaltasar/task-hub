@@ -74,8 +74,13 @@ private class JvmSecureStore : SecureStore {
         if (!dir.exists()) dir.mkdirs()
         val keyFile = File(dir, KEY_FILE_NAME)
         if (!keyFile.exists()) {
-            val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
-            keyFile.writeBytes(key)
+            // Crea el fichero vacío y restringe sus permisos ANTES de escribir
+            // la clave — con el orden inverso (escribir y luego cambiar
+            // permisos) hay una ventana breve en la que el fichero de clave
+            // existe con los permisos por defecto del filesystem, potencialmente
+            // legibles por otros usuarios locales (panel de expertos 2026-09-11
+            // v9 reintento, seguridad MASVS-STORAGE-1).
+            keyFile.createNewFile()
             // Best-effort: en filesystems sin permisos POSIX (p.ej. FAT) esto
             // no hace nada, pero no debe romper la creación del fichero.
             try {
@@ -86,6 +91,8 @@ private class JvmSecureStore : SecureStore {
             } catch (_: Exception) {
                 // Ignorado a propósito — ver comentario anterior.
             }
+            val key = ByteArray(32).also { SecureRandom().nextBytes(it) }
+            keyFile.writeBytes(key)
         }
         return SecretKeySpec(keyFile.readBytes(), "AES")
     }
