@@ -732,7 +732,7 @@ class MemberRepository(
             // 403 esperado por superar el tope de la regla de un fallo de
             // transferencia genérico, ANTES de intentar la reversión (el tipo
             // de fallo no cambia qué reversión intentar, solo el mensaje final).
-            val exceedsPeerLimit = amount > PointsRules.MAX_PEER_TRANSFER_AMOUNT
+            val exceedsPeerLimit = PointsRules.exceedsPeerTransferLimit(amount)
             try {
                 addMemberPoints(householdId, fromMemberId, amount)
             } catch (e2: CancellationException) {

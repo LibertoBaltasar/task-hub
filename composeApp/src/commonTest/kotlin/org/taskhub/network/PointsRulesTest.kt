@@ -226,4 +226,24 @@ class PointsRulesTest {
         assertNull(PointsRules.validateDonateBasic("donor", "receptor", 20))
         assertNull(PointsRules.validateDonateBalance(amount = 20, fromBalance = 50))
     }
+
+    // ── exceedsPeerTransferLimit ─────────────────────────────────
+
+    /** Un importe por encima del tope de `firestore.rules` se clasifica como excedido. */
+    @Test
+    fun exceedsPeerTransferLimit_amountAboveLimit_isTrue() {
+        assertTrue(PointsRules.exceedsPeerTransferLimit(PointsRules.MAX_PEER_TRANSFER_AMOUNT + 1))
+    }
+
+    /** El tope exacto todavía es válido (no lo supera), igual que en las demás validaciones de esta clase. */
+    @Test
+    fun exceedsPeerTransferLimit_amountAtLimit_isFalse() {
+        assertEquals(false, PointsRules.exceedsPeerTransferLimit(PointsRules.MAX_PEER_TRANSFER_AMOUNT))
+    }
+
+    /** Un importe por debajo del tope no se clasifica como excedido. */
+    @Test
+    fun exceedsPeerTransferLimit_amountBelowLimit_isFalse() {
+        assertEquals(false, PointsRules.exceedsPeerTransferLimit(10))
+    }
 }

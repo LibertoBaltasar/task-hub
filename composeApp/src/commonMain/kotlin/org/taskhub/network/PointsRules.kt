@@ -98,4 +98,13 @@ object PointsRules {
     /** Valida el importe contra el saldo actual del donante. Null = válido. */
     fun validateDonateBalance(amount: Int, fromBalance: Int): DonateError? =
         if (amount > fromBalance) DonateError.INSUFFICIENT_BALANCE else null
+
+    /**
+     * True si [amount] supera [MAX_PEER_TRANSFER_AMOUNT] — el tope que
+     * `firestore.rules` aplica a una única escritura de "donar/agradecer
+     * entre iguales". Usado por [MemberRepository.donatePoints] para
+     * clasificar un 403 esperado tras intentar acreditar al receptor como
+     * `AMOUNT_EXCEEDS_LIMIT` en vez de un fallo de transferencia genérico.
+     */
+    fun exceedsPeerTransferLimit(amount: Int): Boolean = amount > MAX_PEER_TRANSFER_AMOUNT
 }
