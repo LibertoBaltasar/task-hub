@@ -763,22 +763,24 @@ asignada) — **[REQUIERE DECISIÓN]** solo si se opta por eliminar cold starts.
 
 ## Resumen — decisiones para Liberto
 
-### [REQUIERE DECISIÓN]
+### [REQUIERE DECISIÓN] — RESUELTAS (ver "Decisiones de Liberto" al final)
 
-1. **Modelo de datos** (sección 1): confirmar que se mantiene un-documento-
-   por-tarea (recomendado) en vez de reabrir instancias/ocurrencias.
+1. **Modelo de datos** (sección 1): ~~confirmar que se mantiene
+   un-documento-por-tarea (recomendado) en vez de reabrir
+   instancias/ocurrencias.~~ **RESUELTO → Opción A**, ver nota final.
 2. **Cierre de la ruta de escritura directa en `firestore.rules`** (sección
-   5): confirmar el enfoque gradual (desplegar función → migrar cliente →
+   5): ~~confirmar el enfoque gradual (desplegar función → migrar cliente →
    cerrar regla después de verificar adopción) y qué umbral de adopción
-   dispara el cierre.
-3. **`minInstances` de las funciones de completar** (sección 8): aceptar
+   dispara el cierre.~~ **RESUELTO → big bang**, ver nota final.
+3. **`minInstances` de las funciones de completar** (sección 8): ~~aceptar
    cold starts ocasionales (gratis) o pagar por mantenerlas calientes
-   (~$5-15/mes).
-4. **Alcance de `undoTaskCompletion`** (sección 2.4): si deshacer una
+   (~$5-15/mes).~~ **RESUELTO → cold starts aceptados**, ver nota final.
+4. **Alcance de `undoTaskCompletion`** (sección 2.4): ~~si deshacer una
    compleción debe seguir limitado a la sesión actual (como hoy, con
    `UndoState` en memoria) o puede sobrevivir a recargar la app (derivando
    el estado previo del historial en servidor — recomendado, pero cambia el
-   comportamiento visible).
+   comportamiento visible).~~ **RESUELTO → sobrevive a recargar (opción ii)**,
+   ver nota final.
 
 ### [APLICA YA] — propuestas para fase 2
 
@@ -795,3 +797,43 @@ asignada) — **[REQUIERE DECISIÓN]** solo si se opta por eliminar cold starts.
 6. Portar `RecurrenceRulesTest.kt` (el subconjunto relevante) a TS junto con
    las funciones, para que la duplicación de lógica Kotlin/TS no diverja en
    silencio.
+
+---
+
+## Decisiones de Liberto (2026-09-11)
+
+Liberto respondió a las 4 preguntas [REQUIERE DECISIÓN] de arriba. Estado
+final, para que fase 2 arranque directamente sobre esto sin reabrir debate:
+
+1. **Modelo de datos → Opción A (un documento por tarea + ventana de
+   atrasada), DECIDIDO.** Liberto delegó la decisión ("lo que consideres...
+   no tengo usuarios activos más allá de los tester"). Se mantiene Opción A:
+   la causa raíz de los 4 fixes previos era la falta de transacciones, no el
+   modelo de datos; con cero usuarios reales no hay argumento de migración
+   que justifique reabrir instancias/ocurrencias para un problema que nunca
+   se diagnosticó como el real. Cero migración de datos (coherente con la
+   sección 6).
+2. **Cierre de la ruta directa en `firestore.rules` → BIG BANG, DECIDIDO.**
+   Se cierra la escritura directa del cliente a
+   `lastCompletedDate`/`completedBy`/`nextDueAt`/`totalPoints` (por
+   completar tarea)/`taskHistory`/`assignments.status` en el MISMO
+   despliegue que las Cloud Functions (opción (i) de la sección 5, no la
+   gradual (ii)) — sin usuarios reales en producción no hay versiones viejas
+   en las stores que romper, así que el riesgo que motivaba el enfoque
+   gradual no aplica. Se mantiene `isPeerPointsTransfer` (donar/agradecer
+   entre iguales sigue escribiendo `totalPoints` directo desde el cliente,
+   fuera de alcance de este diseño, sin cambios).
+3. **Cold starts → ACEPTADOS, DECIDIDO.** Sin `minInstances`. Se acepta la
+   latencia ocasional (~1-2s en la primera invocación tras inactividad) a
+   cambio de coste $0/mes, en vez de pagar ~$5-15/mes por mantener las
+   funciones calientes.
+4. **`undoTaskCompletion` → SOBREVIVE a recargar la app, DECIDIDO.** Se
+   adopta la opción (ii) de la sección 2.4: el servidor deriva el estado
+   previo (lastCompletedDate/completedBy/nextDueAt/puntos/racha) leyendo el
+   registro de `taskHistory` anterior a `completedAt` para esa tarea, en vez
+   de depender del `UndoState` volátil en memoria de `TaskScreenModel`. El
+   botón "deshacer" deja de desaparecer solo porque el usuario recargó la
+   pantalla o cerró la app entre completar y deshacer.
+
+Con estas 4 decisiones resueltas, el diseño de este documento queda cerrado
+para pasar a fase 2 (implementación) sin bloqueantes de producto pendientes.
