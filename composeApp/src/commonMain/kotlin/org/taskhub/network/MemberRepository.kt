@@ -46,7 +46,6 @@ class MemberRepository(
     private val OPTIMISTIC_WRITE_MAX_RETRIES = FirestoreClient.OPTIMISTIC_WRITE_MAX_RETRIES
 
     private suspend fun HttpRequestBuilder.withAuth() = with(firestoreClient) { withAuth() }
-    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() = with(firestoreClient) { tryAuthOrApiKey() }
     private fun HttpRequestBuilder.updateMaskFieldPaths(vararg fields: String) =
         with(firestoreClient) { updateMaskFieldPaths(*fields) }
     private fun HttpRequestBuilder.updateMaskFieldPaths(fields: Collection<String>) =
@@ -140,7 +139,7 @@ class MemberRepository(
     suspend fun getMembers(householdId: String): List<MemberResponse> {
         return try {
             val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/members") {
-                tryAuthOrApiKey()
+                withAuth()
             }.body()
 
             val members = response.documents
@@ -406,7 +405,7 @@ class MemberRepository(
      */
     suspend fun getUserProfile(userId: String): UserProfile? = orDefault(null) {
         val response: FirestoreDocumentResponse = client.get("$baseUrl/users/$userId") {
-            tryAuthOrApiKey()
+            withAuth()
         }.body()
         val f = response.fields
         UserProfile(
@@ -774,7 +773,7 @@ class MemberRepository(
         val response: FirestoreDocumentResponse = client.get(
             "$baseUrl/households/$householdId/members/$memberId/achievements/_meta"
         ) {
-            tryAuthOrApiKey()
+            withAuth()
         }.body()
         response.fields["unlocked"]?.arrayValue?.values
             ?.mapNotNull { it.stringValue }

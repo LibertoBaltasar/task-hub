@@ -1481,13 +1481,6 @@ class FirestoreRepository(
         rewardsRepository.getRewardRedemptions(householdId)
 
     // ────────────────────────────────────────────────────────
-    //  Request helpers
-    // ────────────────────────────────────────────────────────
-
-    /** Ver [FirestoreClient.tryAuthOrApiKey] — delegado tal cual, mismo motivo que [withAuth]. */
-    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() = with(firestoreClient) { tryAuthOrApiKey() }
-
-    // ────────────────────────────────────────────────────────
     //  Helpers
     // ────────────────────────────────────────────────────────
 

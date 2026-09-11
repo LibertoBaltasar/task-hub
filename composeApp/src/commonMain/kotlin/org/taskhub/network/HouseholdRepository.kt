@@ -67,7 +67,6 @@ class HouseholdRepository(
     private val client = firestoreClient.client
 
     private suspend fun HttpRequestBuilder.withAuth() = with(firestoreClient) { withAuth() }
-    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() = with(firestoreClient) { tryAuthOrApiKey() }
     private fun HttpRequestBuilder.updateMaskFieldPaths(vararg fields: String) =
         with(firestoreClient) { updateMaskFieldPaths(*fields) }
     private fun extractDocId(resourceName: String, operation: String): String =
@@ -216,7 +215,7 @@ class HouseholdRepository(
     suspend fun getHousehold(id: String): HouseholdResponse {
         return try {
             val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$id") {
-                tryAuthOrApiKey()
+                withAuth()
             }.body()
 
             val household = toHouseholdResponse(response, knownId = id)
@@ -341,7 +340,7 @@ class HouseholdRepository(
     suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
         // 1) Resolver código → householdId vía invites/{code}.
         val inviteResponse: FirestoreDocumentResponse = client.get("$baseUrl/invites/$inviteCode") {
-            tryAuthOrApiKey()
+            withAuth()
         }.body()
 
         val householdId = inviteResponse.fields["householdId"]?.stringValue
@@ -449,7 +448,7 @@ class HouseholdRepository(
         val documents = client.listAllDocuments(
             "$baseUrl/households/$householdId/messages"
         ) {
-            tryAuthOrApiKey()
+            withAuth()
         }
 
         return documents.map { doc -> FirestoreParsers.toMessageResponse(doc) }

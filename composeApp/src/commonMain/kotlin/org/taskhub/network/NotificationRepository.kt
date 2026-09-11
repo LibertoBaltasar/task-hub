@@ -27,7 +27,6 @@ class NotificationRepository(
     private val client = firestoreClient.client
 
     private suspend fun HttpRequestBuilder.withAuth() = with(firestoreClient) { withAuth() }
-    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() = with(firestoreClient) { tryAuthOrApiKey() }
     private fun HttpRequestBuilder.updateMaskFieldPaths(vararg fields: String) =
         with(firestoreClient) { updateMaskFieldPaths(*fields) }
     private fun extractDocId(resourceName: String, operation: String): String =
@@ -99,18 +98,17 @@ class NotificationRepository(
     }
 
     /**
-     * Lista todas las notificaciones de un hogar. Lectura pública (auth
-     * opcional vía API key). Cache-first ante fallo (ronda de deuda aplicable
-     * 2026-09-12, punto B11): antes usaba `orDefault(emptyList())`, que
-     * vaciaba el badge/lista ante un fallo de red puntual en vez de servir la
-     * última foto conocida.
+     * Lista todas las notificaciones de un hogar. Cache-first ante fallo
+     * (ronda de deuda aplicable 2026-09-12, punto B11): antes usaba
+     * `orDefault(emptyList())`, que vaciaba el badge/lista ante un fallo de
+     * red puntual en vez de servir la última foto conocida.
      */
     suspend fun getNotifications(householdId: String): List<NotificationResponse> {
         return try {
             val response: FirestoreListResponse = client.get(
                 "$baseUrl/households/$householdId/notifications"
             ) {
-                tryAuthOrApiKey()
+                withAuth()
             }.body()
             val notifications = response.documents.map { doc -> FirestoreParsers.toNotificationResponse(doc) }
             taskCache.cacheNotifications(householdId, notifications)

@@ -47,7 +47,6 @@ class TaskRepository(
     private val client = firestoreClient.client
 
     private suspend fun HttpRequestBuilder.withAuth() = with(firestoreClient) { withAuth() }
-    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() = with(firestoreClient) { tryAuthOrApiKey() }
     private fun HttpRequestBuilder.updateMaskFieldPaths(vararg fields: String) =
         with(firestoreClient) { updateMaskFieldPaths(*fields) }
     private fun HttpRequestBuilder.updateMaskFieldPaths(fields: Collection<String>) =
@@ -245,7 +244,7 @@ class TaskRepository(
     suspend fun getTasks(householdId: String): List<TaskResponse> {
         return try {
             val documents = client.listAllDocuments("$baseUrl/households/$householdId/tasks") {
-                tryAuthOrApiKey()
+                withAuth()
             }
 
             val tasks = documents.map { toTaskResponse(it, householdId) }
@@ -264,7 +263,7 @@ class TaskRepository(
     /** Get a single task by id. Used where only one task is needed (avoids an N+1 full-list fetch). */
     suspend fun getTask(householdId: String, taskId: String): TaskResponse {
         val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$householdId/tasks/$taskId") {
-            tryAuthOrApiKey()
+            withAuth()
         }.body()
         return toTaskResponse(response, householdId)
     }
@@ -294,7 +293,7 @@ class TaskRepository(
     suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> {
         return try {
             val documents = client.listAllDocuments("$baseUrl/households/$householdId/taskHistory") {
-                tryAuthOrApiKey()
+                withAuth()
             }
             val history = documents.map { doc -> FirestoreParsers.toTaskHistoryResponse(doc) }
             taskCache.cacheTaskHistory(householdId, history)
@@ -434,7 +433,7 @@ class TaskRepository(
         val documents = client.listAllDocuments(
             "$baseUrl/households/$householdId/tasks/$taskId/assignments"
         ) {
-            tryAuthOrApiKey()
+            withAuth()
         }
 
         return documents.map { toTaskAssignmentResponse(it, taskId) }
@@ -791,7 +790,7 @@ class TaskRepository(
         val documents = client.listAllDocuments(
             "$baseUrl/households/$householdId/tasks/$taskId/comments"
         ) {
-            tryAuthOrApiKey()
+            withAuth()
         }
 
         return documents.map { doc -> toCommentResponse(doc) }

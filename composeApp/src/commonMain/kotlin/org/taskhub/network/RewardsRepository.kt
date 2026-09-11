@@ -40,24 +40,23 @@ class RewardsRepository(
     private val client = firestoreClient.client
 
     private suspend fun HttpRequestBuilder.withAuth() = with(firestoreClient) { withAuth() }
-    private suspend fun HttpRequestBuilder.tryAuthOrApiKey() = with(firestoreClient) { tryAuthOrApiKey() }
     private fun extractDocId(resourceName: String, operation: String): String =
         firestoreClient.extractDocId(resourceName, operation)
 
     /**
-     * Lista todas las recompensas de un hogar. Lectura pública (auth opcional
-     * vía API key). Cache-first ante fallo (ronda de deuda aplicable
-     * 2026-09-12, punto B11): antes usaba `orDefault(emptyList())`, que no
-     * distingue "el hogar de verdad no tiene recompensas" de "no se pudo
-     * leer" — un fallo de red puntual vaciaba la lista de recompensas
-     * canjeables en vez de mostrar la última foto conocida.
+     * Lista todas las recompensas de un hogar. Cache-first ante fallo (ronda
+     * de deuda aplicable 2026-09-12, punto B11): antes usaba
+     * `orDefault(emptyList())`, que no distingue "el hogar de verdad no
+     * tiene recompensas" de "no se pudo leer" — un fallo de red puntual
+     * vaciaba la lista de recompensas canjeables en vez de mostrar la última
+     * foto conocida.
      */
     suspend fun getRewards(householdId: String): List<RewardResponse> {
         return try {
             val response: FirestoreListResponse = client.get(
                 "$baseUrl/households/$householdId/rewards"
             ) {
-                tryAuthOrApiKey()
+                withAuth()
             }.body()
             val rewards = response.documents.map { doc -> FirestoreParsers.toRewardResponse(doc, householdId) }
             taskCache.cacheRewards(householdId, rewards)
@@ -112,16 +111,15 @@ class RewardsRepository(
     }
 
     /**
-     * Lista todos los canjes de recompensas de un hogar. Lectura pública
-     * (auth opcional vía API key). Cache-first ante fallo — mismo motivo que
-     * [getRewards] (punto B11).
+     * Lista todos los canjes de recompensas de un hogar. Cache-first ante
+     * fallo — mismo motivo que [getRewards] (punto B11).
      */
     suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> {
         return try {
             val response: FirestoreListResponse = client.get(
                 "$baseUrl/households/$householdId/rewardRedemptions"
             ) {
-                tryAuthOrApiKey()
+                withAuth()
             }.body()
             val redemptions = response.documents.map { doc -> FirestoreParsers.toRewardRedemption(doc) }
             taskCache.cacheRewardRedemptions(householdId, redemptions)
