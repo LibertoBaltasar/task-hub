@@ -404,24 +404,31 @@ class MemberScreenModel(
     fun clearDonateAction() {
         _donateActionState.value = DonateActionState.Idle
     }
+}
 
-    /** Traduce el motivo de fallo de "agradecer" a una clave de i18n. */
-    private fun appreciateErrorKey(reason: MemberRepository.AppreciateErrorReason): String = when (reason) {
-        MemberRepository.AppreciateErrorReason.SELF -> "transfer_error_self"
-        MemberRepository.AppreciateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
-        MemberRepository.AppreciateErrorReason.LIMIT_EXCEEDED -> "appreciate_error_limit"
-        MemberRepository.AppreciateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
-        MemberRepository.AppreciateErrorReason.TRANSFER_FAILED -> "transfer_error_failed"
-    }
+/**
+ * Traduce el motivo de fallo de "agradecer" a una clave de i18n. Función de
+ * paquete (no método de [MemberScreenModel]) para poder testearla sin
+ * construir el ScreenModel completo — mismo patrón que [computeStats] en
+ * `StatsScreenModel.kt`, que estuvo con un bug de doble conteo en producción
+ * varios días por ser `private` y no poder escribirle un test de regresión
+ * (panel 2026-09-11). Ver [donateErrorKey].
+ */
+internal fun appreciateErrorKey(reason: MemberRepository.AppreciateErrorReason): String = when (reason) {
+    MemberRepository.AppreciateErrorReason.SELF -> "transfer_error_self"
+    MemberRepository.AppreciateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
+    MemberRepository.AppreciateErrorReason.LIMIT_EXCEEDED -> "appreciate_error_limit"
+    MemberRepository.AppreciateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
+    MemberRepository.AppreciateErrorReason.TRANSFER_FAILED -> "transfer_error_failed"
+}
 
-    /** Traduce el motivo de fallo de "donar" a una clave de i18n. */
-    private fun donateErrorKey(reason: MemberRepository.DonateErrorReason): String = when (reason) {
-        MemberRepository.DonateErrorReason.SELF -> "transfer_error_self"
-        MemberRepository.DonateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
-        MemberRepository.DonateErrorReason.INSUFFICIENT_BALANCE -> "donate_error_insufficient_balance"
-        MemberRepository.DonateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
-        MemberRepository.DonateErrorReason.TRANSFER_FAILED -> "transfer_error_failed"
-        MemberRepository.DonateErrorReason.ROLLBACK_FAILED -> "transfer_error_rollback_failed"
-        MemberRepository.DonateErrorReason.AMOUNT_EXCEEDS_LIMIT -> "donate_error_exceeds_limit"
-    }
+/** Traduce el motivo de fallo de "donar" a una clave de i18n. Ver [appreciateErrorKey]. */
+internal fun donateErrorKey(reason: MemberRepository.DonateErrorReason): String = when (reason) {
+    MemberRepository.DonateErrorReason.SELF -> "transfer_error_self"
+    MemberRepository.DonateErrorReason.INVALID_AMOUNT -> "transfer_error_invalid_amount"
+    MemberRepository.DonateErrorReason.INSUFFICIENT_BALANCE -> "donate_error_insufficient_balance"
+    MemberRepository.DonateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
+    MemberRepository.DonateErrorReason.TRANSFER_FAILED -> "transfer_error_failed"
+    MemberRepository.DonateErrorReason.ROLLBACK_FAILED -> "transfer_error_rollback_failed"
+    MemberRepository.DonateErrorReason.AMOUNT_EXCEEDS_LIMIT -> "donate_error_exceeds_limit"
 }
