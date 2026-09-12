@@ -12,6 +12,7 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.NotificationResponse
 import org.taskhub.network.models.RewardRedemption
 import org.taskhub.network.models.RewardResponse
+import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 
@@ -118,6 +119,35 @@ class TaskCache(private val settings: Settings) {
         settings.remove("cache_task_history_$householdId")
     }
 
+    // ── Assignments ─────────────────────────────────────────
+    // Mismo patrón cache-first que tareas/historial arriba (kanban "[Caché]
+    // getAssignments/getAllAssignments sin caché offline"): antes
+    // `TaskRepository.getAssignments` no tenía respaldo local, así que un
+    // fallo de red puntual dejaba una tarea sin ninguna asignación mostrada
+    // en vez de la última foto conocida. Clave por [householdId]+[taskId]
+    // (a diferencia de tasks/rewards/etc., que son un único blob por hogar)
+    // porque las asignaciones se leen y guardan por tarea, no por hogar.
+
+    /** Sobrescribe la caché de asignaciones de [taskId] con [assignments] (llamado tras cada lectura exitosa de red). */
+    fun cacheAssignments(householdId: String, taskId: String, assignments: List<TaskAssignmentResponse>) {
+        settings.putString("cache_assignments_${householdId}_$taskId", json.encodeToString(assignments))
+    }
+
+    /** Asignaciones cacheadas de [taskId], o `null` si no hay caché o el JSON guardado está corrupto. */
+    fun getCachedAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse>? {
+        val raw = settings.getStringOrNull("cache_assignments_${householdId}_$taskId") ?: return null
+        return try {
+            json.decodeFromString<List<TaskAssignmentResponse>>(raw)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Invalida la caché de asignaciones de una tarea. Debe llamarse tras cualquier escritura que las modifique. Ver [clearTasks]. */
+    fun clearAssignments(householdId: String, taskId: String) {
+        settings.remove("cache_assignments_${householdId}_$taskId")
+    }
+
     // ── Rewards & redemptions ───────────────────────────────
     // Mismo motivo/patrón que el historial de arriba (punto B11).
 
@@ -197,6 +227,13 @@ class TaskCache(private val settings: Settings) {
      * pero posible) vería datos obsoletos.
      */
     fun clearHousehold(householdId: String) {
+        // Las asignaciones se cachean por tarea, no por hogar (ver
+        // [cacheAssignments]) — sin un índice propio, se purgan a partir de
+        // las tareas aún cacheadas antes de borrar esa caché. Si no hay
+        // caché de tareas, no hay forma de conocer sus ids: los huérfanos
+        // eventuales expiran solos cuando el mismo taskId se reutiliza (poco
+        // probable) o dejan de leerse.
+        getCachedTasks(householdId)?.forEach { clearAssignments(householdId, it.id) }
         clearTasks(householdId)
         clearHouseholdDoc(householdId)
         clearMembers(householdId)

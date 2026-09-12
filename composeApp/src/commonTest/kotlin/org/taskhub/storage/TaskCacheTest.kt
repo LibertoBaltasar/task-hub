@@ -3,6 +3,7 @@ package org.taskhub.storage
 import com.russhwolf.settings.Settings
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskResponse
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,6 +29,9 @@ class TaskCacheTest {
 
     private fun member(id: String = "m1", householdId: String = "h1", displayName: String = "Ana") =
         MemberResponse(id = id, householdId = householdId, displayName = displayName, role = "child")
+
+    private fun assignment(id: String = "a1", taskId: String = "t1", memberId: String = "m1") =
+        TaskAssignmentResponse(id = id, taskId = taskId, memberId = memberId)
 
     // ── Tasks ───────────────────────────────────────────────
 
@@ -142,6 +146,61 @@ class TaskCacheTest {
         assertEquals(household(), c.getCachedHousehold("h1")) // no afectado
     }
 
+    // ── Assignments ─────────────────────────────────────────
+    // Añadidas al resolver el encargo de kanban "[Caché]
+    // getAssignments/getAllAssignments sin caché offline".
+
+    /** Sin caché previa, leer las asignaciones de una tarea devuelve `null`. */
+    @Test
+    fun getCachedAssignments_withoutCaching_returnsNull() {
+        assertNull(cache().getCachedAssignments("h1", "t1"))
+    }
+
+    /** Las asignaciones guardadas con [TaskCache.cacheAssignments] se recuperan igual con [TaskCache.getCachedAssignments]. */
+    @Test
+    fun cacheAssignments_thenGetCachedAssignments_returnsSameList() {
+        val c = cache()
+        val assignments = listOf(assignment(id = "a1"), assignment(id = "a2"))
+
+        c.cacheAssignments("h1", "t1", assignments)
+
+        assertEquals(assignments, c.getCachedAssignments("h1", "t1"))
+    }
+
+    /** La caché de asignaciones está aislada por tarea: cachear en una no mezcla datos con otra del mismo hogar. */
+    @Test
+    fun cacheAssignments_isScopedPerTask() {
+        val c = cache()
+        c.cacheAssignments("h1", "t1", listOf(assignment(id = "a1", taskId = "t1")))
+        c.cacheAssignments("h1", "t2", listOf(assignment(id = "a2", taskId = "t2")))
+
+        assertEquals(listOf(assignment(id = "a1", taskId = "t1")), c.getCachedAssignments("h1", "t1"))
+        assertEquals(listOf(assignment(id = "a2", taskId = "t2")), c.getCachedAssignments("h1", "t2"))
+    }
+
+    /** [TaskCache.clearAssignments] borra solo la caché de asignaciones de esa tarea, sin tocar la de tareas. */
+    @Test
+    fun clearAssignments_removesOnlyThatTasksAssignmentsCache() {
+        val c = cache()
+        c.cacheAssignments("h1", "t1", listOf(assignment()))
+        c.cacheAssignments("h1", "t2", listOf(assignment(id = "a2", taskId = "t2")))
+        c.cacheTasks("h1", listOf(task()))
+
+        c.clearAssignments("h1", "t1")
+
+        assertNull(c.getCachedAssignments("h1", "t1"))
+        assertEquals(listOf(assignment(id = "a2", taskId = "t2")), c.getCachedAssignments("h1", "t2")) // no afectado
+        assertTrue(c.getCachedTasks("h1")!!.isNotEmpty()) // no afectado
+    }
+
+    /** Un JSON corrupto en el almacenamiento subyacente no rompe la lectura: devuelve `null` en vez de lanzar. */
+    @Test
+    fun getCachedAssignments_withCorruptedJson_returnsNullInsteadOfThrowing() {
+        val settings = FakeCacheSettings(mutableMapOf("cache_assignments_h1_t1" to "{not-valid-json"))
+
+        assertNull(cache(settings).getCachedAssignments("h1", "t1"))
+    }
+
     // ── clearHousehold — borra las 3 cachés a la vez ─────────
 
     /** [TaskCache.clearHousehold] borra de golpe las 3 cachés (tareas, hogar, miembros) de ese hogar. */
@@ -157,6 +216,24 @@ class TaskCacheTest {
         assertNull(c.getCachedTasks("h1"))
         assertNull(c.getCachedHousehold("h1"))
         assertNull(c.getCachedMembers("h1"))
+    }
+
+    /**
+     * [TaskCache.clearHousehold] también purga la caché de asignaciones de
+     * cada tarea que estuviera cacheada (no hay índice propio de
+     * asignaciones: se deriva de la caché de tareas, ver KDoc de la función).
+     */
+    @Test
+    fun clearHousehold_alsoRemovesAssignmentsCacheOfCachedTasks() {
+        val c = cache()
+        c.cacheTasks("h1", listOf(task(id = "t1"), task(id = "t2")))
+        c.cacheAssignments("h1", "t1", listOf(assignment(id = "a1", taskId = "t1")))
+        c.cacheAssignments("h1", "t2", listOf(assignment(id = "a2", taskId = "t2")))
+
+        c.clearHousehold("h1")
+
+        assertNull(c.getCachedAssignments("h1", "t1"))
+        assertNull(c.getCachedAssignments("h1", "t2"))
     }
 
     /** Borrar la caché de un hogar no afecta a la caché de otros hogares. */

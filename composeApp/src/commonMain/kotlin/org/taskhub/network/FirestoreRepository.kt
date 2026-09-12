@@ -1094,6 +1094,7 @@ class FirestoreRepository(
         taskCache.clearTasks(householdId)
         taskCache.clearTaskHistory(householdId)
         taskCache.clearMembers(householdId)
+        taskCache.clearAssignments(householdId, taskId)
         return TaskCompletionResult(result.completedAt, result.pointsAwarded, result.onTime)
     }
 
@@ -1139,6 +1140,7 @@ class FirestoreRepository(
         taskCache.clearTasks(householdId)
         taskCache.clearTaskHistory(householdId)
         taskCache.clearMembers(householdId)
+        taskCache.clearAssignments(householdId, taskId)
     }
 
     /** Get all task history records for a household. */
@@ -1177,6 +1179,7 @@ class FirestoreRepository(
         taskCache.clearTasks(householdId)
         taskCache.clearTaskHistory(householdId)
         taskCache.clearMembers(householdId)
+        taskCache.clearAssignments(householdId, taskId)
     }
 
     /** Assign a task to one or more members with a due date. */
@@ -1268,6 +1271,7 @@ class FirestoreRepository(
         taskCache.clearTasks(householdId)
         taskCache.clearTaskHistory(householdId)
         taskCache.clearMembers(householdId)
+        taskCache.clearAssignments(householdId, taskId)
         return assignment.copy(
             status = "completed",
             completedAt = result.completedAt,

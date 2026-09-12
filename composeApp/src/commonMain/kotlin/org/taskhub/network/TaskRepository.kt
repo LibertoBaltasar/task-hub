@@ -425,18 +425,36 @@ class TaskRepository(
             }
         }
 
+        taskCache.clearAssignments(householdId, taskId)
         return results
     }
 
-    /** Get all assignments for a specific task. */
+    /**
+     * Get all assignments for a specific task. Falls back to local cache si
+     * offline (kanban "[Caché] getAssignments/getAllAssignments sin caché
+     * offline"): antes un fallo de red aquí propagaba la excepción directa
+     * (o, en los callers que ya la envolvían en try/catch, se trataba como
+     * "sin asignaciones" en vez de la última foto conocida) — mismo patrón
+     * cache-first que [getTasks].
+     */
     suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> {
-        val documents = client.listAllDocuments(
-            "$baseUrl/households/$householdId/tasks/$taskId/assignments"
-        ) {
-            withAuth()
+        return try {
+            val documents = client.listAllDocuments(
+                "$baseUrl/households/$householdId/tasks/$taskId/assignments"
+            ) {
+                withAuth()
+            }
+            val assignments = documents.map { toTaskAssignmentResponse(it, taskId) }
+            taskCache.cacheAssignments(householdId, taskId, assignments)
+            assignments
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: FirestoreException) {
+            if (e.statusCode == 404 || e.statusCode == 403) throw e
+            taskCache.getCachedAssignments(householdId, taskId) ?: throw e
+        } catch (e: Exception) {
+            taskCache.getCachedAssignments(householdId, taskId) ?: throw e
         }
-
-        return documents.map { toTaskAssignmentResponse(it, taskId) }
     }
 
     /** Borra todas las asignaciones de una tarea (para reasignar al editar). */
@@ -473,6 +491,7 @@ class TaskRepository(
                 // No crítico: si ya no existe, seguimos.
             }
         }
+        taskCache.clearAssignments(householdId, taskId)
     }
 
     /**
@@ -595,6 +614,7 @@ class TaskRepository(
             contentType(ContentType.Application.Json)
             setBody(FirestoreDocument(fields))
         }
+        taskCache.clearAssignments(householdId, taskId)
     }
 
     // ────────────────────────────────────────────────────────
