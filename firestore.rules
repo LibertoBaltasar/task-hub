@@ -3,7 +3,51 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v9)
+    //  Task Hub — Reglas de seguridad (v10)
+    //
+    //  v10 editada 2026-09-12 (tarjeta kanban "[Seguridad] Expulsión del
+    //  owner: corregir reglas de sucesión (403)" — decisión de Liberto:
+    //  CORREGIR con reglas + deploy, no mantener el bloqueo de UI). Bug: el
+    //  `update` de `households/{hid}` solo permitía `isOwner(hid)`, pero
+    //  [FirestoreRepository.deleteMember] transfiere `ownerId` al sucesor
+    //  (ver [HouseholdRules.planOwnerSuccession]) llamando a
+    //  `updateHouseholdOwner` ANTES del soft-delete del owner expulsado — y
+    //  quien ejecuta esa expulsión es un ADMIN no-owner (la UI de
+    //  `HouseholdMemberList`/`HouseholdScreen` permite a cualquier admin
+    //  expulsar a cualquier miembro, incluido el owner). Ese PATCH recibía
+    //  403 silencioso (try/catch best-effort) y el hogar se quedaba con
+    //  `ownerId` apuntando para siempre al UID ya expulsado. (El caso
+    //  "el propio owner abandona voluntariamente" en
+    //  [FirestoreRepository.leaveHousehold] YA funcionaba: ahí quien llama
+    //  SIGUE siendo el owner vigente en ese instante, así que `isOwner(hid)`
+    //  ya lo cubría — esta tarjeta solo cierra el caso de expulsión por un
+    //  admin distinto del owner.)
+    //
+    //  Se añade `isValidOwnerSuccession(hid)`, acotada para no ampliar
+    //  permisos de escritura general sobre el hogar:
+    //   - solo `isAdminMember(hid)` (admin con cuenta vinculada, no owner —
+    //     el propio owner ya tiene su vía con `isOwner(hid)`).
+    //   - el diff debe afectar EXCLUSIVAMENTE a `ownerId` (nunca `name`,
+    //     `inviteCode`, etc. de paso).
+    //   - el nuevo `ownerId` tiene que ser distinto del actual (es una
+    //     transferencia, no un no-op).
+    //   - el nuevo `ownerId` tiene que ser un miembro REAL de este hogar,
+    //     vinculado a una cuenta (`userId == ownerId`, mismo criterio que
+    //     [HouseholdRules.resolveOwnerSuccessor]: un perfil "hijo/a" sin
+    //     cuenta nunca podría autenticarse como owner) y ACTIVO
+    //     (`leftAt == 0`, no un ex-miembro) — nunca un UID arbitrario.
+    //  Limitación conocida (aceptada, misma naturaleza que el resto de
+    //  "limitaciones arquitectónicas" de este archivo): la regla no puede
+    //  verificar que esta transferencia ocurra REALMENTE durante una
+    //  expulsión del owner saliente (eso exigiría leer el estado "antes" del
+    //  miembro expulsado dentro de la misma regla) — un admin podría en
+    //  teoría auto-transferirse la propiedad a sí mismo o a un cómplice sin
+    //  que el owner actual esté siendo expulsado de verdad. Aceptado por
+    //  decisión de producto: un admin ya es "de confianza" (`isTrusted`)
+    //  para gestionar roles y contenido sensible del hogar; esto no reabre
+    //  inflación de puntos ni ninguna otra superficie — solo decide quién
+    //  es `ownerId`, un campo que ya delega en la confianza entre
+    //  owner/admins del mismo hogar.
     //
     //  v9 editada 2026-09-11 (encargo "cliente KMP usa Cloud Functions para
     //  completar tareas + reglas big bang", fase 2b de
@@ -333,6 +377,19 @@ service cloud.firestore {
         && request.resource.data.totalPoints <= resource.data.totalPoints + 1000;
     }
 
+    // Sucesión de ownerId al expulsar al owner (v10, ver cabecera del
+    // archivo): un admin no-owner puede transferir SOLO ese campo, y solo
+    // hacia un miembro real, vinculado a una cuenta y activo de este hogar.
+    function isValidOwnerSuccession(hid) {
+      return isAdminMember(hid)
+        && request.resource.data.diff(resource.data).affectedKeys() == ['ownerId'].toSet()
+        && request.resource.data.ownerId != resource.data.ownerId
+        && existsMemberDoc(hid, request.resource.data.ownerId)
+        && get(/databases/$(database)/documents/households/$(hid)/members/$(request.resource.data.ownerId)).data.userId
+           == request.resource.data.ownerId
+        && get(/databases/$(database)/documents/households/$(hid)/members/$(request.resource.data.ownerId)).data.get('leftAt', 0) == 0;
+    }
+
     // ── users/{uid}: solo el propio usuario ────────────────────
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
@@ -358,7 +415,11 @@ service cloud.firestore {
       allow list: if false;
       allow create: if signedIn()
         && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(hid);
+      // delete sigue reservado al owner vigente (sin cambios v10) — borrar
+      // el hogar es la acción más destructiva, no forma parte de la
+      // sucesión. update gana isValidOwnerSuccession (v10, ver cabecera).
+      allow update: if isOwner(hid) || isValidOwnerSuccession(hid);
+      allow delete: if isOwner(hid);
     }
 
     // ── members/{mid} ──────────────────────────────────────────

@@ -312,18 +312,19 @@ class HouseholdRepository(
     }
 
     /**
-     * Transfiere la propiedad del hogar (`ownerId`) a otro usuario. Requiere
-     * que quien llama SIGA siendo el owner vigente en el momento de la
-     * petición — `firestore.rules` gatea `update` de `households/{hid}` con
-     * `isOwner(hid)`, comparado contra el `ownerId` que el documento tiene
-     * EN ESE INSTANTE, así que solo el propio owner puede transferir su rol
-     * (nadie más, ni siquiera un admin, puede hacerlo por él).
+     * Transfiere la propiedad del hogar (`ownerId`) a otro usuario.
+     * `firestore.rules` gatea `update` de `households/{hid}` con
+     * `isOwner(hid)` (quien llama sigue siendo el owner vigente en ese
+     * instante — caso de [FirestoreRepository.leaveHousehold], el propio
+     * owner abandonando) o con `isValidOwnerSuccession(hid)` (v10: un admin
+     * no-owner expulsando al owner — ver [FirestoreRepository.deleteMember]
+     * / [org.taskhub.network.HouseholdRules.planOwnerSuccession] — acotada a
+     * transferir solo hacia un miembro real, vinculado a cuenta y activo de
+     * este hogar).
      *
-     * Usado desde [FirestoreRepository.leaveHousehold] cuando el owner
-     * abandona el hogar o se borra la cuenta y quedan otros miembros: sin
-     * transferir, el hogar se queda sin nadie que pase `isOwner(hid)` para
-     * siempre en cuanto el UID del owner deja de poder autenticarse (panel
-     * v4, Experto 2 hallazgo #6 ALTO).
+     * Sin transferir, el hogar se queda sin nadie que pase `isOwner(hid)`
+     * para siempre en cuanto el UID del owner deja de poder autenticarse
+     * (panel v4, Experto 2 hallazgo #6 ALTO).
      */
     suspend fun updateHouseholdOwner(householdId: String, newOwnerId: String) {
         val fields = mapOf("ownerId" to FirestoreValue(stringValue = newOwnerId))
