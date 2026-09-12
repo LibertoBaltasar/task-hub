@@ -177,20 +177,54 @@ class FirestoreRepository(
      * Inicia sesión con Google: intercambia un Google idToken por un token de
      * Firebase Auth vía accounts:signInWithIdp. Devuelve el UID estable de Google
      * (localId) + email/displayName, que persisten entre reinstalaciones.
+     *
+     * Si el usuario está en modo anónimo (sin sesión de Google previa), intenta
+     * primero VINCULAR la credencial de Google a la sesión anónima ACTUAL
+     * (mandando su idToken vigente, ver [SignInWithIdpRequest.idToken]) en vez
+     * de pedir directamente el login normal — así el UID no cambia, y los
+     * hogares compartidos creados/unidos en modo anónimo (`ownerId`,
+     * `members/{uid}`, `users/{uid}.householdIds`) siguen siendo válidos sin
+     * ninguna migración posterior. Antes de este fix, un login con Google
+     * SIEMPRE pedía un UID nuevo (sin idToken de vinculación), dejando
+     * cualquier hogar compartido creado en anónimo con `ownerId` apuntando
+     * para siempre a un UID que deja de poder autenticarse en cuanto
+     * [FirestoreClient.setAuthState] sustituye la sesión — sin marcha atrás
+     * posible desde el cliente (las reglas de `firestore.rules` que gatean
+     * `households`/`members` exigen ser el UID vigente, que ya es otro) — ver
+     * `docs/auditoria-sync-dispositivos-2026-09-12.md`.
+     *
+     * Si la cuenta de Google YA está vinculada a OTRO UID permanente (el
+     * usuario ya la usó antes, en este u otro dispositivo), Identity Toolkit
+     * rechaza la vinculación con `FEDERATED_USER_ID_ALREADY_LINKED` — en ese
+     * caso se cae al login normal (sin idToken), que devuelve ese UID
+     * permanente ya existente; los datos de la sesión anónima de ESTE
+     * dispositivo no se fusionan (limitación ya documentada en
+     * [GoogleAuthManager.repointPersonalHousehold]: "las tareas del anónimo
+     * quedan en el hogar antiguo, no migran" — sin cambios, es un escenario
+     * distinto al que resuelve este fix).
      */
     suspend fun signInWithGoogle(googleIdToken: String): GoogleSignInResult {
-        val response: FirebaseAuthResponse = client.post(
-            "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=$apiKey"
-        ) {
-            contentType(ContentType.Application.Json)
-            setBody(
-                SignInWithIdpRequest(
-                    postBody = "id_token=$googleIdToken&providerId=google.com",
-                    requestUri = "http://localhost",
-                    returnSecureToken = true
-                )
-            )
-        }.body()
+        val anonymousLinkToken = if (AccountLinkingRules.shouldAttemptLinking(settingsStore.getGoogleUid() != null)) {
+            try {
+                firestoreClient.ensureAuth()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null // Offline/sin sesión anónima previa: login normal, sin vincular.
+            }
+        } else {
+            null
+        }
+
+        val response: FirebaseAuthResponse = try {
+            requestSignInWithIdp(googleIdToken, linkToken = anonymousLinkToken)
+        } catch (e: FirestoreException) {
+            if (AccountLinkingRules.shouldFallBackToPlainSignIn(anonymousLinkToken != null, e.message)) {
+                requestSignInWithIdp(googleIdToken, linkToken = null)
+            } else {
+                throw e
+            }
+        }
 
         val idToken = response.idToken
         val localId = response.localId
@@ -218,6 +252,24 @@ class FirestoreRepository(
             photoUrl = response.photoUrl
         )
     }
+
+    /**
+     * POST a `accounts:signInWithIdp`. Ver [signInWithGoogle] para el porqué
+     * de [linkToken] (idToken de la sesión anónima activa, o `null` para un
+     * login normal sin vincular).
+     */
+    private suspend fun requestSignInWithIdp(googleIdToken: String, linkToken: String?): FirebaseAuthResponse =
+        client.post("https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=$apiKey") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                SignInWithIdpRequest(
+                    postBody = "id_token=$googleIdToken&providerId=google.com",
+                    requestUri = "http://localhost",
+                    returnSecureToken = true,
+                    idToken = linkToken
+                )
+            )
+        }.body()
 
     /** Resultado del login con Google. */
     data class GoogleSignInResult(

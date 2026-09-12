@@ -194,12 +194,24 @@ data class FirebaseAuthResponse(
     val photoUrl: String? = null
 )
 
-/** Cuerpo de `POST signInWithIdp` (Identity Toolkit) para iniciar sesión con Google Sign-In. */
+/**
+ * Cuerpo de `POST signInWithIdp` (Identity Toolkit) para iniciar sesión con Google Sign-In.
+ *
+ * [idToken]: si se manda el idToken de una sesión anónima YA activa, Identity
+ * Toolkit VINCULA la credencial de Google a esa misma cuenta anónima en vez de
+ * devolver/crear una permanente distinta — mismo UID de siempre, así que los
+ * hogares (`ownerId`/`members/{uid}`) creados en modo anónimo NO quedan
+ * huérfanos al iniciar sesión con Google (ver
+ * [FirestoreRepository.signInWithGoogle], auditoría de sincronización
+ * 2026-09-12). Con `encodeDefaults=false` (ver [FirestoreClient.client]) un
+ * valor `null` se omite del body, igual que antes de añadir este campo.
+ */
 @Serializable
 data class SignInWithIdpRequest(
     val postBody: String,
     val requestUri: String,
-    val returnSecureToken: Boolean
+    val returnSecureToken: Boolean,
+    val idToken: String? = null
 )
 
 /** Respuesta del endpoint securetoken.googleapis.com/v1/token (refresh token). */

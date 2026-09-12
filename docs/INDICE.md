@@ -94,6 +94,11 @@ entender *por qué* el código quedó como quedó en ciertos puntos.
   y **[correcciones-2026-09-04-arquitectura-ux-tests.md](correcciones-2026-09-04-arquitectura-ux-tests.md)**
   — aplicación de los hallazgos de los paneles del 04-sep (integridad,
   concurrencia, privacidad, seguridad, arquitectura, rendimiento, UX, tests).
+- **[auditoria-sync-dispositivos-2026-09-12.md](auditoria-sync-dispositivos-2026-09-12.md)**
+  — causa raíz de los hogares compartidos huérfanos al iniciar sesión con
+  Google desde modo anónimo (login siempre pedía un UID nuevo en vez de
+  vincular la sesión anónima activa) y el fix aplicado (vinculación de
+  cuenta vía Identity Toolkit, sin tocar `firestore.rules`).
 - **[correcciones-2026-09-05-propuestas-aprobadas.md](correcciones-2026-09-05-propuestas-aprobadas.md)**
   y **[correcciones-2026-09-05-notificaciones.md](correcciones-2026-09-05-notificaciones.md)**
   — ronda de correcciones aprobadas y el cierre del flujo de notificaciones
