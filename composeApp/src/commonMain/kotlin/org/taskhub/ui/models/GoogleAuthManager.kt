@@ -391,32 +391,50 @@ class GoogleAuthManager(
         }
     }
 
-    /** Restaura los hogares vinculados a la cuenta de Google desde Firestore. */
+    /**
+     * Restaura los hogares vinculados a la cuenta de Google desde Firestore.
+     *
+     * Usa [FirestoreRepository.getHouseholds] (batch en paralelo con
+     * `async`/`awaitAll`, ya existente en [org.taskhub.network.HouseholdRepository]
+     * para el mismo propósito en `reconcileHouseholds`) en vez de un `for` con
+     * un `getHousehold(id)` secuencial por hogar — con una cuenta con varios
+     * hogares compartidos, la versión secuencial encadenaba N round-trips de
+     * red uno detrás de otro en el arranque en frío; en paralelo son
+     * concurrentes (panel de expertos v10, rendimiento, IMPORTANTE). Hogares
+     * obsoletos/eliminados ya se descartan dentro de `getHouseholds` (ignora
+     * el fallo y omite ese ID), mismo comportamiento que el `catch` que
+     * sustituye.
+     */
     private suspend fun restoreHouseholds(uid: String) {
         val ids = repo.loadUserHouseholds(uid)
-        for (id in ids) {
-            try {
-                val household = repo.getHousehold(id)
-                householdStore.saveHousehold(
-                    householdId = id,
-                    householdName = household.name,
-                    inviteCode = household.inviteCode,
-                    isPersonal = household.isPersonal
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Hogar obsoleto/eliminado — ignorar
-            }
+        val households = repo.getHouseholds(ids)
+        for (household in households) {
+            householdStore.saveHousehold(
+                householdId = household.id,
+                householdName = household.name,
+                inviteCode = household.inviteCode,
+                isPersonal = household.isPersonal
+            )
         }
     }
 
     /**
-     * Restaura los hogares compartidos desde la nube (users/{uid}) y re-apunta el
-     * espacio Personal. Debe llamarse al arrancar la app si hay sesión de Google
-     * persistida, para que los hogares creados/unidos en OTRO dispositivo con la
-     * misma cuenta aparezcan sin re-loguearse (antes `restoreHouseholds` solo se
-     * ejecutaba en el login explícito).
+     * Restaura los hogares compartidos desde la nube (users/{uid}). Debe
+     * llamarse al arrancar la app si hay sesión de Google persistida, para
+     * que los hogares creados/unidos en OTRO dispositivo con la misma cuenta
+     * aparezcan sin re-loguearse (antes `restoreHouseholds` solo se ejecutaba
+     * en el login explícito).
+     *
+     * A propósito NO re-apunta aquí el espacio Personal (a diferencia de
+     * [handleGoogleToken], que sí llama a [repointPersonalHousehold] tras un
+     * login explícito): el único llamante de esta función, el bootstrap de
+     * `App.kt`, ya resuelve/crea el espacio Personal por su cuenta justo
+     * ANTES de invocar [restoreFromCloudOnStartup] (con manejo adicional de
+     * fallback offline que [repointPersonalHousehold] no tiene). Repetirlo
+     * aquí era un segundo `GET households/{personal_uid}` a Firestore
+     * idéntico y descartado en cada arranque en frío — panel de expertos v10,
+     * rendimiento, CRÍTICO: doblaba la latencia de red de esa parte del
+     * arranque sin ningún efecto observable.
      *
      * Es aditivo (unión) y tolerante a fallos: no lanza excepciones. Es `suspend`
      * para que App.kt pueda esperarla ANTES de mostrar HomeScreen (que lee la
@@ -430,13 +448,6 @@ class GoogleAuthManager(
             throw e
         } catch (_: Exception) {
             // No crítico: se reintenta en el próximo arranque/login.
-        }
-        try {
-            repointPersonalHousehold()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // No crítico.
         }
     }
 

@@ -30,6 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.taskhub.ui.components.AppLogo
@@ -98,7 +102,14 @@ fun AuthGateScreen(
                         text = authState.message,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        // Mismo patrón que JoinHouseholdScreen/MemberRewardScreen/
+                        // HouseholdDialogs (commit 5202d42): sin esto, TalkBack/
+                        // VoiceOver no anuncia el error de login al aparecer —
+                        // aquí es más grave que en el resto de la app porque
+                        // AuthGateScreen es el ÚNICO punto de entrada, sin otra
+                        // pantalla a la que navegar para "descubrir" el error.
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                 }
                 Spacer(Modifier.height(16.dp))
@@ -114,14 +125,34 @@ fun AuthGateScreen(
                 onClick = { authManager.signIn() },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
+                    .height(56.dp)
+                    // Sin esto, TalkBack/VoiceOver anuncia un botón deshabilitado
+                    // sin ningún contexto (el spinner interior no tiene nombre
+                    // accesible propio) — un usuario ciego no sabe si el botón
+                    // está roto o si el inicio de sesión sigue en curso. Solo se
+                    // fija durante `SigningIn`: en el resto de estados el nombre
+                    // accesible lo sigue aportando el `Text` interior fusionado.
+                    .semantics {
+                        if (authState is GoogleAuthState.SigningIn) {
+                            contentDescription = s("auth_gate_signing_in")
+                        }
+                    },
                 enabled = authState !is GoogleAuthState.SigningIn,
                 shape = MaterialTheme.shapes.large
             ) {
                 if (authState is GoogleAuthState.SigningIn) {
+                    // El botón está `enabled = false` en este estado, así que
+                    // M3 pinta el contenedor con `disabledContainerColor`
+                    // (onSurface al 12% de opacidad sobre el fondo: un gris
+                    // casi imperceptible). Un spinner en `onPrimary` (blanco
+                    // en el tema claro por defecto) queda con ~1.3:1 de
+                    // contraste sobre ese gris — prácticamente invisible justo
+                    // cuando más falta hace la señal de progreso. Se usa el
+                    // mismo `disabledContentColor` que M3 aplica al resto del
+                    // contenido del botón deshabilitado (onSurface al 38%).
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                         strokeWidth = 2.dp
                     )
                 } else {

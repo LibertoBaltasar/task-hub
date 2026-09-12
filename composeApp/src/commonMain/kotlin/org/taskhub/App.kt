@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.transitions.FadeTransition
@@ -55,9 +56,12 @@ import org.taskhub.ui.theme.Teal600
  * 4) ya con sesión, un `LaunchedEffect(authState)` hace la inicialización de
  * arranque en frío — resolver/crear el hogar "Personal" (determinista por
  * UID para que sea el mismo en todos los dispositivos con la misma cuenta),
- * asegurar el miembro "Yo" en él, restaurar hogares compartidos desde la
- * nube ([GoogleAuthManager.restoreFromCloudOnStartup]) y subir el token FCM
- * pendiente — todo best-effort (nunca bloquea si está offline); 5) se crea
+ * asegurar el miembro "Yo" en él y restaurar hogares compartidos desde la
+ * nube ([GoogleAuthManager.restoreFromCloudOnStartup]), en secuencia (cada
+ * paso depende del anterior o comparte `HouseholdStore`); subir el token FCM
+ * pendiente corre en paralelo (`launch`, no en la cadena anterior: escribe en
+ * un documento distinto, sin nada que serializar) — todo best-effort (nunca
+ * bloquea si está offline); 5) se crea
  * el único [Navigator] de Voyager de la app con la pila inicial
  * `[HomeScreen(), destino?]` (el destino del deep link, si lo hay, ya
  * incluido para evitar un salto visual doble).
@@ -164,6 +168,33 @@ fun App(
                         initialScreens = null
                         return@LaunchedEffect
                     }
+                    // ── Subir el token FCM del dispositivo (si hay uno persistido) ──
+                    // Lanzado en paralelo (`launch`, no `await`ado aquí) en vez de
+                    // al final de este bloque secuencial: escribe en
+                    // `users/{uid}.fcmToken`, un documento que ningún otro paso de
+                    // este bootstrap toca, así que no hay ninguna escritura
+                    // concurrente que serializar (a diferencia de repointear el
+                    // hogar Personal y restaurar hogares compartidos, que si se
+                    // paralelizaran entre sí sí podrían pisarse al escribir la
+                    // MISMA lista en `HouseholdStore` sin un lock — ver PROPUESTA
+                    // en el informe de rendimiento del panel v10). No bloquea la
+                    // construcción de `initialScreens`: es best-effort, igual que
+                    // antes (panel de expertos v10, rendimiento, IMPORTANTE — antes
+                    // añadía un round-trip de red entero, en serie, al final del
+                    // arranque en frío sin ninguna razón para no solaparlo).
+                    launch {
+                        try {
+                            val uid = repo.getLocalId()
+                            val fcmToken = notificationScheduler.getFcmToken()
+                            if (uid != null && fcmToken != null) {
+                                repo.saveFcmToken(uid, fcmToken)
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // Offline/transitorio: se reintenta en el próximo arranque.
+                        }
+                    }
                     // ── Resolver/crear el espacio Personal (interdispositivo) ──
                     // El ID es determinista (personal_{uid}), de modo que con la
                     // misma cuenta de Google todos los dispositivos apuntan al
@@ -207,22 +238,6 @@ fun App(
                     // Cubre hogares creados/unidos en OTRO dispositivo con la
                     // misma cuenta de Google (antes solo se restauraban al re-loguearse).
                     authManager.restoreFromCloudOnStartup()
-
-                    // ── Subir el token FCM del dispositivo (si hay uno persistido) ──
-                    // Sin esto, el token quedaba solo en SharedPreferences y el
-                    // backend nunca podía dirigir un push de "tarea asignada" a
-                    // este dispositivo. Best-effort: nunca bloquea el arranque.
-                    try {
-                        val uid = repo.getLocalId()
-                        val fcmToken = notificationScheduler.getFcmToken()
-                        if (uid != null && fcmToken != null) {
-                            repo.saveFcmToken(uid, fcmToken)
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        // Offline/transitorio: se reintenta en el próximo arranque.
-                    }
 
                     // ── Ir siempre a HomeScreen, con el destino del deep link
                     // (si lo hay) ya incluido en la pila inicial ───────────

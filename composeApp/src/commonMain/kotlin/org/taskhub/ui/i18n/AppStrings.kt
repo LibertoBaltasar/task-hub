@@ -60,6 +60,7 @@ object AppStrings {
             // Gate de login obligatorio (App.kt, sin sesión de Google)
             "auth_gate_title" to "Inicia sesión con Google",
             "auth_gate_subtitle" to "Task Hub necesita tu cuenta de Google para guardar tus tareas y sincronizarlas entre tus dispositivos.",
+            "auth_gate_signing_in" to "Iniciando sesión con Google, espera un momento",
 
             // Privacidad y datos
             "settings_privacy_data_title" to "Privacidad y datos",
@@ -698,6 +699,7 @@ object AppStrings {
             // Mandatory login gate (App.kt, no Google session)
             "auth_gate_title" to "Sign in with Google",
             "auth_gate_subtitle" to "Task Hub needs your Google account to save your tasks and sync them across your devices.",
+            "auth_gate_signing_in" to "Signing in with Google, please wait",
 
             // Privacy and data
             "settings_privacy_data_title" to "Privacy and data",
