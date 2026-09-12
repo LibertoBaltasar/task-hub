@@ -214,7 +214,7 @@ class HouseholdRepository(
      */
     suspend fun getHousehold(id: String): HouseholdResponse {
         return try {
-            val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$id") {
+            val response: FirestoreDocumentResponse = client.getWithRetry("$baseUrl/households/$id") {
                 withAuth()
             }.body()
 
@@ -340,7 +340,7 @@ class HouseholdRepository(
     /** Find a household by invite code. Uses the invites/{code} map (no list). */
     suspend fun joinHousehold(inviteCode: String): HouseholdResponse {
         // 1) Resolver código → householdId vía invites/{code}.
-        val inviteResponse: FirestoreDocumentResponse = client.get("$baseUrl/invites/$inviteCode") {
+        val inviteResponse: FirestoreDocumentResponse = client.getWithRetry("$baseUrl/invites/$inviteCode") {
             withAuth()
         }.body()
 

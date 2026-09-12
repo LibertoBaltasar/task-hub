@@ -53,7 +53,7 @@ class RewardsRepository(
      */
     suspend fun getRewards(householdId: String): List<RewardResponse> {
         return try {
-            val response: FirestoreListResponse = client.get(
+            val response: FirestoreListResponse = client.getWithRetry(
                 "$baseUrl/households/$householdId/rewards"
             ) {
                 withAuth()
@@ -116,7 +116,7 @@ class RewardsRepository(
      */
     suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> {
         return try {
-            val response: FirestoreListResponse = client.get(
+            val response: FirestoreListResponse = client.getWithRetry(
                 "$baseUrl/households/$householdId/rewardRedemptions"
             ) {
                 withAuth()

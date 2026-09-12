@@ -262,7 +262,7 @@ class TaskRepository(
 
     /** Get a single task by id. Used where only one task is needed (avoids an N+1 full-list fetch). */
     suspend fun getTask(householdId: String, taskId: String): TaskResponse {
-        val response: FirestoreDocumentResponse = client.get("$baseUrl/households/$householdId/tasks/$taskId") {
+        val response: FirestoreDocumentResponse = client.getWithRetry("$baseUrl/households/$householdId/tasks/$taskId") {
             withAuth()
         }.body()
         return toTaskResponse(response, householdId)

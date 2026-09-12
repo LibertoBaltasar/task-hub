@@ -18,9 +18,11 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
+import kotlinx.io.IOException
 import kotlinx.serialization.json.Json
 
 /** Project ID por defecto de Firestore — ver [firestoreBaseUrl]. */
@@ -402,11 +404,13 @@ internal suspend fun HttpClient.listAllDocuments(
     var pageToken: String? = null
     var page = 0
     do {
-        val response: FirestoreListResponse = get(url) {
-            configureAuth()
-            parameter("pageSize", pageSize)
-            pageToken?.let { parameter("pageToken", it) }
-        }.body()
+        val response: FirestoreListResponse = retryTransientReadFailure {
+            get(url) {
+                configureAuth()
+                parameter("pageSize", pageSize)
+                pageToken?.let { parameter("pageToken", it) }
+            }.body()
+        }
         documents += response.documents
         pageToken = response.nextPageToken
         page++
@@ -420,6 +424,61 @@ internal suspend fun HttpClient.listAllDocuments(
     } while (pageToken != null)
     return documents
 }
+
+/**
+ * Reintenta [block] con backoff exponencial acotado (300ms, 600ms, ...) ante
+ * fallos TRANSITORIOS — de transporte (timeout, DNS, conexión) o 5xx del
+ * servidor — en operaciones de LECTURA (GET). Nunca debe envolver una
+ * escritura (POST/PATCH/DELETE): sin `:commit`/transacciones, reintentar una
+ * escritura que sí llegó al servidor pero cuya respuesta se perdió podría
+ * duplicar la operación (tarjeta kanban "Retry/backoff idempotente", alcance
+ * explícitamente limitado a lecturas). Un 4xx (permiso, documento
+ * inexistente, argumento inválido) no es transitorio y se relanza sin
+ * reintentar — reintentarlo no cambiaría el resultado.
+ */
+internal suspend fun <T> retryTransientReadFailure(
+    maxAttempts: Int = 3,
+    initialDelayMillis: Long = 300,
+    block: suspend () -> T
+): T {
+    var attempt = 0
+    var delayMillis = initialDelayMillis
+    while (true) {
+        try {
+            return block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            attempt++
+            if (attempt >= maxAttempts || !e.isTransientReadFailure()) throw e
+            delay(delayMillis)
+            delayMillis *= 2
+        }
+    }
+}
+
+/**
+ * Ver [retryTransientReadFailure]. `HttpRequestTimeoutException` y
+ * `ConnectTimeoutException` (ktor) heredan de [IOException] en todas las
+ * plataformas objetivo, así que capturar [IOException] ya cubre timeouts,
+ * DNS y conexión rechazada sin necesidad de listarlas una a una.
+ */
+internal fun Exception.isTransientReadFailure(): Boolean = when (this) {
+    is FirestoreException -> statusCode >= 500
+    is IOException -> true
+    else -> false
+}
+
+/**
+ * Igual que `client.get(url) { ... }` pero con [retryTransientReadFailure] por
+ * delante — para GET de documento único (las listas paginadas usan
+ * [listAllDocuments], que ya reintenta cada página). Solo para lecturas, ver
+ * [retryTransientReadFailure].
+ */
+internal suspend fun HttpClient.getWithRetry(
+    url: String,
+    block: suspend HttpRequestBuilder.() -> Unit = {}
+): HttpResponse = retryTransientReadFailure { get(url) { block() } }
 
 /**
  * Ejecuta [block] y devuelve [default] ante cualquier fallo NO fatal, pero

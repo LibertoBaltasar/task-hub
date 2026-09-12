@@ -307,7 +307,7 @@ class FirestoreRepository(
      * escenario real que lo justifique.
      */
     suspend fun loadUserHouseholds(uid: String): List<String> = orDefault(emptyList()) {
-        val response: FirestoreDocumentResponse = client.get("$baseUrl/users/$uid") {
+        val response: FirestoreDocumentResponse = client.getWithRetry("$baseUrl/users/$uid") {
             withAuth()
         }.body()
         response.fields["householdIds"]?.arrayValue?.values
@@ -330,6 +330,13 @@ class FirestoreRepository(
      * solo un fallo de TRANSPORTE (timeout, DNS, sin conexión — una excepción
      * que ni siquiera llega a convertirse en [FirestoreException]) se
      * interpreta como offline.
+     *
+     * A propósito SIN [retryTransientReadFailure] (a diferencia del resto de
+     * lecturas, tarjeta kanban "Retry/backoff idempotente"): el fallo de
+     * transporte que dispara este catch ES la señal que la sonda busca
+     * detectar, no un contratiempo que enmascarar — reintentar con backoff
+     * aquí solo retrasaría varios segundos el aviso de "sin conexión" en la
+     * UI ([org.taskhub.ui.models.TaskScreenModel] lo usa para `_isOffline`).
      */
     suspend fun isOnline(): Boolean {
         return try {

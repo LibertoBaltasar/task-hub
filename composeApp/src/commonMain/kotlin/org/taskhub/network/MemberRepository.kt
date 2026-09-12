@@ -138,7 +138,7 @@ class MemberRepository(
      */
     suspend fun getMembers(householdId: String): List<MemberResponse> {
         return try {
-            val response: FirestoreListResponse = client.get("$baseUrl/households/$householdId/members") {
+            val response: FirestoreListResponse = client.getWithRetry("$baseUrl/households/$householdId/members") {
                 withAuth()
             }.body()
 
@@ -404,7 +404,7 @@ class MemberRepository(
      * justifique el coste de mantener esta caché sincronizada.
      */
     suspend fun getUserProfile(userId: String): UserProfile? = orDefault(null) {
-        val response: FirestoreDocumentResponse = client.get("$baseUrl/users/$userId") {
+        val response: FirestoreDocumentResponse = client.getWithRetry("$baseUrl/users/$userId") {
             withAuth()
         }.body()
         val f = response.fields
@@ -511,7 +511,7 @@ class MemberRepository(
         val docUrl = "$baseUrl/households/$householdId/members/$memberId"
         repeat(OPTIMISTIC_WRITE_MAX_RETRIES) { attempt ->
             val current: FirestoreDocumentResponse = try {
-                client.get(docUrl) { withAuth() }.body()
+                client.getWithRetry(docUrl) { withAuth() }.body()
             } catch (e: FirestoreException) {
                 if (e.statusCode == 404) return // miembro inexistente: no-op, como antes
                 throw e
@@ -632,7 +632,7 @@ class MemberRepository(
         val docUrl = "$baseUrl/households/$householdId/members/$fromMemberId"
         repeat(OPTIMISTIC_WRITE_MAX_RETRIES) { attempt ->
             val current: FirestoreDocumentResponse = try {
-                client.get(docUrl) { withAuth() }.body()
+                client.getWithRetry(docUrl) { withAuth() }.body()
             } catch (e: FirestoreException) {
                 if (e.statusCode == 404) return AppreciateResult.Error(AppreciateErrorReason.MEMBER_NOT_FOUND)
                 throw e
@@ -770,7 +770,7 @@ class MemberRepository(
      * el siguiente refresco.
      */
     suspend fun getMemberAchievements(householdId: String, memberId: String): Set<String> = orDefault(emptySet()) {
-        val response: FirestoreDocumentResponse = client.get(
+        val response: FirestoreDocumentResponse = client.getWithRetry(
             "$baseUrl/households/$householdId/members/$memberId/achievements/_meta"
         ) {
             withAuth()
@@ -795,7 +795,7 @@ class MemberRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         repeat(OPTIMISTIC_WRITE_MAX_RETRIES) { attempt ->
             val current: FirestoreDocumentResponse? = try {
-                client.get(docUrl) { withAuth() }.body()
+                client.getWithRetry(docUrl) { withAuth() }.body()
             } catch (e: FirestoreException) {
                 if (e.statusCode == 404) null else throw e
             }

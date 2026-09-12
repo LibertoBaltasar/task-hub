@@ -105,7 +105,7 @@ class NotificationRepository(
      */
     suspend fun getNotifications(householdId: String): List<NotificationResponse> {
         return try {
-            val response: FirestoreListResponse = client.get(
+            val response: FirestoreListResponse = client.getWithRetry(
                 "$baseUrl/households/$householdId/notifications"
             ) {
                 withAuth()
