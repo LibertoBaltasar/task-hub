@@ -149,9 +149,9 @@ class FirestoreClient(
      * Devuelve el [bearerToken] vigente — leído DENTRO de la sección protegida
      * por [authMutex], no por el caller después de que `withLock` ya haya
      * soltado el lock (panel de revisión 2026-09-03/04, Experto 6, NUEVO):
-     * antes los 3 llamadores ([withAuth]/[tryAuthOrApiKey]/
-     * [deleteFirebaseAccount]) leían `bearerToken` en su propio cuerpo, fuera
-     * de cualquier mutex, así que una ráfaga de llamadas concurrentes podía
+     * antes los 2 llamadores ([withAuth]/[deleteFirebaseAccount]) leían
+     * `bearerToken` en su propio cuerpo, fuera de cualquier mutex, así que
+     * una ráfaga de llamadas concurrentes podía
      * intercalarse entre "esta corrutina terminó `ensureAuth()`" y "esta
      * corrutina lee `bearerToken`" con OTRA corrutina que también estuviera
      * refrescando el token — `@Volatile` garantiza visibilidad de memoria,
@@ -294,30 +294,21 @@ class FirestoreClient(
     /**
      * Añade la cabecera Authorization a la petición si ya hay token. Llama
      * primero a [ensureAuth] para garantizar que el token esté vigente —
-     * usado en operaciones de escritura, que SIEMPRE requieren auth.
+     * usado tanto en lecturas como en escrituras, ya que TODAS las
+     * colecciones de `firestore.rules` exigen `signedIn()` (no hay ninguna
+     * ruta de lectura pública sin usuario autenticado).
+     *
+     * Hasta la ronda de seguridad 2026-09-12 (encargo "Quitar fallback
+     * tryAuthOrApiKey") existía un `tryAuthOrApiKey()` separado para
+     * lecturas, que ante un fallo de `ensureAuth()` caía a pasar la API key
+     * como parámetro de query. Ese fallback nunca podía tener éxito (mismo
+     * motivo: todas las reglas exigen `signedIn()`), así que quitarlo no
+     * cambia ningún comportamiento observable — solo deja de exponer la API
+     * key en la query string de esas peticiones de lectura.
      */
     suspend fun HttpRequestBuilder.withAuth() {
         val token = ensureAuth()
         token?.let { header("Authorization", "Bearer $it") }
-    }
-
-    /**
-     * Intenta primero auth Bearer; si falla, cae a pasar la API key como
-     * parámetro de query. Usado en operaciones de LECTURA, donde las reglas
-     * de Firestore permiten acceso solo con API key (sin usuario
-     * autenticado) — así una lectura no falla solo porque `ensureAuth()`
-     * (alta/refresco de sesión) tuviera un problema puntual de red.
-     */
-    suspend fun HttpRequestBuilder.tryAuthOrApiKey() {
-        try {
-            val token = ensureAuth()
-            token?.let { header("Authorization", "Bearer $it") }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            // Auth failed — fall back to API key for read-only access
-            parameter("key", apiKey)
-        }
     }
 
     /**
@@ -399,7 +390,7 @@ class FirestoreClient(
  * `pageSize` por defecto (300) es generoso para los hogares reales de hoy —
  * en la práctica el bucle da una sola vuelta — pero deja de truncar si un
  * hogar crece. `configureAuth` recibe la misma lambda que ya usan los
- * call-sites (`tryAuthOrApiKey()`/`withAuth()`), definida en el repo llamante
+ * call-sites (`withAuth()`), definida en el repo llamante
  * porque son extension functions con receptor [FirestoreClient].
  */
 internal suspend fun HttpClient.listAllDocuments(

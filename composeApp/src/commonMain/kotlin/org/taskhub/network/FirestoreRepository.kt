@@ -308,7 +308,7 @@ class FirestoreRepository(
      */
     suspend fun loadUserHouseholds(uid: String): List<String> = orDefault(emptyList()) {
         val response: FirestoreDocumentResponse = client.get("$baseUrl/users/$uid") {
-            tryAuthOrApiKey()
+            withAuth()
         }.body()
         response.fields["householdIds"]?.arrayValue?.values
             ?.mapNotNull { it.stringValue }
