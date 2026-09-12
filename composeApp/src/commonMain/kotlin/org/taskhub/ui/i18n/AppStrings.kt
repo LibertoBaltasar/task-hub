@@ -391,6 +391,7 @@ object AppStrings {
             "member_reward_confirm_title" to "Confirmar canje",
             "member_reward_confirm_text" to "¿Canjear '%1' por ⭐ %2 puntos?\n\nTe quedarán ⭐ %3 puntos.",
             "member_reward_confirm_yes" to "Sí, canjear",
+            "member_reward_redeemed_success" to "¡Recompensa canjeada!",
 
             // Unirse a un espacio (JoinHouseholdScreen.kt)
             "join_household_step1" to "Paso 1: Introduce el código de invitación",
@@ -1008,6 +1009,7 @@ object AppStrings {
             "member_reward_confirm_title" to "Confirm redemption",
             "member_reward_confirm_text" to "Redeem '%1' for ⭐ %2 points?\n\nYou'll have ⭐ %3 points left.",
             "member_reward_confirm_yes" to "Yes, redeem",
+            "member_reward_redeemed_success" to "Reward redeemed!",
 
             // Join a space (JoinHouseholdScreen.kt)
             "join_household_step1" to "Step 1: Enter the invite code",

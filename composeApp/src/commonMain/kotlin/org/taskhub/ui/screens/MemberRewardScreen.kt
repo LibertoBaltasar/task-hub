@@ -56,6 +56,7 @@ data class MemberRewardScreen(
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var showConfirmDialog by remember { mutableStateOf(false) }
+        val snackbarHostState = remember { SnackbarHostState() }
 
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
@@ -83,9 +84,16 @@ data class MemberRewardScreen(
         val memberPoints = currentMember?.totalPoints ?: 0
         val canAfford = memberPoints >= reward.cost
 
-        // Navigate back on success
+        // Confirmación de éxito antes de volver a la lista — sin esto, el canje
+        // se veía como una simple vuelta atrás sin ninguna señal de que se
+        // había descontado el coste (encargo kanban "Snackbars de éxito en
+        // canjear/donar/agradecer puntos", 2026-09-12).
         LaunchedEffect(actionState) {
             if (actionState is RewardActionState.Success) {
+                snackbarHostState.showSnackbar(
+                    message = s("member_reward_redeemed_success"),
+                    duration = SnackbarDuration.Short
+                )
                 memberModel.clearRewardAction()
                 navigator.pop()
             }
@@ -95,6 +103,7 @@ data class MemberRewardScreen(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
+            Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
@@ -255,6 +264,12 @@ data class MemberRewardScreen(
 
                     Spacer(Modifier.height(24.dp))
                 }
+            }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
             }
         }
 

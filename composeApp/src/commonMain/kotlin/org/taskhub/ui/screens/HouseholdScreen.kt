@@ -192,15 +192,20 @@ data class HouseholdScreen(val householdId: String) : Screen {
             }
         }
 
-        // Cierra los diálogos y limpia el estado de acción al completarse con éxito.
+        // Cierra los diálogos y confirma el envío con un snackbar al completarse
+        // con éxito — antes agradecer/donar cerraba el diálogo en silencio, sin
+        // ninguna señal de que los puntos habían llegado (encargo kanban
+        // "Snackbars de éxito en canjear/donar/agradecer puntos", 2026-09-12).
         LaunchedEffect(appreciateActionState) {
             if (appreciateActionState is AppreciateActionState.Success) {
                 appreciateTarget = null
+                householdSnackbarHostState.showSnackbar(message = s("appreciate_success"), duration = SnackbarDuration.Short)
             }
         }
         LaunchedEffect(donateActionState) {
             if (donateActionState is DonateActionState.Success) {
                 donateTarget = null
+                householdSnackbarHostState.showSnackbar(message = s("donate_success"), duration = SnackbarDuration.Short)
             }
         }
         val messagesState by householdModel.messagesUiState.collectAsState()
