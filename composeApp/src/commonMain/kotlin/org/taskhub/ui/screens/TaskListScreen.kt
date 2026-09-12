@@ -34,8 +34,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -844,6 +847,22 @@ private fun TaskCard(
             }
             // role = Button: semántica estructurada para TalkBack/VoiceOver
             // (panel v7 2026-09-10, Exp. 3, IMPORTANTE).
+            // customActions: expone "Hecho" como acción accesible del propio
+            // card en vez de un botón anidado dentro del área clicable (panel
+            // kanban 2026-09-10, [Accesibilidad] botón anidado); el Button
+            // interno se oculta del árbol de semántica con clearAndSetSemantics.
+            .then(
+                if (!isDone && onComplete != null && !isLoading && !isCompleting) {
+                    Modifier.semantics {
+                        customActions = listOf(
+                            CustomAccessibilityAction(s("task_detail_mark_done")) {
+                                isCompleting = true
+                                true
+                            }
+                        )
+                    }
+                } else Modifier
+            )
             .clickable(enabled = !isCompleting, role = Role.Button, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (isDone) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
@@ -879,7 +898,11 @@ private fun TaskCard(
                         Button(
                             onClick = { isCompleting = true },
                             enabled = !isLoading,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            // Oculto para TalkBack/VoiceOver: la acción ya está expuesta
+                            // como customAction del Card (evita botón anidado dentro
+                            // del área clicable). Sigue funcionando al tacto.
+                            modifier = Modifier.clearAndSetSemantics {}
                         ) {
                             if (isLoading) {
                                 CircularProgressIndicator(

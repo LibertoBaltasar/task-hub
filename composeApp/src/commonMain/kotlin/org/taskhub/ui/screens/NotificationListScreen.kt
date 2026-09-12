@@ -18,7 +18,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -238,7 +242,25 @@ private fun NotificationCard(
     Card(
         // role = Button: semántica estructurada para TalkBack/VoiceOver
         // (panel v7 2026-09-10, Exp. 3, IMPORTANTE).
-        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
+        // customActions: expone "marcar leída" como acción accesible del propio
+        // card en vez de un botón anidado dentro del área clicable (panel
+        // kanban 2026-09-10, [Accesibilidad] botón anidado); el TextButton
+        // interno se oculta del árbol de semántica con clearAndSetSemantics.
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (!notification.read) {
+                    Modifier.semantics {
+                        customActions = listOf(
+                            CustomAccessibilityAction(s("notifications_mark_read")) {
+                                onMarkRead()
+                                true
+                            }
+                        )
+                    }
+                } else Modifier
+            )
+            .clickable(role = Role.Button, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (!notification.read)
                 MaterialTheme.colorScheme.primaryContainer
@@ -299,7 +321,11 @@ private fun NotificationCard(
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
                         onClick = onMarkRead,
-                        contentPadding = PaddingValues(0.dp)
+                        contentPadding = PaddingValues(0.dp),
+                        // Oculto para TalkBack/VoiceOver: la acción ya está expuesta
+                        // como customAction del Card (evita botón anidado dentro
+                        // del área clicable). Sigue funcionando al tacto.
+                        modifier = Modifier.clearAndSetSemantics {}
                     ) {
                         Text(
                             text = s("notifications_mark_read"),
