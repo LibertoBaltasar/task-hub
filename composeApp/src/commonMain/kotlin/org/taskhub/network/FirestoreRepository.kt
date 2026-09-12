@@ -1007,10 +1007,14 @@ class FirestoreRepository(
 
     // Tasks CRUD + history + assignments — delegado en TaskRepository (fase
     // 2.3 del refactor), salvo completeTask/completeAssignment/
-    // reassignTaskCompletion: orquestan Task+Member a la vez (otorgan puntos
-    // vía MemberRepository.addMemberPoints mientras mutan la tarea/
-    // asignación), así que se quedan en la fachada — ver KDoc de
-    // TaskRepository/MemberRepository.
+    // reassignTaskCompletion: desde
+    // `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md` (decisión
+    // aprobada por Liberto) ya NO orquestan Task+Member en el cliente —
+    // delegan la transacción completa en Cloud Functions
+    // (`cloudFunctionsClient.call(...)`) y la fachada solo mapea errores de
+    // conflicto y limpia caché. Se quedan aquí (no en TaskRepository) porque
+    // esa es la capa que conoce `cloudFunctionsClient`; no hay lógica de
+    // negocio residual que mover — vive en `functions/src/`.
 
     suspend fun createTask(
         householdId: String,
