@@ -443,10 +443,24 @@ class HouseholdRepository(
         return MessageResponse(id, memberId, authorName, text, now)
     }
 
-    /** List chat messages for a household, oldest first. */
-    suspend fun getMessages(householdId: String): List<MessageResponse> {
+    /**
+     * List chat messages for a household, oldest first.
+     *
+     * [limit], si se indica, trae solo los [limit] mensajes MÁS RECIENTES
+     * (vía `orderBy=createdAt desc` en el servidor) en vez de la colección
+     * completa — pensado para el sondeo de chat de
+     * [org.taskhub.ui.models.HouseholdScreenModel.loadMessages], que antes
+     * releía TODO el historial en cada ciclo (tarjeta kanban "Paginación
+     * getMessages/getNotifications", 2026-09-13). NO se pasa desde
+     * [anonymizeMemberMessages]: anonimizar el nombre de un miembro que se
+     * va debe alcanzar a TODO su historial, no solo a los mensajes más
+     * recientes, o dejaría su nombre real expuesto en mensajes antiguos.
+     */
+    suspend fun getMessages(householdId: String, limit: Int? = null): List<MessageResponse> {
         val documents = client.listAllDocuments(
-            "$baseUrl/households/$householdId/messages"
+            "$baseUrl/households/$householdId/messages",
+            limit = limit,
+            orderBy = if (limit != null) "createdAt desc" else null
         ) {
             withAuth()
         }

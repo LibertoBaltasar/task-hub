@@ -98,19 +98,38 @@ class NotificationRepository(
     }
 
     /**
-     * Lista todas las notificaciones de un hogar. Cache-first ante fallo
-     * (ronda de deuda aplicable 2026-09-12, punto B11): antes usaba
+     * Lista las notificaciones de un hogar. Cache-first ante fallo (ronda de
+     * deuda aplicable 2026-09-12, punto B11): antes usaba
      * `orDefault(emptyList())`, que vaciaba el badge/lista ante un fallo de
      * red puntual en vez de servir la última foto conocida.
+     *
+     * Antes hacía una única petición sin `pageSize`/paginación (`getWithRetry`
+     * a secas): el REST de Firestore no garantiza la colección completa en
+     * una sola respuesta, así que un hogar con muchas notificaciones podía
+     * leerse truncado en silencio, con el orden que decidiera el servidor
+     * (normalmente por ID, no por fecha) — mismo hallazgo de escalabilidad
+     * que ya se había corregido en `HouseholdRepository.getMessages` con
+     * [listAllDocuments]. Ahora usa la misma función compartida, lo que de
+     * paso permite [limit] (tarjeta kanban "Paginación
+     * getMessages/getNotifications", 2026-09-13): si se indica, trae solo
+     * las [limit] notificaciones MÁS RECIENTES (`orderBy=createdAt desc`) en
+     * vez de la colección completa — pensado para el sondeo del badge
+     * ([org.taskhub.ui.models.NotificationScreenModel.refreshUnreadCount],
+     * cada 30s). [org.taskhub.ui.models.NotificationScreenModel.loadNotifications]
+     * (la pantalla de lista completa, a demanda) sigue sin pasar [limit]:
+     * capar ahí escondería para siempre una notificación sin leer más
+     * antigua que las [limit] más recientes.
      */
-    suspend fun getNotifications(householdId: String): List<NotificationResponse> {
+    suspend fun getNotifications(householdId: String, limit: Int? = null): List<NotificationResponse> {
         return try {
-            val response: FirestoreListResponse = client.getWithRetry(
-                "$baseUrl/households/$householdId/notifications"
+            val documents = client.listAllDocuments(
+                "$baseUrl/households/$householdId/notifications",
+                limit = limit,
+                orderBy = if (limit != null) "createdAt desc" else null
             ) {
                 withAuth()
-            }.body()
-            val notifications = response.documents.map { doc -> FirestoreParsers.toNotificationResponse(doc) }
+            }
+            val notifications = documents.map { doc -> FirestoreParsers.toNotificationResponse(doc) }
             taskCache.cacheNotifications(householdId, notifications)
             notifications
         } catch (e: CancellationException) {

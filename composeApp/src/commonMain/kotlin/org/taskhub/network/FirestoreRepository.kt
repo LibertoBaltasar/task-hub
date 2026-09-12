@@ -1398,9 +1398,9 @@ class FirestoreRepository(
         text: String
     ): org.taskhub.network.models.MessageResponse = householdRepository.sendMessage(householdId, memberId, authorName, text)
 
-    /** List chat messages for a household, oldest first. */
-    suspend fun getMessages(householdId: String): List<org.taskhub.network.models.MessageResponse> =
-        householdRepository.getMessages(householdId)
+    /** List chat messages for a household, oldest first. Ver [HouseholdRepository.getMessages]. */
+    suspend fun getMessages(householdId: String, limit: Int? = null): List<org.taskhub.network.models.MessageResponse> =
+        householdRepository.getMessages(householdId, limit)
 
     /** Ver [HouseholdRepository.purgeOldMessages]. */
     suspend fun purgeOldMessages(
@@ -1422,8 +1422,9 @@ class FirestoreRepository(
         message: String
     ): NotificationResponse = notificationRepository.createNotification(householdId, memberId, taskId, title, message)
 
-    suspend fun getNotifications(householdId: String): List<NotificationResponse> =
-        notificationRepository.getNotifications(householdId)
+    /** Ver [NotificationRepository.getNotifications]. */
+    suspend fun getNotifications(householdId: String, limit: Int? = null): List<NotificationResponse> =
+        notificationRepository.getNotifications(householdId, limit)
 
     suspend fun markNotificationRead(householdId: String, notificationId: String) =
         notificationRepository.markNotificationRead(householdId, notificationId)

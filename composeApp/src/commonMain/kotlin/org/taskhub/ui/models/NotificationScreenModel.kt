@@ -56,6 +56,18 @@ sealed class NotificationUiState {
 }
 
 /**
+ * Tope de notificaciones que trae [NotificationScreenModel.refreshUnreadCount]
+ * (badge de la campanita, sondeado cada 30s desde
+ * [org.taskhub.ui.screens.HouseholdScreen]) — antes releía la subcolección
+ * `notifications` COMPLETA en cada ciclo (tarjeta kanban "Paginación
+ * getMessages/getNotifications", 2026-09-13). No afecta a
+ * [NotificationScreenModel.loadNotifications] (la pantalla de lista completa,
+ * a demanda): capar ahí escondería para siempre una notificación sin leer
+ * más antigua que este tope.
+ */
+private const val MAX_POLLED_NOTIFICATIONS = 300
+
+/**
  * ScreenModel de notificaciones in-app. Carga las notificaciones de un
  * miembro dentro de un hogar, permite marcarlas como leídas y mantiene un
  * contador de no leídas independiente para el badge de la pantalla principal
@@ -169,7 +181,7 @@ class NotificationScreenModel(
     fun refreshUnreadCount(householdId: String, memberId: String) {
         screenModelScope.launch {
             try {
-                val all = repo.getNotifications(householdId)
+                val all = repo.getNotifications(householdId, limit = MAX_POLLED_NOTIFICATIONS)
                 val unread = all.count { it.memberId == memberId && !it.read }
                 _unreadCount.value = unread
             } catch (e: CancellationException) {

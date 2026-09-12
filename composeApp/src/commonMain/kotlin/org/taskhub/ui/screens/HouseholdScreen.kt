@@ -219,14 +219,17 @@ data class HouseholdScreen(val householdId: String) : Screen {
         LaunchedEffect(householdId) {
             householdModel.loadMessages(householdId)
             while (true) {
-                // 20s → 60s: getMessages trae la subcolección `messages`
+                // 20s → 60s: getMessages traía la subcolección `messages`
                 // COMPLETA en cada tick (sin cursor/limit) — a 20s, un hogar
                 // con chat activo/antiguo disparaba varias recargas
                 // completas por minuto mientras la pantalla estuviera
-                // abierta. Mitigación de bajo riesgo; migrar a
-                // structuredQuery con paginación real sigue siendo la
-                // solución de fondo (panel de revisión 2026-09-10, Experto
-                // 11, IMPORTANTE, NUEVO).
+                // abierta (panel de revisión 2026-09-10, Experto 11,
+                // IMPORTANTE). `loadMessages` ahora además acota cada tick a
+                // los MAX_POLLED_MESSAGES más recientes vía `orderBy`+`limit`
+                // en el servidor (tarjeta kanban "Paginación
+                // getMessages/getNotifications", 2026-09-13) — el intervalo
+                // de 60s sigue siendo la mitigación complementaria (menos
+                // frecuencia además de menos volumen por tick).
                 kotlinx.coroutines.delay(60_000L)
                 householdModel.loadMessages(householdId)
             }

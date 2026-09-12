@@ -372,21 +372,35 @@ class FirestoreClient(
  * hogar crece. `configureAuth` recibe la misma lambda que ya usan los
  * call-sites (`withAuth()`), definida en el repo llamante
  * porque son extension functions con receptor [FirestoreClient].
+ *
+ * [limit]/[orderBy] acotan colecciones que crecen sin cota natural (chat,
+ * notificaciones) y a las que se sondea periódicamente — sin esto, cada
+ * ciclo de sondeo releía la colección COMPLETA aunque solo hicieran falta
+ * los documentos más recientes (tarjeta kanban "Paginación
+ * getMessages/getNotifications", 2026-09-13). `orderBy` (p.ej. `"createdAt
+ * desc"`) es responsabilidad del caller: sin él, [limit] recortaría un
+ * subconjunto en el orden arbitrario que devuelva el servidor, no
+ * necesariamente el más reciente. `pageSize` se acota también a [limit]
+ * cuando se indica, para no pedir más documentos de los que hacen falta.
  */
 internal suspend fun HttpClient.listAllDocuments(
     url: String,
     pageSize: Int = 300,
+    limit: Int? = null,
+    orderBy: String? = null,
     configureAuth: suspend HttpRequestBuilder.() -> Unit
 ): List<FirestoreDocumentResponse> {
     val documents = mutableListOf<FirestoreDocumentResponse>()
     var pageToken: String? = null
     var page = 0
+    val effectivePageSize = if (limit != null) minOf(pageSize, limit) else pageSize
     do {
         val response: FirestoreListResponse = retryTransientReadFailure {
             get(url) {
                 configureAuth()
-                parameter("pageSize", pageSize)
+                parameter("pageSize", effectivePageSize)
                 pageToken?.let { parameter("pageToken", it) }
+                orderBy?.let { parameter("orderBy", it) }
             }.body()
         }
         documents += response.documents
@@ -399,8 +413,21 @@ internal suspend fun HttpClient.listAllDocuments(
         // fin. 200 páginas × 300 = 60.000 documentos, muy por encima de
         // cualquier hogar real.
         check(page < 200) { "listAllDocuments: demasiadas páginas para $url (posible bucle de paginación)" }
-    } while (pageToken != null)
-    return documents
+    } while (shouldFetchNextPage(pageToken, documents.size, limit))
+    return if (limit != null) documents.take(limit) else documents
+}
+
+/**
+ * Decide si [listAllDocuments] debe pedir una página más: solo si el
+ * servidor aún ofrece [pageToken] Y (sin [limit], o con [documentsSoFar]
+ * todavía por debajo de él). Extraída como función pura para poder
+ * testearla sin I/O (mismo criterio que [isTransientReadFailure] en este
+ * archivo).
+ */
+internal fun shouldFetchNextPage(pageToken: String?, documentsSoFar: Int, limit: Int?): Boolean {
+    if (pageToken == null) return false
+    if (limit != null && documentsSoFar >= limit) return false
+    return true
 }
 
 /**

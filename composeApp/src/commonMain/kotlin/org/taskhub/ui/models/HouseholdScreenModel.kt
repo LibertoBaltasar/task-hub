@@ -44,6 +44,17 @@ sealed class HouseholdUiState {
     data class Error(val message: String, val removable: Boolean = false) : HouseholdUiState()
 }
 
+/**
+ * Tope de mensajes que trae [HouseholdScreenModel.loadMessages] (chat en
+ * pantalla, sondeado cada 60s desde [org.taskhub.ui.screens.HouseholdScreen])
+ * — antes releía la subcolección `messages` COMPLETA en cada ciclo, con
+ * coste de red creciente sin cota conforme el chat envejecía (tarjeta kanban
+ * "Paginación getMessages/getNotifications", 2026-09-13). No afecta a
+ * [HouseholdRepository.anonymizeMemberMessages], que necesita ver TODO el
+ * historial para poder anonimizar mensajes antiguos.
+ */
+private const val MAX_POLLED_MESSAGES = 300
+
 /** Estados de carga del chat de mensajes del hogar. */
 sealed class MessagesUiState {
     data object Idle : MessagesUiState()
@@ -264,15 +275,20 @@ class HouseholdScreenModel(
                 _messagesUiState.value = MessagesUiState.Loading
             }
             try {
-                val messages = repo.getMessages(householdId)
+                val messages = repo.getMessages(householdId, limit = MAX_POLLED_MESSAGES)
                 _messagesUiState.value = MessagesUiState.Success(messages)
 
                 // Purga TTL de 90 días del chat (ver KDoc de
                 // HouseholdRepository.purgeOldMessages) — best-effort, DESPUÉS
-                // de publicar la lista: ya se tiene cargada la colección
-                // completa aquí, así que no hace falta un segundo fetch para
-                // decidir qué purgar (ronda de deuda aplicable 2026-09-12,
-                // punto B9).
+                // de publicar la lista: se reutilizan los mensajes ya
+                // cargados aquí para no hacer un segundo fetch (ronda de
+                // deuda aplicable 2026-09-12, punto B9). Desde que [messages]
+                // está acotado a [MAX_POLLED_MESSAGES], un mensaje caducado
+                // MÁS ANTIGUO que ese tope no se purgará hasta que el chat
+                // encoja por debajo del tope de forma natural — trade-off
+                // aceptado: es limpieza best-effort, no una garantía de
+                // borrado (tarjeta kanban "Paginación
+                // getMessages/getNotifications", 2026-09-13).
                 try {
                     repo.purgeOldMessages(householdId, messages)
                 } catch (e: CancellationException) {
