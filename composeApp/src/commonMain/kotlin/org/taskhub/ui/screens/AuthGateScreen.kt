@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -99,22 +100,27 @@ fun AuthGateScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            if (authState is GoogleAuthState.SigningIn) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = s("settings_account_connecting"),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Button(
-                    onClick = { authManager.signIn() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = MaterialTheme.shapes.large
-                ) {
+            // Mismo patrón que el botón de envío de CreateHouseholdScreen/
+            // JoinHouseholdScreen: el botón permanece en su sitio (mismo
+            // tamaño/posición) y se deshabilita durante el envío, con el
+            // spinner sustituyendo solo la etiqueta — evita el salto de
+            // layout de reemplazar el botón entero por un bloque centrado
+            // aparte mientras se conecta.
+            Button(
+                onClick = { authManager.signIn() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                enabled = authState !is GoogleAuthState.SigningIn,
+                shape = MaterialTheme.shapes.large
+            ) {
+                if (authState is GoogleAuthState.SigningIn) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
                     Text(
                         text = s("settings_account_sign_in_google"),
                         style = MaterialTheme.typography.titleMedium

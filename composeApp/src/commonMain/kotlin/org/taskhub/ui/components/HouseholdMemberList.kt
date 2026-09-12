@@ -353,9 +353,20 @@ private fun MemberCard(
                         )
                     }
                     if (showRemoveConfirm) {
+                        // Si el objetivo es el owner actual, el copy genérico de
+                        // "eliminar miembro" no basta: expulsarlo dispara una
+                        // transferencia AUTOMÁTICA de `ownerId` a otro admin con
+                        // cuenta vinculada (ver HouseholdRules.resolveOwnerSuccessor)
+                        // que el admin que confirma no puede adivinar por su cuenta
+                        // (panel de expertos v10, UX) — se avisa explícitamente antes
+                        // de confirmar, en vez de que se entere después del hecho.
                         DestructiveConfirmDialog(
-                            title = s("member_remove_confirm_title"),
-                            text = s("member_remove_confirm_text").replace("%s", member.displayName),
+                            title = if (isOwner) s("member_remove_confirm_title_owner") else s("member_remove_confirm_title"),
+                            text = if (isOwner) {
+                                s("member_remove_confirm_text_owner").replace("%s", member.displayName)
+                            } else {
+                                s("member_remove_confirm_text").replace("%s", member.displayName)
+                            },
                             s = s,
                             onDismiss = { showRemoveConfirm = false },
                             onConfirm = {

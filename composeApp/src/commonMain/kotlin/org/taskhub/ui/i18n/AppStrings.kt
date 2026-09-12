@@ -311,6 +311,8 @@ object AppStrings {
             "member_remove_confirm_title" to "¿Eliminar miembro?",
             "member_remove_confirm_text" to "%s dejará de formar parte de este espacio y sus tareas asignadas quedarán a nombre de \"Miembro eliminado\" (deberás reasignarlas a mano). Esta acción no se puede deshacer.",
             "member_remove_confirm_btn" to "Eliminar",
+            "member_remove_confirm_title_owner" to "¿Expulsar a la persona propietaria?",
+            "member_remove_confirm_text_owner" to "%s es quien administra este hogar (persona propietaria). Al expulsarla, la propiedad pasará automáticamente a otra persona administradora con cuenta vinculada (la más antigua). %s dejará de formar parte de este espacio y sus tareas asignadas quedarán a nombre de \"Miembro eliminado\" (deberás reasignarlas a mano). Esta acción no se puede deshacer.",
 
             // Sección de tareas del hogar (HouseholdTaskSection.kt)
             "household_task_section_pending_count" to "%d pendientes",
@@ -935,6 +937,8 @@ object AppStrings {
             "member_remove_confirm_title" to "Remove member?",
             "member_remove_confirm_text" to "%s will no longer be part of this space and their assigned tasks will be left under \"Removed member\" (you'll need to reassign them by hand). This action cannot be undone.",
             "member_remove_confirm_btn" to "Remove",
+            "member_remove_confirm_title_owner" to "Remove the owner?",
+            "member_remove_confirm_text_owner" to "%s currently owns this household. Removing them will automatically transfer ownership to another admin member with a linked account (the oldest one). %s will no longer be part of this space and their assigned tasks will be left under \"Removed member\" (you'll need to reassign them by hand). This action cannot be undone.",
 
             // Household task section (HouseholdTaskSection.kt)
             "household_task_section_pending_count" to "%d pending",
