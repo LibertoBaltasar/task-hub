@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -151,6 +152,29 @@ fun LazyListScope.householdMemberList(
                 }
             } else {
                 items(memberState.members, key = { it.id }) { member ->
+                    // HouseholdScreen recompone esta lista en cada tick del polling
+                    // de notificaciones (30s) y chat (60s) aunque memberState no haya
+                    // cambiado; sin memoizar, las lambdas de abajo (que cierran sobre
+                    // `member`) se recreaban en cada paso, y su nueva identidad forzaba
+                    // recomponer TODAS las MemberCard aunque sus datos siguieran
+                    // iguales. remember(member) las estabiliza mientras el miembro no
+                    // cambie (MemberResponse es data class → equals estructural), y
+                    // rememberUpdatedState evita que queden cerradas sobre callbacks
+                    // obsoletos (p.ej. si currentMemberId aún no se había resuelto).
+                    val latestOnAppreciateClick by rememberUpdatedState(onAppreciateClick)
+                    val latestOnDonateClick by rememberUpdatedState(onDonateClick)
+                    val latestOnRoleChange by rememberUpdatedState(onRoleChange)
+                    val latestOnRemoveMember by rememberUpdatedState(onRemoveMember)
+                    val latestOnCreateTask by rememberUpdatedState(onCreateTask)
+                    val latestOnMemberClick by rememberUpdatedState(onMemberClick)
+
+                    val stableOnAppreciateClick = remember(member) { { latestOnAppreciateClick(member) } }
+                    val stableOnDonateClick = remember(member) { { latestOnDonateClick(member) } }
+                    val stableOnRoleChange = remember(member) { { newRole: String -> latestOnRoleChange(member, newRole) } }
+                    val stableOnRemoveClick = remember(member) { { latestOnRemoveMember(member) } }
+                    val stableOnCreateTask = remember(member) { { latestOnCreateTask(member) } }
+                    val stableOnClick = remember(member) { { latestOnMemberClick(member) } }
+
                     MemberCard(
                         member = member,
                         isAdmin = isAdmin,
@@ -159,12 +183,12 @@ fun LazyListScope.householdMemberList(
                         canTransfer = myMember != null,
                         actionPending = isMemberActionPending,
                         s = s,
-                        onAppreciateClick = { onAppreciateClick(member) },
-                        onDonateClick = { onDonateClick(member) },
-                        onRoleChange = { newRole -> onRoleChange(member, newRole) },
-                        onRemoveClick = { onRemoveMember(member) },
-                        onCreateTask = { onCreateTask(member) },
-                        onClick = { onMemberClick(member) }
+                        onAppreciateClick = stableOnAppreciateClick,
+                        onDonateClick = stableOnDonateClick,
+                        onRoleChange = stableOnRoleChange,
+                        onRemoveClick = stableOnRemoveClick,
+                        onCreateTask = stableOnCreateTask,
+                        onClick = stableOnClick
                     )
                 }
             }

@@ -179,7 +179,12 @@ data class HouseholdScreen(val householdId: String) : Screen {
         val isOwner = currentUserId != null && ownerHousehold != null && currentUserId == ownerHousehold.ownerId
 
         // ── Chat de mensajes ──
-        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+        // remember(currentLanguage): sin esto se recreaba en cada recomposición
+        // (p.ej. cada tick del polling de notificaciones/chat), y al propagarse
+        // sin memoizar a la lista de miembros anulaba el remember(member) de
+        // householdMemberList (ver HouseholdMemberList.kt) forzando recomponer
+        // toda la lista igualmente.
+        val s = remember(appSettings.currentLanguage) { { key: String -> AppStrings.get(key, appSettings.currentLanguage) } }
 
         // Poll for notification unread count every 30 seconds
         LaunchedEffect(householdId, currentMemberId) {
