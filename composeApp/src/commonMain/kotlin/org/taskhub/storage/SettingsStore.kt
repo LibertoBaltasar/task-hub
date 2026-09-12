@@ -12,8 +12,8 @@ import kotlinx.serialization.json.Json
 /**
  * Persists user settings: notifications, language, and theme preference.
  *
- * [secureStore] guarda SOLO los refresh tokens (Google + anónimo) cifrados
- * — ver [SecureStore] y el hallazgo de seguridad B1. Migración aditiva: si
+ * [secureStore] guarda SOLO el refresh token de Google cifrado — ver
+ * [SecureStore] y el hallazgo de seguridad B1. Migración aditiva: si
  * un token todavía vive en texto plano en [settings] (versión anterior a
  * este cambio), se traslada automáticamente al leerlo por primera vez, sin
  * cerrar la sesión de usuarios ya autenticados.
@@ -179,41 +179,6 @@ class SettingsStore(
         settings.remove(KEY_GOOGLE_REFRESH_TOKEN)
     }
 
-    /** Si el usuario ya vio el prompt de login con Google en el primer arranque. */
-    fun hasSeenGooglePrompt(): Boolean =
-        settings.getBoolean(KEY_GOOGLE_PROMPT_SEEN, false)
-
-    fun setHasSeenGooglePrompt(seen: Boolean) =
-        settings.putBoolean(KEY_GOOGLE_PROMPT_SEEN, seen)
-
-    // ── Auth anónima persistente ─────────────────────────
-    //
-    // Firebase Auth anónimo genera un UID nuevo en cada signUp. Para que el
-    // usuario anónimo conserve SU identidad (y sus datos) entre reinicios y
-    // reinstalaciones, guardamos el refresh token del usuario anónimo. Con él
-    // se renueva el idToken sin crear una identidad nueva (mismo UID).
-
-    /** Cifrado en [secureStore] — ver [getGoogleRefreshToken]. */
-    fun getAnonymousRefreshToken(): String? =
-        secureStore.getString(KEY_ANON_REFRESH_TOKEN) ?: migrateLegacyToken(KEY_ANON_REFRESH_TOKEN)
-
-    fun getAnonymousUid(): String? =
-        settings.getStringOrNull(KEY_ANON_UID)
-
-    /** Guarda el refresh token (cifrado) y el UID de la identidad anónima persistente. */
-    fun saveAnonymousAuth(refreshToken: String, uid: String) {
-        secureStore.putString(KEY_ANON_REFRESH_TOKEN, refreshToken)
-        settings.remove(KEY_ANON_REFRESH_TOKEN) // por si quedaba el valor legado sin cifrar
-        settings.putString(KEY_ANON_UID, uid)
-    }
-
-    /** Borra la identidad anónima persistente (refresh token cifrado/legado + UID). */
-    fun clearAnonymousAuth() {
-        secureStore.remove(KEY_ANON_REFRESH_TOKEN)
-        settings.remove(KEY_ANON_REFRESH_TOKEN)
-        settings.remove(KEY_ANON_UID)
-    }
-
     /**
      * Migra un refresh token guardado en texto plano (versión anterior al
      * cifrado de [secureStore]) al almacén cifrado, y borra el original. Solo
@@ -318,9 +283,6 @@ class SettingsStore(
         private const val KEY_GOOGLE_UID = "taskhub_google_uid"
         private const val KEY_GOOGLE_EMAIL = "taskhub_google_email"
         private const val KEY_GOOGLE_REFRESH_TOKEN = "taskhub_google_refresh_token"
-        private const val KEY_GOOGLE_PROMPT_SEEN = "taskhub_google_prompt_seen"
-        private const val KEY_ANON_REFRESH_TOKEN = "taskhub_anon_refresh_token"
-        private const val KEY_ANON_UID = "taskhub_anon_uid"
         private const val KEY_CALENDAR_IDS = "taskhub_calendar_ids"
         private const val KEY_NOTIFICATION_POLL_MARKERS = "taskhub_notification_poll_markers"
     }

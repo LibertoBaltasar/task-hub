@@ -21,7 +21,8 @@ object MemberResolutionRules {
      *
      * Orden de preferencia:
      * 1. El miembro cuyo [MemberResponse.userId] coincide con cualquiera de
-     *    [identities] (UID de Google y/o anónimo del usuario actual).
+     *    [identities] del usuario actual (ver
+     *    [org.taskhub.network.FirestoreClient.currentUserIdentities]).
      * 2. El primer miembro SIN cuenta vinculada (`userId == null`, perfil
      *    "child" del onboarding típico) — NUNCA uno cuyo `userId` ya
      *    pertenece a OTRA identidad real: antes se devolvía `members.first()`

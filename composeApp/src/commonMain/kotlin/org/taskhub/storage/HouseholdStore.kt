@@ -1,7 +1,7 @@
 // Capa de persistencia (storage/): referencia local a los hogares del
 // usuario (IDs, no los datos completos — ver [TaskCache] para eso).
 // Es la fuente de verdad de "a qué hogares pertenezco" entre reinicios,
-// necesaria porque el auth anónimo no ofrece un UID estable por sí solo.
+// para resolverlos sin depender de una consulta de red al arrancar.
 
 package org.taskhub.storage
 
@@ -12,9 +12,8 @@ import kotlinx.serialization.json.Json
 
 /**
  * Locally-saved household reference (ID + display info).
- * Used to find households across app restarts without relying on
- * Firestore collection-group queries (which break when anonymous auth
- * generates a new localId each session).
+ * Used to find households across app restarts without relying on a
+ * Firestore collection-group query at every cold start.
  */
 @Serializable
 data class SavedHousehold(
@@ -27,10 +26,8 @@ data class SavedHousehold(
 
 /**
  * Persists household IDs locally via [Settings] (SharedPreferences on Android,
- * NSUserDefaults on iOS).
- *
- * Households whose anonymous auth localId changes every session —
- * the local store is the stable reference for "which households have I joined?".
+ * NSUserDefaults on iOS) — the stable, offline-first reference for "which
+ * households have I joined?".
  */
 class HouseholdStore(private val settings: Settings) {
 

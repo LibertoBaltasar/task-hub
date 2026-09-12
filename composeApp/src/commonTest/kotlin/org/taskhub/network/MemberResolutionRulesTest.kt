@@ -75,14 +75,19 @@ class MemberResolutionRulesTest {
         assertNull(MemberResolutionRules.resolveExistingMemberId(emptyList(), identities = listOf("uid-me")))
     }
 
-    /** El usuario puede tener varias identidades (Google + anónima); cualquiera de ellas cuenta como match. */
+    /**
+     * El usuario puede resolver con varias identidades a la vez (p.ej. el UID
+     * de Google persistido y el UID activo de esta sesión, normalmente el
+     * mismo pero no siempre en el primer frame tras el login); cualquiera de
+     * ellas cuenta como match. Ver [org.taskhub.network.FirestoreClient.currentUserIdentities].
+     */
     @Test
     fun resolveExistingMemberId_matchesAnyOfMultipleIdentities() {
-        val members = listOf(member(id = "me", userId = "uid-anonymous"))
+        val members = listOf(member(id = "me", userId = "uid-google-legacy"))
 
         val result = MemberResolutionRules.resolveExistingMemberId(
             members,
-            identities = listOf("uid-google", "uid-anonymous")
+            identities = listOf("uid-google", "uid-google-legacy")
         )
 
         assertEquals("me", result)

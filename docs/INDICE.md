@@ -99,6 +99,10 @@ entender *por qué* el código quedó como quedó en ciertos puntos.
   Google desde modo anónimo (login siempre pedía un UID nuevo en vez de
   vincular la sesión anónima activa) y el fix aplicado (vinculación de
   cuenta vía Identity Toolkit, sin tocar `firestore.rules`).
+- **[google-only-auth-2026-09-12.md](google-only-auth-2026-09-12.md)** —
+  eliminación completa de la auth anónima (decisión de producto): login con
+  Google obligatorio, gate de login en `App.kt` (`AuthGateScreen`), y por qué
+  el fix de vinculación del informe anterior quedó obsoleto/eliminado.
 - **[correcciones-2026-09-05-propuestas-aprobadas.md](correcciones-2026-09-05-propuestas-aprobadas.md)**
   y **[correcciones-2026-09-05-notificaciones.md](correcciones-2026-09-05-notificaciones.md)**
   — ronda de correcciones aprobadas y el cierre del flujo de notificaciones

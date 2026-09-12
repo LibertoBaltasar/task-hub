@@ -40,7 +40,12 @@ actual fun launchGoogleSignIn() {
     // siempre en SigningIn (GoogleSignInResultHolder.result nunca volvía a
     // emitir), incluido cada vez que el usuario pulsaba "Vincular Google
     // Calendar" desde Ajustes o el detalle de una tarea. Señalizar "sin
-    // token" desbloquea el flujo (vuelve a Anonymous) en vez de colgarlo.
+    // token" desbloquea el flujo (vuelve a SignedOut) en vez de colgarlo.
+    //
+    // IMPORTANTE (Google-only, docs/google-only-auth-2026-09-12.md): al no
+    // haber ya ningún modo anónimo de respaldo, esto deja el build iOS sin
+    // forma de pasar el gate de login de `App.kt` — se queda
+    // permanentemente en AuthGateScreen. Pendiente de decisión de producto.
     GoogleSignInResultHolder.setResult("")
 }
 

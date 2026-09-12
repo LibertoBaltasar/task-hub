@@ -82,9 +82,9 @@ const val RETENTION_90_DAYS_MILLIS = 90L * 24 * 60 * 60 * 1000
  * Firestore REST API docs:
  *   https://firebase.google.com/docs/firestore/reference/rest
  *
- * Uses Firebase Anonymous Auth for write access.
- * The API key alone only allows reads — writes require a Bearer token.
- * Anonymous Auth requires zero user interaction (no Google Sign-In, no UI).
+ * Uses Firebase Auth (Google Sign-In only, ver `docs/google-only-auth-2026-09-12.md`)
+ * for write access. The API key alone only allows reads — writes require a
+ * Bearer token.
  *
  * Construcción de rutas: todas las URLs son concatenaciones directas sobre
  * [baseUrl] (= `firestoreBaseUrl(projectId)`, el endpoint REST de la base de
@@ -178,53 +178,12 @@ class FirestoreRepository(
      * Firebase Auth vía accounts:signInWithIdp. Devuelve el UID estable de Google
      * (localId) + email/displayName, que persisten entre reinstalaciones.
      *
-     * Si el usuario está en modo anónimo (sin sesión de Google previa), intenta
-     * primero VINCULAR la credencial de Google a la sesión anónima ACTUAL
-     * (mandando su idToken vigente, ver [SignInWithIdpRequest.idToken]) en vez
-     * de pedir directamente el login normal — así el UID no cambia, y los
-     * hogares compartidos creados/unidos en modo anónimo (`ownerId`,
-     * `members/{uid}`, `users/{uid}.householdIds`) siguen siendo válidos sin
-     * ninguna migración posterior. Antes de este fix, un login con Google
-     * SIEMPRE pedía un UID nuevo (sin idToken de vinculación), dejando
-     * cualquier hogar compartido creado en anónimo con `ownerId` apuntando
-     * para siempre a un UID que deja de poder autenticarse en cuanto
-     * [FirestoreClient.setAuthState] sustituye la sesión — sin marcha atrás
-     * posible desde el cliente (las reglas de `firestore.rules` que gatean
-     * `households`/`members` exigen ser el UID vigente, que ya es otro) — ver
-     * `docs/auditoria-sync-dispositivos-2026-09-12.md`.
-     *
-     * Si la cuenta de Google YA está vinculada a OTRO UID permanente (el
-     * usuario ya la usó antes, en este u otro dispositivo), Identity Toolkit
-     * rechaza la vinculación con `FEDERATED_USER_ID_ALREADY_LINKED` — en ese
-     * caso se cae al login normal (sin idToken), que devuelve ese UID
-     * permanente ya existente; los datos de la sesión anónima de ESTE
-     * dispositivo no se fusionan (limitación ya documentada en
-     * [GoogleAuthManager.repointPersonalHousehold]: "las tareas del anónimo
-     * quedan en el hogar antiguo, no migran" — sin cambios, es un escenario
-     * distinto al que resuelve este fix).
+     * Único mecanismo de autenticación de Task Hub (Google-only, ver
+     * `docs/google-only-auth-2026-09-12.md`): no hay sesión anónima previa que
+     * vincular, así que siempre es un login normal.
      */
     suspend fun signInWithGoogle(googleIdToken: String): GoogleSignInResult {
-        val anonymousLinkToken = if (AccountLinkingRules.shouldAttemptLinking(settingsStore.getGoogleUid() != null)) {
-            try {
-                firestoreClient.ensureAuth()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                null // Offline/sin sesión anónima previa: login normal, sin vincular.
-            }
-        } else {
-            null
-        }
-
-        val response: FirebaseAuthResponse = try {
-            requestSignInWithIdp(googleIdToken, linkToken = anonymousLinkToken)
-        } catch (e: FirestoreException) {
-            if (AccountLinkingRules.shouldFallBackToPlainSignIn(anonymousLinkToken != null, e.message)) {
-                requestSignInWithIdp(googleIdToken, linkToken = null)
-            } else {
-                throw e
-            }
-        }
+        val response: FirebaseAuthResponse = requestSignInWithIdp(googleIdToken)
 
         val idToken = response.idToken
         val localId = response.localId
@@ -242,8 +201,6 @@ class FirestoreRepository(
         // Persistir la sesión de Google para restaurarla en próximos arranques
         // (el refresh token permite renovar el idToken sin re-login).
         settingsStore.setGoogleRefreshToken(response.refreshToken)
-        // La identidad de Google sustituye a la anónima.
-        settingsStore.clearAnonymousAuth()
 
         return GoogleSignInResult(
             uid = localId,
@@ -253,20 +210,15 @@ class FirestoreRepository(
         )
     }
 
-    /**
-     * POST a `accounts:signInWithIdp`. Ver [signInWithGoogle] para el porqué
-     * de [linkToken] (idToken de la sesión anónima activa, o `null` para un
-     * login normal sin vincular).
-     */
-    private suspend fun requestSignInWithIdp(googleIdToken: String, linkToken: String?): FirebaseAuthResponse =
+    /** POST a `accounts:signInWithIdp`. Ver [signInWithGoogle]. */
+    private suspend fun requestSignInWithIdp(googleIdToken: String): FirebaseAuthResponse =
         client.post("https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=$apiKey") {
             contentType(ContentType.Application.Json)
             setBody(
                 SignInWithIdpRequest(
                     postBody = "id_token=$googleIdToken&providerId=google.com",
                     requestUri = "http://localhost",
-                    returnSecureToken = true,
-                    idToken = linkToken
+                    returnSecureToken = true
                 )
             )
         }.body()
@@ -432,12 +384,11 @@ class FirestoreRepository(
     /**
      * Obtiene (o crea) el espacio Personal del usuario actual con un ID DETERMINISTA
      * derivado de su identidad estable: `personal_{uid}`, donde `uid` es el UID de
-     * Google si hay sesión iniciada, o el UID anónimo persistido en caso contrario.
+     * Google de la sesión iniciada.
      *
      * Esto hace el espacio Personal interdispositivo: con la misma cuenta de Google,
      * todos los dispositivos resuelven el MISMO documento `households/personal_{uid}`,
-     * así que tareas/miembros/puntos se comparten automáticamente. En modo anónimo
-     * (sin cuenta) sigue siendo por-dispositivo, como antes.
+     * así que tareas/miembros/puntos se comparten automáticamente.
      */
     suspend fun getOrCreatePersonalHousehold(): HouseholdResponse = householdRepository.getOrCreatePersonalHousehold()
 
@@ -642,12 +593,13 @@ class FirestoreRepository(
      * `GoogleAuthManager.deleteAccount` (un hogar compartido por cada uno).
      *
      * Devuelve true si el hogar se eliminó por completo (no quedaban miembros).
-     * Si [currentUserId] es null (usuario anónimo sin auth aún), no borra miembros
-     * pero sí comprueba si el hogar queda vacío.
+     * Si [currentUserId] es null (sin auth), no borra miembros pero sí
+     * comprueba si el hogar queda vacío.
      */
     suspend fun leaveHousehold(householdId: String, currentUserId: String?): Boolean {
-        // Resolver TODAS las identidades del usuario (Google + anónimo), para que
-        // el miembro se borre aunque se haya creado antes de vincular Google.
+        // Resolver TODAS las identidades del usuario, para que el miembro se
+        // borre aunque se haya creado antes del login actual (ver
+        // FirestoreClient.currentUserIdentities).
         val identities = (currentUserIdentities() + listOfNotNull(currentUserId)).distinct()
 
         val members = try {
@@ -983,7 +935,7 @@ class FirestoreRepository(
     suspend fun deleteUserProfile(userId: String) = memberRepository.deleteUserProfile(userId)
 
     /**
-     * Borra la cuenta de Firebase Auth actual (Google o anónima). Ver
+     * Borra la cuenta de Firebase Auth actual (Google). Ver
      * [FirestoreClient.deleteFirebaseAccount] — debe ser SIEMPRE el último
      * paso del flujo "eliminar cuenta": una vez borrada, el idToken deja de
      * servir para más escrituras.

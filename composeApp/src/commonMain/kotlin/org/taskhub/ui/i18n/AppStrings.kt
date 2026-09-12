@@ -57,6 +57,10 @@ object AppStrings {
             "settings_account_sign_in_google" to "Iniciar sesión con Google",
             "settings_account_edit_profile" to "✏️ Editar perfil",
 
+            // Gate de login obligatorio (App.kt, sin sesión de Google)
+            "auth_gate_title" to "Inicia sesión con Google",
+            "auth_gate_subtitle" to "Task Hub necesita tu cuenta de Google para guardar tus tareas y sincronizarlas entre tus dispositivos.",
+
             // Privacidad y datos
             "settings_privacy_data_title" to "Privacidad y datos",
 
@@ -452,9 +456,6 @@ object AppStrings {
             "profile_card_go_to_space" to "Ir al espacio",
 
             // Inicio (HomeScreen.kt)
-            "home_google_prompt_title" to "Guarda tus datos con Google",
-            "home_google_prompt_body" to "Inicia sesión con Google para que tus tareas y espacios se guarden en la nube. Así no los pierdes si cambias de móvil o reinstalas.",
-            "home_google_prompt_dismiss" to "Ahora no",
             "home_fab_join_space" to "Unirse a espacio",
             "home_fab_add_space" to "Añadir espacio",
             "home_empty_title" to "Crea tu primer espacio",
@@ -691,6 +692,10 @@ object AppStrings {
             "settings_account_no_session" to "No session: your data is only saved on this device.",
             "settings_account_sign_in_google" to "Sign in with Google",
             "settings_account_edit_profile" to "✏️ Edit profile",
+
+            // Mandatory login gate (App.kt, no Google session)
+            "auth_gate_title" to "Sign in with Google",
+            "auth_gate_subtitle" to "Task Hub needs your Google account to save your tasks and sync them across your devices.",
 
             // Privacy and data
             "settings_privacy_data_title" to "Privacy and data",
@@ -1070,9 +1075,6 @@ object AppStrings {
             "profile_card_go_to_space" to "Go to space",
 
             // Home (HomeScreen.kt)
-            "home_google_prompt_title" to "Save your data with Google",
-            "home_google_prompt_body" to "Sign in with Google so your tasks and spaces are saved to the cloud. That way you won't lose them if you switch phones or reinstall.",
-            "home_google_prompt_dismiss" to "Not now",
             "home_fab_join_space" to "Join space",
             "home_fab_add_space" to "Add space",
             "home_empty_title" to "Create your first space",

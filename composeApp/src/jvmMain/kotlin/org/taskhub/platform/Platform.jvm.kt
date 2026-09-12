@@ -28,8 +28,13 @@ actual fun launchGoogleSignIn() {
     // JVM/Desktop: Google Sign-In no está implementado todavía. Sin esto,
     // GoogleAuthManager.signIn()/linkCalendar() se quedaban colgados para
     // siempre en SigningIn (GoogleSignInResultHolder.result nunca volvía a
-    // emitir). Señalizar "sin token" desbloquea el flujo (vuelve a Anonymous)
+    // emitir). Señalizar "sin token" desbloquea el flujo (vuelve a SignedOut)
     // en vez de colgarlo.
+    //
+    // IMPORTANTE (Google-only, docs/google-only-auth-2026-09-12.md): al no
+    // haber ya ningún modo anónimo de respaldo, esto deja el build JVM/Desktop
+    // sin forma de pasar el gate de login de `App.kt` — se queda
+    // permanentemente en AuthGateScreen. Pendiente de decisión de producto.
     GoogleSignInResultHolder.setResult("")
 }
 

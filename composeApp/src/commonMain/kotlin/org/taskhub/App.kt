@@ -31,6 +31,8 @@ import org.taskhub.ui.components.AppSettingsState
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.models.GoogleAuthManager
+import org.taskhub.ui.models.GoogleAuthState
+import org.taskhub.ui.screens.AuthGateScreen
 import org.taskhub.ui.screens.HomeScreen
 import org.taskhub.ui.screens.HouseholdScreen
 import org.taskhub.ui.screens.SplashScreen
@@ -46,12 +48,16 @@ import org.taskhub.ui.theme.Teal600
  * (necesario ya para [SplashScreen], que lee el idioma de [SettingsStore]);
  * 2) tras el splash (1.5s) se resuelven tema/idioma reactivos desde
  * [SettingsStore] y se envuelve el árbol en [TaskHubTheme] +
- * `LocalAppSettings`; 3) un `LaunchedEffect(Unit)` hace la inicialización de
+ * `LocalAppSettings`; 3) sin sesión de Google ([GoogleAuthManager.state]
+ * distinto de `SignedIn`), se muestra [org.taskhub.ui.screens.AuthGateScreen]
+ * y el resto de este composable no se ejecuta — Task Hub es Google-only (ver
+ * `docs/google-only-auth-2026-09-12.md`), no hay modo anónimo al que caer;
+ * 4) ya con sesión, un `LaunchedEffect(authState)` hace la inicialización de
  * arranque en frío — resolver/crear el hogar "Personal" (determinista por
  * UID para que sea el mismo en todos los dispositivos con la misma cuenta),
  * asegurar el miembro "Yo" en él, restaurar hogares compartidos desde la
  * nube ([GoogleAuthManager.restoreFromCloudOnStartup]) y subir el token FCM
- * pendiente — todo best-effort (nunca bloquea si está offline); 4) se crea
+ * pendiente — todo best-effort (nunca bloquea si está offline); 5) se crea
  * el único [Navigator] de Voyager de la app con la pila inicial
  * `[HomeScreen(), destino?]` (el destino del deep link, si lo hay, ya
  * incluido para evitar un salto visual doble).
@@ -136,6 +142,7 @@ fun App(
                 val repo = koinInject<FirestoreRepository>()
                 val authManager = koinInject<GoogleAuthManager>()
                 val notificationScheduler = koinInject<NotificationScheduler>()
+                val authState by authManager.state.collectAsState()
 
                 var initialScreens by remember { mutableStateOf<List<Screen>?>(null) }
                 // Deep link ya incorporado a la pila con la que se crea el
@@ -145,11 +152,22 @@ fun App(
                 // 2026-09-05, UX, doble salto visual Home→destino).
                 var initialDeepLinkConsumedKey by remember { mutableStateOf<Pair<String?, String?>?>(null) }
 
-                LaunchedEffect(Unit) {
+                // Task Hub es Google-only (ver docs/google-only-auth-2026-09-12.md):
+                // sin sesión de Google, [AuthGateScreen] bloquea el resto de la app
+                // más abajo — este bootstrap NO debe correr (todo lo que hace
+                // requiere Firestore autenticado) hasta que `authState` sea
+                // SignedIn. Si el usuario cierra sesión (o se elimina la cuenta)
+                // mientras ya estaba dentro, `initialScreens` se resetea a null
+                // para reconstruir el Navigator desde cero en el próximo login.
+                LaunchedEffect(authState) {
+                    if (authState !is GoogleAuthState.SignedIn) {
+                        initialScreens = null
+                        return@LaunchedEffect
+                    }
                     // ── Resolver/crear el espacio Personal (interdispositivo) ──
                     // El ID es determinista (personal_{uid}), de modo que con la
                     // misma cuenta de Google todos los dispositivos apuntan al
-                    // MISMO hogar. En modo anónimo sigue siendo por-dispositivo.
+                    // MISMO hogar.
                     var personalId: String? = null
                     try {
                         val personal = repo.getOrCreatePersonalHousehold()
@@ -234,6 +252,17 @@ fun App(
                         }
                     }
                     initialScreens = screens
+                }
+
+                if (authState !is GoogleAuthState.SignedIn) {
+                    // Google-only: sin sesión iniciada, bloquea el resto de la
+                    // app con el gate de login en vez de mostrar HomeScreen.
+                    AuthGateScreen(
+                        authManager = authManager,
+                        authState = authState,
+                        lang = appSettings.currentLanguage
+                    )
+                    return@CompositionLocalProvider
                 }
 
                 // Surface paints the background behind system bars (edge-to-edge)

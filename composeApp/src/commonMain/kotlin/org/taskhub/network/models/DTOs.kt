@@ -75,7 +75,7 @@ data class MemberResponse(
     /** Puntos acumulados totales (histórico). */
     val totalPoints: Int = 0,
     val joinedAt: Long = 0,
-    /** ID del usuario anónimo de Firebase Auth (localId). */
+    /** UID de Firebase Auth (Google) de la cuenta vinculada, o `null` si es un perfil sin cuenta (p.ej. "hijo/a"). */
     val userId: String? = null,
     /** Racha actual de días consecutivos completando tareas. */
     val currentStreak: Int = 0,
@@ -99,7 +99,7 @@ data class MemberResponse(
  */
 @Serializable
 data class UserProfile(
-    /** UID de Firebase Auth (anónimo o Google). */
+    /** UID de Firebase Auth (Google). */
     val id: String,
     val displayName: String = "",
     /** URL de la foto de perfil. null = sin foto todavía. */

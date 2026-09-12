@@ -121,12 +121,11 @@ class HouseholdRepository(
     /**
      * Obtiene (o crea) el espacio Personal del usuario actual con un ID DETERMINISTA
      * derivado de su identidad estable: `personal_{uid}`, donde `uid` es el UID de
-     * Google si hay sesión iniciada, o el UID anónimo persistido en caso contrario.
+     * Google de la sesión iniciada.
      *
      * Esto hace el espacio Personal interdispositivo: con la misma cuenta de Google,
      * todos los dispositivos resuelven el MISMO documento `households/personal_{uid}`,
-     * así que tareas/miembros/puntos se comparten automáticamente. En modo anónimo
-     * (sin cuenta) sigue siendo por-dispositivo, como antes.
+     * así que tareas/miembros/puntos se comparten automáticamente.
      */
     suspend fun getOrCreatePersonalHousehold(): HouseholdResponse {
         ensureAuth()

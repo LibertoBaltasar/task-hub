@@ -44,13 +44,6 @@ class HomeScreenModel(
     private val settingsStore: SettingsStore
 ) : ScreenModel {
 
-    /** True si debe mostrarse el prompt de login con Google (primer arranque, aún sin sesión). */
-    fun shouldShowGooglePrompt(): Boolean =
-        !settingsStore.hasSeenGooglePrompt() && !settingsStore.isGoogleLoggedIn()
-
-    /** Marca el prompt de Google como visto, para no volver a mostrarlo. */
-    fun markGooglePromptSeen() = settingsStore.setHasSeenGooglePrompt(true)
-
     private val _uiState = MutableStateFlow(HomeScreenUiState())
     val uiState: StateFlow<HomeScreenUiState> = _uiState.asStateFlow()
 

@@ -131,8 +131,9 @@ fun DeleteAccountSection(
                 deleteAccountError = null
                 scope.launch {
                     // Reautenticación reciente ANTES del borrado irreversible
-                    // — panel v4, Experto 9. No-op (true) para cuentas
-                    // anónimas, ver KDoc de [GoogleAuthManager.reauthenticateForDeletion].
+                    // — panel v4, Experto 9. No-op (true) si por algún motivo
+                    // se llegara aquí sin sesión, ver KDoc de
+                    // [GoogleAuthManager.reauthenticateForDeletion].
                     isReauthenticating = true
                     val reauthOk = authManager.reauthenticateForDeletion()
                     isReauthenticating = false

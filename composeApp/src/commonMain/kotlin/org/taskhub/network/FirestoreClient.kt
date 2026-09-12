@@ -1,8 +1,8 @@
 /**
  * Cliente HTTP + autenticación de bajo nivel para la capa REST de
  * Firestore/Firebase Auth: construcción de URLs, ciclo de vida del token
- * (alta anónima, refresco, vinculación con Google), validación de errores
- * HTTP y paginación de colecciones. Es la base sobre la que se construyen
+ * (login exclusivamente con Google, refresco), validación de errores HTTP y
+ * paginación de colecciones. Es la base sobre la que se construyen
  * [FirestoreRepository] y todos los repos de dominio (`MemberRepository`,
  * `TaskRepository`, etc.), inyectada por composición vía Koin.
  */
@@ -48,10 +48,9 @@ class FirestoreClient(
     private val apiKey: String,
     private val settingsStore: org.taskhub.storage.SettingsStore
 ) {
-    private val authUrl = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
     private val secureTokenUrl = "https://securetoken.googleapis.com/v1/token"
 
-    // ── Estado de auth (en memoria, se regenera al reiniciar la app — vale para anónimo) ──
+    // ── Estado de auth (en memoria, se regenera al reiniciar la app) ──
     @Volatile
     var bearerToken: String? = null
         private set
@@ -110,9 +109,10 @@ class FirestoreClient(
     }
 
     /**
-     * Devuelve el UID del usuario actual (anónimo o Google). Cae al UID persistido
-     * si aún no se ha autenticado en esta sesión, para que esté disponible antes
-     * de la primera llamada de red (p.ej. al crear el miembro "Yo" del Personal).
+     * Devuelve el UID de Google del usuario actual, o `null` si no hay sesión
+     * iniciada. Cae al UID persistido si aún no se ha autenticado en esta
+     * sesión, para que esté disponible antes de la primera llamada de red
+     * (p.ej. al crear el miembro "Yo" del Personal).
      *
      * Vive aquí (no en `FirestoreRepository`) porque solo depende de
      * [cachedLocalId]/[settingsStore], nada del resto de la fachada — moverlo
@@ -122,31 +122,31 @@ class FirestoreClient(
      * un ciclo hacia `FirestoreRepository` (panel v7, #16).
      */
     fun getLocalId(): String? =
-        cachedLocalId ?: settingsStore.getGoogleUid() ?: settingsStore.getAnonymousUid()
+        cachedLocalId ?: settingsStore.getGoogleUid()
 
     /**
-     * Todas las identidades posibles del usuario actual, sin duplicados:
-     * UID de Google (si ha iniciado sesión), UID anónimo persistido y el UID
-     * activo en esta sesión. Sirve para resolver "¿este miembro soy yo?" con
-     * independencia de en qué momento se creó el miembro (antes o después de
-     * vincular Google), lo que evita duplicados al unirse y perfiles que no
-     * se borran al salir. Ver [getLocalId].
+     * Todas las identidades posibles del usuario actual, sin duplicados: el
+     * UID de Google persistido y el UID activo en esta sesión (normalmente el
+     * mismo). Sirve para resolver "¿este miembro soy yo?" con independencia
+     * de si el miembro se creó antes o después del login. Ver [getLocalId].
      */
     fun currentUserIdentities(): List<String> =
         listOfNotNull(
             settingsStore.getGoogleUid(),
-            settingsStore.getAnonymousUid(),
             cachedLocalId
         ).distinct()
 
     /**
-     * Asegura que hay un token de auth válido, dando de alta una sesión
-     * anónima si hace falta. Se llama de forma perezosa en la primera
+     * Asegura que hay un token de auth válido, renovando la sesión de Google
+     * persistida si hace falta. Se llama de forma perezosa en la primera
      * petición. El token se cachea en memoria y se refresca cuando está a
      * menos de 5 minutos de caducar.
      *
-     * POST https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=API_KEY
-     * Body: {"returnSecureToken":true}
+     * Devuelve `null` si no hay ninguna sesión de Google (sin sesión anónima
+     * de respaldo: Task Hub exige login con Google — ver
+     * `docs/google-only-auth-2026-09-12.md`). Los llamadores ya tratan un
+     * `bearerToken`/`getLocalId()` nulo como "no autenticado" (ver
+     * [HouseholdRepository.createHousehold]).
      *
      * Devuelve el [bearerToken] vigente — leído DENTRO de la sección protegida
      * por [authMutex], no por el caller después de que `withLock` ya haya
@@ -163,7 +163,7 @@ class FirestoreClient(
         val now = Clock.System.now().toEpochMilliseconds()
         if (bearerToken != null && now < tokenExpiry) return@withLock bearerToken
 
-        // 1) Restaurar sesión de Google si existe (UID estable del login Google).
+        // Restaurar sesión de Google si existe (UID estable del login Google).
         val googleRefresh = settingsStore.getGoogleRefreshToken()
         if (settingsStore.getGoogleUid() != null && googleRefresh != null) {
             try {
@@ -176,64 +176,20 @@ class FirestoreClient(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // Sesión de Google caducada → cae al flujo anónimo.
+                // Sesión de Google caducada/revocada: sin sesión anónima de
+                // respaldo, el usuario queda sin sesión y debe volver a
+                // iniciarla (ver GoogleAuthManager/App.kt, gate de login).
                 settingsStore.clearGoogleAuth()
             }
         }
 
-        // 2) Restaurar la identidad anónima persistida (mismo UID entre reinicios).
-        val savedRefresh = settingsStore.getAnonymousRefreshToken()
-        if (savedRefresh != null) {
-            try {
-                val refreshed = refreshFirebaseToken(savedRefresh)
-                bearerToken = refreshed.idToken
-                cachedLocalId = refreshed.userId
-                tokenExpiry = refreshed.tokenExpiry
-                settingsStore.saveAnonymousAuth(refreshed.refreshToken ?: savedRefresh, refreshed.userId)
-                return@withLock bearerToken
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Token caducado/revocado → alta anónima nueva.
-                settingsStore.clearAnonymousAuth()
-            }
-        }
-
-        // 3) Alta anónima nueva (sin email/password) y persistir el refresh token.
-        val response: FirebaseAuthResponse = try {
-            client.post("$authUrl?key=$apiKey") {
-                contentType(ContentType.Application.Json)
-                setBody(FirebaseAuthRequest(returnSecureToken = true))
-            }.body()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            throw redactApiKey(e)
-        }
-
-        val idToken = response.idToken
-        val localId = response.localId
-        val expiresIn = response.expiresIn?.toLongOrNull()
-        val refreshToken = response.refreshToken
-        if (idToken.isNullOrBlank() || localId.isNullOrBlank() || expiresIn == null || refreshToken.isNullOrBlank()) {
-            throw IllegalStateException(
-                "Firebase anonymous auth devolvió una respuesta incompleta " +
-                "(sin idToken/localId/expiresIn/refreshToken). Verifica la API key del proyecto."
-            )
-        }
-
-        bearerToken = idToken
-        cachedLocalId = localId
-        // expiresIn viene en segundos. Se refresca 5 minutos antes de la caducidad real.
-        tokenExpiry = now + (expiresIn * 1000) - 300_000
-        settingsStore.saveAnonymousAuth(refreshToken, localId)
-        bearerToken
+        null
     }
 
     /**
      * Renueva un idToken de Firebase Auth usando su refresh token, sin crear una
      * identidad nueva. Devuelve el MISMO UID (user_id), de modo que el usuario
-     * (anónimo o de Google) conserva sus datos entre reinicios y reinstalaciones.
+     * conserva sus datos entre reinicios y reinstalaciones.
      *
      * Endpoint: POST https://securetoken.googleapis.com/v1/token?key=API_KEY
      * Body (form-urlencoded): grant_type=refresh_token&refresh_token=...
@@ -334,7 +290,7 @@ class FirestoreClient(
         FirestoreParsers.extractDocId(resourceName, operation)
 
     /**
-     * Borra la cuenta de Firebase Auth actual (Google o anónima) vía el REST
+     * Borra la cuenta de Firebase Auth actual (Google) vía el REST
      * de Identity Toolkit. Paso final e irreversible del flujo "eliminar
      * cuenta" (ver [org.taskhub.ui.models.GoogleAuthManager.deleteAccount]):
      * debe llamarse SOLO después de borrar los datos del usuario en

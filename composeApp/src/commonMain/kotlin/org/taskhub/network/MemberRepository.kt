@@ -103,8 +103,9 @@ class MemberRepository(
 
     /**
      * Check if any of the given [userIds] (identidades del usuario) ya es
-     * miembro del hogar. Acepta una lista porque un mismo usuario puede tener
-     * UID anónimo y UID de Google, y el miembro pudo crearse con cualquiera.
+     * miembro del hogar. Acepta una lista porque el UID activo de esta sesión
+     * y el UID de Google persistido pueden no coincidir en el primer frame
+     * tras el login, y el miembro pudo crearse con cualquiera de los dos.
      *
      * SIN caché de respaldo propia a propósito (ronda de deuda aplicable
      * 2026-09-12, punto B11 — evaluado y descartado): esta función gatea
@@ -121,7 +122,7 @@ class MemberRepository(
         getMembers(householdId).any { it.userId != null && it.userId in userIds }
     }
 
-    /** ¿El usuario actual (Google o anónimo) ya es miembro de este hogar? */
+    /** ¿El usuario actual ya es miembro de este hogar? */
     suspend fun isCurrentUserMember(householdId: String): Boolean =
         isMember(householdId, firestoreClient.currentUserIdentities())
 

@@ -7,20 +7,19 @@ import kotlin.test.assertNull
 
 /**
  * `SettingsStore.migrateLegacyToken` es `private`, así que se testea de
- * forma indirecta a través de [SettingsStore.getGoogleRefreshToken] /
- * [SettingsStore.getAnonymousRefreshToken] (sus únicos dos call sites) —
- * panel v4, Experto 13, hueco #6. Usa dobles de prueba (`FakeSettings`,
- * `FakeSecureStore`) en vez de `MapSettings`/una librería de mocks, que no
- * están entre las dependencias del proyecto.
+ * forma indirecta a través de su único call site,
+ * [SettingsStore.getGoogleRefreshToken] — panel v4, Experto 13, hueco #6.
+ * Usa dobles de prueba (`FakeSettings`, `FakeSecureStore`) en vez de
+ * `MapSettings`/una librería de mocks, que no están entre las dependencias
+ * del proyecto.
  *
- * Los nombres de key (`taskhub_google_refresh_token`, etc.) están
- * hardcodeados aquí porque las constantes de [SettingsStore] son `private`
- * — coinciden con `SettingsStore.KEY_GOOGLE_REFRESH_TOKEN`/`KEY_ANON_REFRESH_TOKEN`.
+ * El nombre de key (`taskhub_google_refresh_token`) está hardcodeado aquí
+ * porque las constantes de [SettingsStore] son `private` — coincide con
+ * `SettingsStore.KEY_GOOGLE_REFRESH_TOKEN`.
  */
 class SettingsStoreTest {
 
     private val keyGoogleRefreshToken = "taskhub_google_refresh_token"
-    private val keyAnonRefreshToken = "taskhub_anon_refresh_token"
 
     private fun store(settings: FakeSettings, secureStore: FakeSecureStore) =
         SettingsStore(settings, lazy { secureStore })
@@ -90,30 +89,6 @@ class SettingsStoreTest {
         val token = store(settings, secureStore).getGoogleRefreshToken()
 
         assertNull(token)
-    }
-
-    // ── getAnonymousRefreshToken — mismo mecanismo, distinta key ──
-
-    /** Mismo mecanismo de migración que el token de Google, pero con la key del token anónimo. */
-    @Test
-    fun getAnonymousRefreshToken_migratesLegacyPlainTextToken_toSecureStore() {
-        val settings = FakeSettings(mutableMapOf(keyAnonRefreshToken to "legacy-anon-token"))
-        val secureStore = FakeSecureStore()
-
-        val token = store(settings, secureStore).getAnonymousRefreshToken()
-
-        assertEquals("legacy-anon-token", token)
-        assertEquals("legacy-anon-token", secureStore.getString(keyAnonRefreshToken))
-        assertNull(settings.getStringOrNull(keyAnonRefreshToken))
-    }
-
-    /** Sin token anónimo en ningún sitio, devuelve `null`. */
-    @Test
-    fun getAnonymousRefreshToken_noValueAnywhere_returnsNull() {
-        val settings = FakeSettings()
-        val secureStore = FakeSecureStore()
-
-        assertNull(store(settings, secureStore).getAnonymousRefreshToken())
     }
 
     // ── getCalendarId/setCalendarId — mapa por hogar (panel v7, #30) ──

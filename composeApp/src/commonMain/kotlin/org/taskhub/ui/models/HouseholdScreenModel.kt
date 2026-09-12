@@ -103,8 +103,7 @@ class HouseholdScreenModel(
 
     /**
      * Se une a un hogar existente mediante [inviteCode]. Si el usuario ya era
-     * miembro (con cualquiera de sus identidades: anónima o Google) no
-     * vuelve a crear perfil, solo emite [HouseholdUiState.AlreadyMember]
+     * miembro no vuelve a crear perfil, solo emite [HouseholdUiState.AlreadyMember]
      * para que la UI navegue directo al hogar sin duplicar el alta.
      */
     fun joinHousehold(inviteCode: String) {
@@ -226,7 +225,7 @@ class HouseholdScreenModel(
         }
     }
 
-    /** ID local (anónimo) del usuario actual, independiente de si hay sesión de Google. */
+    /** UID de Google del usuario actual, o `null` si no hay sesión iniciada. */
     fun getLocalId(): String? = repo.getLocalId()
 
     // ── Chat de mensajes ──

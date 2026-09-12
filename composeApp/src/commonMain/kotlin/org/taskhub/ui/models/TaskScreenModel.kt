@@ -54,7 +54,7 @@ import kotlinx.datetime.*
  *              │
  * ┌────────────▼─────────────────────────────────────────────┐
  * │  FirestoreRepository (REST API directa, sin servidor)   │
- * │  → Auth anónima (signUp → idToken → Bearer)             │
+ * │  → Auth Google (signInWithIdp → idToken → Bearer)       │
  * │  → CRUD: households, tasks, members, assignments        │
  * │  → Los tasks son documentos planos (no instancias por   │
  * │    día). La recurrencia se calcula en cliente.          │

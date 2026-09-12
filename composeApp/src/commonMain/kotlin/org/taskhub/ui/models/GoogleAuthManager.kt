@@ -1,9 +1,9 @@
 /**
  * Manager (no ScreenModel) inyectado como singleton en Koin que centraliza
- * el login con Google/anónimo, la obtención de tokens OAuth de Calendar y el
- * borrado de cuenta. Expone [GoogleAuthManager.state] ([GoogleAuthState]),
- * observado por [org.taskhub.ui.screens.HomeScreen] y las pantallas de
- * ajustes/perfil; [CalendarSyncManager] depende de él para los tokens.
+ * el login con Google, la obtención de tokens OAuth de Calendar y el borrado
+ * de cuenta. Expone [GoogleAuthManager.state] ([GoogleAuthState]), observado
+ * por [org.taskhub.App] (gate de login) y las pantallas de ajustes/perfil;
+ * [CalendarSyncManager] depende de él para los tokens.
  */
 package org.taskhub.ui.models
 
@@ -31,10 +31,10 @@ import org.taskhub.ui.i18n.AppStrings
  * Estado del login del usuario.
  */
 sealed class GoogleAuthState {
-    data object Idle : GoogleAuthState()
     data object SigningIn : GoogleAuthState()
     data class SignedIn(val email: String?) : GoogleAuthState()
-    data object Anonymous : GoogleAuthState()
+    /** Sin sesión — Task Hub exige login con Google (no hay modo anónimo, ver `docs/google-only-auth-2026-09-12.md`). */
+    data object SignedOut : GoogleAuthState()
     data class Error(val message: String) : GoogleAuthState()
 }
 
@@ -49,7 +49,8 @@ class AccountDeletionCascadeException :
     Exception("No se pudieron borrar/abandonar todos los hogares del usuario; la cuenta no se ha eliminado.")
 
 /**
- * Orquesta el login con Google (y el fallback anónimo).
+ * Orquesta el login con Google — único mecanismo de auth de Task Hub, sin
+ * modo anónimo (ver `docs/google-only-auth-2026-09-12.md`).
  *
  * - [signIn] lanza el flujo nativo de Google Sign-In y, al recibir el idToken,
  *   lo intercambia por credenciales de Firebase Auth vía [FirestoreRepository.signInWithGoogle].
@@ -70,7 +71,7 @@ class GoogleAuthManager(
         if (settingsStore.isGoogleLoggedIn()) {
             GoogleAuthState.SignedIn(settingsStore.getGoogleEmail())
         } else {
-            GoogleAuthState.Anonymous
+            GoogleAuthState.SignedOut
         }
     )
     val state: StateFlow<GoogleAuthState> = _state.asStateFlow()
@@ -82,11 +83,11 @@ class GoogleAuthManager(
                 when {
                     // null = en curso (aún no resuelto); no hacer nada.
                     token == null -> Unit
-                    // "" = cancelado / sin token → volver a Anonymous para no
+                    // "" = cancelado / sin token → volver a SignedOut para no
                     // quedarse colgado en "Conectando con Google...".
                     token.isEmpty() -> {
                         GoogleSignInResultHolder.reset()
-                        _state.value = GoogleAuthState.Anonymous
+                        _state.value = GoogleAuthState.SignedOut
                     }
                     else -> {
                         handleGoogleToken(token)
@@ -116,7 +117,9 @@ class GoogleAuthManager(
     }
 
     /**
-     * Cierra sesión: vuelve al modo anónimo.
+     * Cierra sesión: sin modo anónimo de respaldo, la app queda sin sesión
+     * ([GoogleAuthState.SignedOut]) y exige volver a iniciar sesión con
+     * Google (ver el gate de login en `App.kt`).
      *
      * Limpia también el `fcmToken` del perfil global de la cuenta que cierra
      * sesión (best-effort, en segundo plano) — sin esto, en un dispositivo
@@ -140,7 +143,7 @@ class GoogleAuthManager(
         // (panel de notificaciones 2026-09-05, QA — mismo riesgo ya cubierto
         // para currentMemberCache y fcmToken en esta misma función).
         settingsStore.clearNotificationPollState()
-        _state.value = GoogleAuthState.Anonymous
+        _state.value = GoogleAuthState.SignedOut
         scope.launch {
             try {
                 repo.invalidateAllCurrentMembers()
@@ -164,8 +167,8 @@ class GoogleAuthManager(
     }
 
     /**
-     * Elimina la cuenta del usuario actual (Google o anónima) y TODOS sus
-     * datos — ver hallazgo de privacidad "sin flujo de eliminar cuenta"
+     * Elimina la cuenta de Google del usuario actual y TODOS sus datos — ver
+     * hallazgo de privacidad "sin flujo de eliminar cuenta"
      * (docs/review-panel-expertos-v3-2026-09-01.md, Experto 10 #3).
      *
      * Orden:
@@ -191,7 +194,10 @@ class GoogleAuthManager(
      *     [revokeGoogleCalendarAccess]) — panel v4, Experto 10 hallazgo #5.
      *  5. La cuenta de Firebase Auth en sí — el paso irreversible final; si
      *     este falla SÍ se reporta como error (la cuenta sigue activa).
-     * Termina limpiando todo el estado local (tokens, hogares guardados).
+     * Termina limpiando todo el estado local (tokens, hogares guardados) y
+     * dejando la app en [GoogleAuthState.SignedOut]: sin modo anónimo de
+     * respaldo, el usuario debe volver a iniciar sesión con Google (gate de
+     * login en `App.kt`) para crear una cuenta nueva.
      */
     suspend fun deleteAccount(): Result<Unit> {
         val myId = currentUserId()
@@ -237,22 +243,7 @@ class GoogleAuthManager(
             householdStore.clearAll()
             settingsStore.unlinkGoogleCalendar()
             settingsStore.clearGoogleAuth()
-            settingsStore.clearAnonymousAuth()
-            _state.value = GoogleAuthState.Anonymous
-            // Recrea el espacio Personal para la (nueva) identidad anónima —
-            // mismo bootstrap que hace App.kt en cada arranque en frío. Sin
-            // esto, HomeScreen se quedaría sin ningún hogar que mostrar hasta
-            // que el usuario reiniciara la app entera.
-            try {
-                val personal = repo.getOrCreatePersonalHousehold()
-                householdStore.replacePersonalHousehold(personal.id)
-                repo.ensurePersonalMember(personal.id)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Offline/transitorio: App.kt lo reintentará en el próximo
-                // arranque real de la app.
-            }
+            _state.value = GoogleAuthState.SignedOut
             Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
@@ -266,15 +257,14 @@ class GoogleAuthManager(
      * la cuenta (acción irreversible) — sin esto, una sesión de Firebase ya
      * iniciada (posiblemente horas o días atrás) bastaba para borrar la
      * cuenta desde un dispositivo desatendido/robado (panel v4, Experto 9).
-     * Solo aplica a cuentas vinculadas a Google: una cuenta anónima no tiene
-     * ningún proveedor de identidad externo contra el que reautenticar (el
-     * único "factor" es tener el dispositivo desbloqueado, ya verificado
-     * antes de llegar a Ajustes), así que no hay nada más que hacer y
-     * devuelve true directamente.
+     * Task Hub es Google-only, así que si no hay sesión iniciada (estado
+     * distinto de [GoogleAuthState.SignedIn]) no hay nada que reautenticar —
+     * devuelve true directamente (no debería poder llegar a Ajustes sin
+     * sesión, ver el gate de login en `App.kt`).
      *
      * Reutiliza [signIn] (mismo patrón que [linkCalendar]) para no duplicar
      * el manejo de [GoogleSignInResultHolder]/reentrancia: si el usuario
-     * cancela el selector de cuenta, el estado vuelve a [GoogleAuthState.Anonymous]
+     * cancela el selector de cuenta, el estado vuelve a [GoogleAuthState.SignedOut]
      * (comportamiento ya existente y aceptado en [linkCalendar] ante una
      * cancelación) y esta función devuelve false.
      */
@@ -282,7 +272,7 @@ class GoogleAuthManager(
         if (_state.value !is GoogleAuthState.SignedIn) return true
         signIn()
         val result = state.first {
-            it is GoogleAuthState.SignedIn || it is GoogleAuthState.Anonymous || it is GoogleAuthState.Error
+            it is GoogleAuthState.SignedIn || it is GoogleAuthState.SignedOut || it is GoogleAuthState.Error
         }
         return result is GoogleAuthState.SignedIn
     }
@@ -311,7 +301,7 @@ class GoogleAuthManager(
         if (_state.value !is GoogleAuthState.SignedIn) {
             signIn()
             val result = state.first {
-                it is GoogleAuthState.SignedIn || it is GoogleAuthState.Anonymous || it is GoogleAuthState.Error
+                it is GoogleAuthState.SignedIn || it is GoogleAuthState.SignedOut || it is GoogleAuthState.Error
             }
             if (result !is GoogleAuthState.SignedIn) return false
         }
@@ -319,9 +309,9 @@ class GoogleAuthManager(
     }
 
     /**
-     * ID estable del usuario actual: el UID de Google si hay sesión iniciada,
-     * o el localId anónimo en caso contrario. Sirve para identificar los
-     * miembros creados por este usuario en un hogar (member.userId).
+     * ID estable del usuario actual (UID de Google), o `null` si no hay
+     * sesión iniciada. Sirve para identificar los miembros creados por este
+     * usuario en un hogar (member.userId).
      */
     fun currentUserId(): String? = settingsStore.getGoogleUid() ?: repo.getLocalId()
 
@@ -423,9 +413,7 @@ class GoogleAuthManager(
      * Re-apunta el espacio Personal a la identidad de Google para que sea
      * interdispositivo: con el UID estable de Google, todos los dispositivos
      * resuelven el mismo documento `personal_{uid}` (vía
-     * [FirestoreRepository.getOrCreatePersonalHousehold]). Si el usuario venía
-     * del modo anónimo, su espacio Personal por-dispositivo se sustituye por el
-     * compartido; las tareas del anónimo quedan en el hogar antiguo (no migran).
+     * [FirestoreRepository.getOrCreatePersonalHousehold]).
      */
     private suspend fun repointPersonalHousehold() {
         try {

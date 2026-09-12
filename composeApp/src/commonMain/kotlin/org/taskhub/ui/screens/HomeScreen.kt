@@ -1,9 +1,8 @@
 /**
  * Pantalla raíz de la app tras el login (landing page principal). Usa
  * [org.taskhub.ui.models.HomeScreenModel] para cargar todos los hogares del
- * usuario y una previsualización de tareas de cada uno; también observa
- * [org.taskhub.ui.models.GoogleAuthManager] para el prompt de vincular cuenta
- * Google. Navega a [ProfileScreen], [PersonalSpaceScreen], [HouseholdScreen],
+ * usuario y una previsualización de tareas de cada uno. Navega a
+ * [ProfileScreen], [PersonalSpaceScreen], [HouseholdScreen],
  * [CreateHouseholdScreen] y [JoinHouseholdScreen].
  */
 package org.taskhub.ui.screens
@@ -35,7 +34,6 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.koin.compose.koinInject
 import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.components.AppLogo
 import org.taskhub.ui.components.EmptyHouseholdsIllustration
@@ -45,8 +43,6 @@ import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
-import org.taskhub.ui.models.GoogleAuthManager
-import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.models.HomeScreenModel
 import org.taskhub.platform.AdBannerSlot
 
@@ -68,8 +64,6 @@ class HomeScreen : Screen {
         val uiState by model.uiState.collectAsState()
         val previewTasks by model.previewTasks.collectAsState()
         val reduceMotion = shouldReduceMotion()
-        val authManager = koinInject<GoogleAuthManager>()
-        val authState by authManager.state.collectAsState()
 
         // Semilla con la lista guardada localmente (sync, sin red) en vez de
         // vacía: `households` es un `remember` LOCAL de este composable, así
@@ -86,24 +80,11 @@ class HomeScreen : Screen {
         var showFabMenu by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
 
-        // Prompt de login con Google en el primer arranque (solo si aún no ha iniciado sesión)
-        var showGooglePrompt by remember { mutableStateOf(model.shouldShowGooglePrompt()) }
-
         // Cargar hogares + tareas de todos al entrar. Reconcilia primero contra
         // Firestore para podar hogares "fantasma" (borrados o sin acceso).
         LaunchedEffect(Unit) {
             households = model.reconcileHouseholds()
             model.loadAllTasks()
-        }
-
-        // Cierra el prompt de Google solo cuando el login realmente tiene éxito.
-        // Antes se cerraba de forma síncrona al pulsar el botón, así que si el
-        // login fallaba el usuario nunca llegaba a ver el estado SigningIn/Error
-        // (el diálogo ya había desaparecido).
-        LaunchedEffect(authState) {
-            if (showGooglePrompt && authState is GoogleAuthState.SignedIn) {
-                showGooglePrompt = false
-            }
         }
 
         // Settings dialog
@@ -113,72 +94,6 @@ class HomeScreen : Screen {
                 onEditProfile = {
                     showSettings = false
                     navigator.push(EditProfileScreen())
-                }
-            )
-        }
-
-        // Google login prompt (primer arranque)
-        if (showGooglePrompt) {
-            AlertDialog(
-                onDismissRequest = {
-                    showGooglePrompt = false
-                    model.markGooglePromptSeen()
-                },
-                title = { Text(s("home_google_prompt_title")) },
-                text = {
-                    Column {
-                        Text(s("home_google_prompt_body"))
-                        if (authState is GoogleAuthState.SigningIn) {
-                            Spacer(Modifier.height(16.dp))
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(s("settings_account_connecting"))
-                            }
-                        }
-                        if (authState is GoogleAuthState.Error) {
-                            Spacer(Modifier.height(16.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = s("error_icon_content_desc"),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = (authState as GoogleAuthState.Error).message,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            model.markGooglePromptSeen()
-                            authManager.signIn()
-                        },
-                        enabled = authState !is GoogleAuthState.SigningIn,
-                    ) {
-                        Text(s("settings_account_sign_in_google"))
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            showGooglePrompt = false
-                            model.markGooglePromptSeen()
-                        }
-                    ) {
-                        Text(s("home_google_prompt_dismiss"))
-                    }
                 }
             )
         }
