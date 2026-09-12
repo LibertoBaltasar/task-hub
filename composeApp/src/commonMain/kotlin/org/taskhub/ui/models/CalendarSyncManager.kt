@@ -8,8 +8,13 @@
 package org.taskhub.ui.models
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.network.models.TaskAssignmentResponse
@@ -53,6 +58,14 @@ class CalendarSyncManager(
      * alcance de un `Mutex` en memoria de proceso).
      */
     private val ensureCalendarMutex = Mutex()
+
+    /**
+     * Limita a 4 las creaciones de evento simultáneas contra la API de Google
+     * Calendar: antes se creaban en serie (N+1), lo que era lento con muchas
+     * asignaciones pendientes; paralelizar sin límite arriesga rate-limiting
+     * de la API (condición de aprobación de la tarjeta de rendimiento).
+     */
+    private val createEventSemaphore = Semaphore(4)
 
     /** Devuelve el calendarId cacheado localmente, o lo crea/busca y lo cachea. */
     private suspend fun ensureCalendarId(
@@ -106,8 +119,14 @@ class CalendarSyncManager(
                 emptyList()
             }
 
-            for (assignment in mine) {
-                createEventForAssignment(householdId, calendarId, token, assignment, tasks)
+            coroutineScope {
+                mine.map { assignment ->
+                    async {
+                        createEventSemaphore.withPermit {
+                            createEventForAssignment(householdId, calendarId, token, assignment, tasks)
+                        }
+                    }
+                }.awaitAll()
             }
         } catch (e: CancellationException) {
             throw e
@@ -213,8 +232,14 @@ class CalendarSyncManager(
             val token = authManager.ensureCalendarAccessToken() ?: return
             val calendarId = ensureCalendarId(householdId, householdName, isPersonal, token) ?: return
 
-            for (assignment in pending) {
-                createEventForAssignment(householdId, calendarId, token, assignment, tasks)
+            coroutineScope {
+                pending.map { assignment ->
+                    async {
+                        createEventSemaphore.withPermit {
+                            createEventForAssignment(householdId, calendarId, token, assignment, tasks)
+                        }
+                    }
+                }.awaitAll()
             }
         } catch (e: CancellationException) {
             throw e
