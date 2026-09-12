@@ -51,9 +51,17 @@ con la siguiente oleada sin fabricar hallazgos.
   - **Rendimiento**: 1 CRÍTICO nuevo aplicado — `restoreFromCloudOnStartup()` repetía una llamada de red (`getOrCreatePersonalHousehold`) que `App.kt` ya acababa de hacer, duplicando un round-trip en cada arranque en frío; eliminada la llamada redundante a `repointPersonalHousehold()` dentro de esa función. 2 IMPORTANTES nuevos aplicados: `restoreHouseholds` pasó de un `for` secuencial (N round-trips) a usar el batch paralelo `getHouseholds` ya existente; subida del token FCM movida a `launch` en paralelo en vez de al final de la cadena secuencial del bootstrap. 1 PROPUESTA documentada sin aplicar (paralelizar más la cadena del bootstrap requeriría serializar las escrituras a `HouseholdStore`, que no tiene lock). Confirmó YA RESUELTO/sin problema: retry/backoff, recomposición de `authState`, coste de `isTransientReadFailure`/`HouseholdStore.clearAll()`.
   - **Privacidad/RGPD**: CRÍTICO nuevo aplicado — `docs/privacy.html` afirmaba falsamente que se podía usar la app "de forma anónima" y presentaba el login de Google como opcional, pese a que `9e36410` lo hizo obligatorio; reescrita la sección de "Datos de cuenta" para reflejar la realidad (incluye que también se guarda la foto de perfil, ya cierto desde antes pero nunca documentado). 1 IMPORTANTE documentado como propuesta de producto/UX (sin aplicar): `AuthGateScreen` no enlaza la política de privacidad antes de que el usuario comparta su identidad de Google, a diferencia de antes (auth anónima permitía explorar sin compartir datos reales). Confirmó SIGUE ABIERTO (ya conocido, sin regresión): falta de SDK de consentimiento UMP/CMP para EEE/UK. Confirmó YA RESUELTO/sin problema: borrado de cuenta en cascada intacto, modelo de "hijo/a sin cuenta propia" no afectado por el gate de login.
   - Verificación combinada: `compileDebugKotlinAndroid` BUILD SUCCESSFUL (un error transitorio de compilación por una edición a medias de otro experto en paralelo se resolvió solo al completarse esa edición), `jvmTest` BUILD SUCCESSFUL (242 tests, 0 fallos, 0 errores).
-- [ ] Consolidación final + informe `docs/review-panel-expertos-sync-2026-09-12.md`
-- [ ] Verificación final (`compileDebugKotlinAndroid`, `jvmTest`)
-- [ ] Commit único final
+- [x] Consolidación final + informe `docs/review-panel-expertos-sync-2026-09-12.md` (13 expertos, 3 oleadas, por experto y por prioridad, con secciones explícitas de estado de v9 y del fix de sync de la auditoría 00)
+- [x] Verificación final (`compileDebugKotlinAndroid`, `jvmTest`) — 242 tests, 0 fallos, 0 errores
+- [x] Commit único final (este archivo + el informe)
+
+**RONDA COMPLETADA.** Panel de 13 expertos ejecutado en 3 oleadas (4/4 en A
+tras 1 reintento por session limit; 5/5 en B con 2/5 reintentados tras
+session limit, trabajo parcial preservado en checkpoint automático; 4/4 en C
+a la primera). Ver `docs/review-panel-expertos-sync-2026-09-12.md` para el
+detalle completo y las propuestas de mayor prioridad pendientes de decisión
+(deploy de `firestore.rules` v10, desactivar proveedor anónimo server-side,
+endurecer `isValidOwnerSuccession`, decisión de producto sobre iOS/JVM).
 
 (Este archivo se actualiza tras cada oleada para poder retomar si la sesión
 se corta a mitad.)
