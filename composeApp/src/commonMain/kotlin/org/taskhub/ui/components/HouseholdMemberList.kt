@@ -35,10 +35,12 @@ import org.taskhub.ui.models.MemberUiState
  * @param memberState estado de carga de los miembros del hogar.
  * @param isMemberActionPending si hay una acción de miembro en curso (deshabilita botones para evitar dobles envíos).
  * @param isAdmin si el usuario actual es admin del hogar (habilita cambiar rol / eliminar miembro).
- * @param ownerUserId el `userId` del owner actual del hogar, para no ofrecer degradar de rol
- * ni expulsar al propio owner (ver [MemberCard]: ambas acciones dejarían el hogar en un estado
- * inconsistente — expulsarlo no puede transferir `ownerId` de verdad porque `firestore.rules`
- * solo permite ese PATCH al propio owner, panel de expertos 2026-09-11 v9 reintento).
+ * @param ownerUserId el `userId` del owner actual del hogar, para no ofrecer degradar su rol vía
+ * el desplegable (ver [MemberCard]: cambiar solo `role` a "child" no transfiere `ownerId`, dejaría
+ * el badge inconsistente y sería auto-uncorregible). Expulsarlo SÍ está permitido desde `f92aa0b`
+ * (`firestore.rules` añadió `isValidOwnerSuccession(hid)`, que permite a un admin no-owner
+ * transferir `ownerId` al expulsar al owner — panel de expertos 2026-09-11 v9 reintento, corregido
+ * con reglas + deploy en vez de mantener este bloqueo de UI, ver cabecera de `firestore.rules` v10).
  * @param myMember el miembro correspondiente al usuario actual, o `null` si aún no se resolvió.
  * @param s resolutor de claves i18n ya fijado al idioma actual.
  * @param onAppreciateClick callback al pulsar "Agradecer" sobre un miembro.
@@ -270,16 +272,12 @@ private fun MemberCard(
                 // Nunca sobre uno mismo: un admin que se auto-degrada a "Miembro"
                 // (y era el único admin) deja el hogar sin nadie que pueda volver
                 // a abrir este menú para revertirlo — bloqueo permanente evitable.
-                // Nunca sobre el owner: ni degradar su rol (badge quedaría
-                // incorrecto y solo él podría revertirlo, pero el menú está
-                // oculto sobre uno mismo) ni expulsarlo son reversibles de
-                // verdad — `firestore.rules` solo permite reasignar `ownerId`
-                // al propio owner, así que un admin expulsándolo no puede
-                // completar la sucesión y el hogar queda en un estado
-                // inconsistente (panel de expertos 2026-09-11 v9 reintento,
-                // hallazgo convergente QA/seguridad). Quien quiera dejar de
-                // ser owner debe abandonar el hogar voluntariamente
-                // (leaveHousehold), que sí transfiere la propiedad primero.
+                // Nunca sobre el owner: cambiar solo su `role` a "child" no
+                // transfiere `ownerId` (son campos independientes), así que
+                // dejaría su badge incorrecto y solo él podría revertirlo —
+                // el menú está oculto sobre uno mismo, y expulsarlo (abajo) es
+                // la vía correcta si se quiere que deje de ser owner por la
+                // fuerza (esa sí transfiere `ownerId` de verdad).
                 if (isAdmin && !isSelf && !isOwner) {
                     var roleMenuExpanded by remember { mutableStateOf(false) }
                     var pendingRole by remember { mutableStateOf<String?>(null) }
@@ -331,7 +329,16 @@ private fun MemberCard(
                             destructive = false
                         )
                     }
+                }
 
+                // Expulsar SÍ está permitido sobre el owner (a diferencia del
+                // cambio de rol de arriba): `deleteMember` transfiere `ownerId`
+                // al sucesor ANTES del soft-delete
+                // (`HouseholdRules.planOwnerSuccession`), y desde `f92aa0b`
+                // `firestore.rules` permite ese PATCH a un admin no-owner
+                // (`isValidOwnerSuccession`) — ya no queda el hogar con
+                // `ownerId` apuntando a un miembro ya expulsado.
+                if (isAdmin && !isSelf) {
                     // Eliminar un miembro es tan destructivo como borrar/salir del
                     // hogar — mismo componente de confirmación (DestructiveConfirmDialog).
                     var showRemoveConfirm by remember { mutableStateOf(false) }

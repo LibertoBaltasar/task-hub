@@ -175,11 +175,26 @@ class FirestoreClient(
                 return@withLock bearerToken
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
-                // Sesión de Google caducada/revocada: sin sesión anónima de
-                // respaldo, el usuario queda sin sesión y debe volver a
-                // iniciarla (ver GoogleAuthManager/App.kt, gate de login).
-                settingsStore.clearGoogleAuth()
+            } catch (e: Exception) {
+                // OJO: distinguir fallo TRANSITORIO (sin red, timeout, 5xx de
+                // Identity Toolkit) de un refresh token realmente inválido/
+                // revocado (4xx, p.ej. TOKEN_EXPIRED/INVALID_REFRESH_TOKEN).
+                // Antes se borraba la sesión de Google persistida ante
+                // CUALQUIER excepción — incluida abrir la app sin conexión,
+                // el caso de uso explícitamente soportado por el bootstrap de
+                // `App.kt` (best-effort, cae a datos cacheados). Sin esta
+                // distinción, cada arranque en frío offline destruía el
+                // `googleRefreshToken` guardado (aunque siguiera siendo
+                // válido): la sesión en memoria de esa ejecución seguía viva,
+                // pero el siguiente arranque en frío (siguiera offline o no)
+                // ya no encontraba credenciales que restaurar y caía a
+                // [GoogleAuthState.SignedOut] — un usuario sin conexión podía
+                // quedar deslogueado permanentemente sin haber hecho nada.
+                // Solo se limpia la sesión ante un fallo NO transitorio (panel
+                // de expertos, red/offline/sync, CRÍTICO).
+                if (!e.isTransientReadFailure()) {
+                    settingsStore.clearGoogleAuth()
+                }
             }
         }
 
@@ -324,8 +339,15 @@ class FirestoreClient(
      * por casi todos los `ScreenModel`) y en Logcat de producción cada vez
      * que la alta/refresco de sesión o el borrado de cuenta tenían un fallo
      * de red (panel 2026-09-11, IMPORTANTE).
+     *
+     * `internal` (no `private`): [FirestoreRepository.requestSignInWithIdp]
+     * (login con Google, `accounts:signInWithIdp?key=...`) reutiliza esta
+     * misma función en vez de duplicar el saneado (panel de expertos,
+     * seguridad, 2026-09-12 — ese endpoint comparte el patrón `?key=$apiKey`
+     * pero se había quedado sin cubrir cuando se introdujo esta redacción
+     * para [refreshFirebaseToken]/[deleteFirebaseAccount]).
      */
-    private fun redactApiKey(e: Exception): Exception {
+    internal fun redactApiKey(e: Exception): Exception {
         val msg = e.message ?: return e
         if (!msg.contains(apiKey)) return e
         return IllegalStateException(msg.replace(apiKey, "***"), e)
@@ -418,11 +440,21 @@ internal suspend fun <T> retryTransientReadFailure(
  * `ConnectTimeoutException` (ktor) heredan de [IOException] en todas las
  * plataformas objetivo, así que capturar [IOException] ya cubre timeouts,
  * DNS y conexión rechazada sin necesidad de listarlas una a una.
+ *
+ * Comprueba también [cause] (no solo el tipo de `this`): `redactApiKey`
+ * (ver más arriba, `refreshFirebaseToken`/`deleteFirebaseAccount`) reenvuelve
+ * un timeout/error de conexión como `IllegalStateException` para poder
+ * censurar la API key embebida en el mensaje de esas excepciones de ktor —
+ * eso perdía el tipo `IOException` original y hacía que
+ * [ensureAuth] tratara un simple timeout de red como un refresh token
+ * inválido (borrando la sesión de Google persistida). `redactApiKey`
+ * conserva la excepción original como `cause`, así que basta con mirar un
+ * nivel más para no perder esa transitoriedad.
  */
 internal fun Exception.isTransientReadFailure(): Boolean = when (this) {
     is FirestoreException -> statusCode >= 500
     is IOException -> true
-    else -> false
+    else -> (cause as? Exception)?.isTransientReadFailure() ?: false
 }
 
 /**

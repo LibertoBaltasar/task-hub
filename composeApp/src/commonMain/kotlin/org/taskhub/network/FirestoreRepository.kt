@@ -210,18 +210,36 @@ class FirestoreRepository(
         )
     }
 
-    /** POST a `accounts:signInWithIdp`. Ver [signInWithGoogle]. */
+    /**
+     * POST a `accounts:signInWithIdp`. Ver [signInWithGoogle].
+     *
+     * Envuelve el fallo con [FirestoreClient.redactApiKey] igual que
+     * [FirestoreClient.refreshFirebaseToken]/[FirestoreClient.deleteFirebaseAccount]:
+     * Ktor mete la URL completa (con `?key=$apiKey`) en el mensaje de las
+     * excepciones de transporte (timeout/sin conexión), y ese mensaje llega
+     * sin filtrar a [GoogleAuthState.Error] → `AuthGateScreen` (el ÚNICO
+     * punto de entrada de la app, ver `docs/google-only-auth-2026-09-12.md`)
+     * — este endpoint compartía el mismo patrón que los otros dos pero se
+     * había quedado sin cubrir por la redacción introducida en el panel de
+     * seguridad 2026-09-11 (panel de expertos, seguridad, 2026-09-12).
+     */
     private suspend fun requestSignInWithIdp(googleIdToken: String): FirebaseAuthResponse =
-        client.post("https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=$apiKey") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                SignInWithIdpRequest(
-                    postBody = "id_token=$googleIdToken&providerId=google.com",
-                    requestUri = "http://localhost",
-                    returnSecureToken = true
+        try {
+            client.post("https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=$apiKey") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    SignInWithIdpRequest(
+                        postBody = "id_token=$googleIdToken&providerId=google.com",
+                        requestUri = "http://localhost",
+                        returnSecureToken = true
+                    )
                 )
-            )
-        }.body()
+            }.body()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw firestoreClient.redactApiKey(e)
+        }
 
     /** Resultado del login con Google. */
     data class GoogleSignInResult(

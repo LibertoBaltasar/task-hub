@@ -133,6 +133,23 @@ class GoogleAuthManager(
      * cacheado del perfil anterior podía seguir resolviéndose para el mismo
      * hogar, atribuyendo compleciones/puntos al miembro equivocado (panel de
      * revisión 2026-09-04, Experto 9/10, NUEVO).
+     *
+     * Limpia también [HouseholdStore] (lista de hogares guardados + espacio
+     * Personal) — sin esto, en un dispositivo familiar compartido, cerrar
+     * sesión de la cuenta A e iniciar sesión con la cuenta B dejaba los
+     * hogares de A en el `HouseholdStore` local; como
+     * [restoreFromCloudOnStartup]/[handleGoogleToken] son ADITIVOS (unión,
+     * nunca podan lo que no reconocen) y [reconcileHouseholds] solo comprueba
+     * que el documento `households/{hid}` siga existiendo (su regla es
+     * `allow get: if signedIn()`, sin exigir membresía — ver
+     * `firestore.rules`), esos hogares de A nunca se podaban: quedaban
+     * visibles (nombre + código de invitación) en la sesión de B y, peor,
+     * [syncHouseholdsToCloud] los subía a `users/{uidB}.householdIds`,
+     * filtrando la fuga a TODOS los dispositivos de la cuenta B (panel
+     * arquitectura 2026-09-12, CRÍTICO — no cubierto por la limpieza de
+     * `currentMemberCache`/`fcmToken`/sondeo de notificaciones de arriba,
+     * que ya contemplaba el mismo escenario de dispositivo compartido pero
+     * no tocaba `HouseholdStore`).
      */
     fun signOut() {
         val uidBeingSignedOut = settingsStore.getGoogleUid()
@@ -143,6 +160,10 @@ class GoogleAuthManager(
         // (panel de notificaciones 2026-09-05, QA — mismo riesgo ya cubierto
         // para currentMemberCache y fcmToken en esta misma función).
         settingsStore.clearNotificationPollState()
+        // Ver KDoc de esta función: sin esto, los hogares de la cuenta
+        // saliente se filtraban a la cuenta entrante en un dispositivo
+        // compartido.
+        householdStore.clearAll()
         _state.value = GoogleAuthState.SignedOut
         scope.launch {
             try {
