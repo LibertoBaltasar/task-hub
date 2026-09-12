@@ -179,6 +179,7 @@ fun HouseholdChatSection(
                     value = newMessageText,
                     onValueChange = onTextChange,
                     modifier = Modifier.weight(1f),
+                    label = { Text(s("messages_label")) },
                     placeholder = { Text(s("messages_hint")) },
                     singleLine = true
                 )

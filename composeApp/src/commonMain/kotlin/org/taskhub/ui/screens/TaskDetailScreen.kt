@@ -773,6 +773,7 @@ private fun TaskDetailContent(
                     value = newCommentText,
                     onValueChange = onCommentTextChange,
                     modifier = Modifier.weight(1f),
+                    label = { Text(s("task_detail_comment_label")) },
                     placeholder = { Text(s("task_detail_comment_placeholder")) },
                     maxLines = 2,
                     singleLine = false,

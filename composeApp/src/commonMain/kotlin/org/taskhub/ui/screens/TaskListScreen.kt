@@ -1216,6 +1216,7 @@ private fun SearchBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 12.dp),
+        label = { Text(s("task_list_search_label")) },
         placeholder = { Text(s("task_list_search_placeholder")) },
         leadingIcon = {
             Icon(
