@@ -349,8 +349,18 @@ class GoogleAuthManager(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Siempre el mensaje genérico (nunca `e.message`, panel de expertos
+            // v10, UX): `repo.signInWithGoogle` puede lanzar un `FirestoreException`
+            // con el `error.message` crudo de Identity Toolkit (p.ej.
+            // "INVALID_IDP_RESPONSE : ...", "TOO_MANY_ATTEMPTS_TRY_LATER") o una
+            // excepción de transporte ya saneada de la apiKey pero con texto de
+            // Ktor sin traducir — `AuthGateScreen` es el ÚNICO punto de entrada
+            // de la app (Google-only, ver `docs/google-only-auth-2026-09-12.md`)
+            // y muestra `authState.message` tal cual, sin pasar por ninguna
+            // capa de traducción de errores (a diferencia del patrón
+            // `appreciateErrorKey`/`donateErrorKey` de `MemberScreenModel.kt`).
             _state.value = GoogleAuthState.Error(
-                e.message ?: AppStrings.get("google_auth_error_sign_in", settingsStore.getLanguage())
+                AppStrings.get("google_auth_error_sign_in", settingsStore.getLanguage())
             )
         }
     }
