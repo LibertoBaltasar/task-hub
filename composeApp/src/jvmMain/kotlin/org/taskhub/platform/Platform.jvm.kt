@@ -1,17 +1,23 @@
 /**
- * `actual` JVM (desktop) de las declaraciones sueltas de [Platform.kt]. La
- * mayoría son no-op o placeholders (compartir, widget, Google Sign-In no
- * están implementados en desktop); `secureRandomInt` sí usa un CSPRNG real
- * (`java.security.SecureRandom`).
+ * `actual` JVM (desktop) de las declaraciones sueltas de [Platform.kt].
+ * Escritorio no tiene hoja de compartir nativa ni widget de home screen, así
+ * que `shareText` cae a portapapeles y el widget queda no-op; Google
+ * Sign-In tampoco está implementado en desktop; `secureRandomInt` sí usa un
+ * CSPRNG real (`java.security.SecureRandom`).
  */
 package org.taskhub.platform
 
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.security.SecureRandom
 
-/** Aún no implementado en JVM/Desktop: solo deja constancia por consola. */
+/**
+ * Sin hoja de compartir nativa en desktop: copia [text] al portapapeles del
+ * sistema (java.awt) como fallback razonable. [title] no se usa (no hay
+ * chooser al que ponerle asunto).
+ */
 actual fun shareText(text: String, title: String) {
-    // TODO: JVM/Desktop implementation
-    println("shareText not implemented on JVM: $title")
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }
 
 /** JVM: no hay widget de escritorio — no-op. */
