@@ -90,7 +90,13 @@ data class CreateProfileScreen(val householdId: String) : Screen {
             Column(modifier = Modifier.fillMaxSize()) {
                 TaskHubTopBar(
                     title = s("create_profile_title"),
-                    onBack = { navigator.pop() }
+                    // Se llega aquí SIEMPRE vía replaceAll (desde CreateHouseholdScreen),
+                    // así que esta es la única pantalla de la pila: navigator.pop() sería
+                    // un no-op y la flecha de atrás no haría nada (bug reportado
+                    // 2026-09-11). canPop cubre el caso general por si esto cambia.
+                    onBack = {
+                        if (navigator.canPop) navigator.pop() else navigator.replaceAll(HomeScreen())
+                    }
                 )
                 Column(
                     modifier = Modifier

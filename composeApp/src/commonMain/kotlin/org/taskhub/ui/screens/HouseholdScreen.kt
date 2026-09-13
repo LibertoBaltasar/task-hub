@@ -371,16 +371,18 @@ data class HouseholdScreen(val householdId: String) : Screen {
                     // pantalla que no dejaba claro en cuál se estaba (ver
                     // panel de expertos v2, Estética #4).
                     title = householdName.ifBlank { "Task Hub" },
-                    // pop() en vez de replaceAll(HomeScreen()): unifica con el atrás del
-                    // sistema (que Voyager ya resuelve como pop() por defecto) y con la
-                    // convención del resto de pantallas de la app (todas usan pop() en su
-                    // flecha de topbar). Antes la flecha y el atrás del sistema llevaban a
-                    // destinos distintos según cómo se hubiera llegado aquí. Si esta
-                    // pantalla se alcanzó vía replaceAll (p.ej. tras crear perfil o unirse
-                    // a un hogar — ver CreateProfileScreen/JoinHouseholdScreen), no hay
-                    // nada que hacer pop(): mismo comportamiento no-op que ya tenía el
-                    // atrás del sistema en ese caso, ahora también en la flecha.
-                    onBack = { navigator.pop() },
+                    // pop() en vez de replaceAll(HomeScreen()) SIEMPRE: unifica con el
+                    // atrás del sistema y con la convención del resto de pantallas de la
+                    // app. Pero si esta pantalla se alcanzó vía replaceAll (tras crear
+                    // perfil o unirse a un hogar — ver CreateProfileScreen/
+                    // JoinHouseholdScreen — o el redirect AlreadyMember de más abajo),
+                    // esta es la ÚNICA pantalla de la pila: pop() sería un no-op y la
+                    // flecha se quedaría sin efecto visible, dejando al usuario atrapado
+                    // (bug reportado 2026-09-11). canPop cubre ambos casos con el mismo
+                    // destino al que ya iría el usuario en el resto de flujos: Home.
+                    onBack = {
+                        if (navigator.canPop) navigator.pop() else navigator.replaceAll(HomeScreen())
+                    },
                     actions = {
                         // Notification bell with badge
                         Box {
