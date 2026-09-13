@@ -62,6 +62,18 @@ class MainActivity : ComponentActivity() {
     private var deepLinkTaskId by mutableStateOf<String?>(null)
     private var deepLinkNotificationId by mutableStateOf<String?>(null)
 
+    // Instancia compartida para toda la vida de la Activity — `consumeDeepLink`
+    // se llama tanto desde `onCreate` como desde cada `onNewIntent` (una
+    // notificación nueva con la Activity ya viva), y antes creaba un
+    // `HouseholdStore(Settings())` nuevo en cada llamada. El Koin de la app
+    // vive solo dentro del árbol de Compose (`KoinApplication` en `App.kt`, ver
+    // su comentario) y no está disponible aquí, antes de `setContent`, así que
+    // no se puede inyectar vía Koin sin mover su instalación fuera de Compose
+    // — cambio de mayor riesgo, descartado por ahora (panel de revisión
+    // 2026-09-11). `Settings()` sin argumentos es segura de invocar aquí (ver
+    // comentario de `NotificationPollWorker`): mismo backing store que usa Koin.
+    private val householdStore by lazy { HouseholdStore(Settings()) }
+
     /**
      * Extrae de [intent] los extras de deep link puestos por una notificación
      * local (ver el comentario de las propiedades `deepLink*` arriba) y
@@ -79,7 +91,7 @@ class MainActivity : ComponentActivity() {
         // legítimo (notificación propia) siempre apunta a un hogar guardado
         // localmente (panel de revisión 2026-09-10, Experto 9, MENOR).
         val isKnownHousehold = householdId != null &&
-            HouseholdStore(Settings()).getSavedHouseholds().any { it.id == householdId }
+            householdStore.getSavedHouseholds().any { it.id == householdId }
         if (isKnownHousehold) {
             deepLinkHouseholdId = householdId
             deepLinkTaskId = intent?.getStringExtra("taskId")
