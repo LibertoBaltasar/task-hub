@@ -5,6 +5,8 @@
  */
 package org.taskhub.platform
 
+import kotlin.concurrent.Volatile
+
 /** Comparte texto mediante la hoja de compartir nativa de cada plataforma. */
 expect fun shareText(text: String, title: String)
 

@@ -24,6 +24,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.Clock
 import kotlinx.io.IOException
 import kotlinx.serialization.json.Json
+import kotlin.concurrent.Volatile
 
 /** Project ID por defecto de Firestore — ver [firestoreBaseUrl]. */
 const val DEFAULT_FIRESTORE_PROJECT_ID = "task-hub-62f98"
