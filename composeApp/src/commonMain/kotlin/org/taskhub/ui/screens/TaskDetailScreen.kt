@@ -22,7 +22,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -747,7 +750,9 @@ private fun TaskDetailContent(
                     ) {
                         Text(
                             text = "⚠️ $sendCommentError",
-                            modifier = Modifier.weight(1f),
+                            // liveRegion: sin esto, TalkBack/VoiceOver no anuncia el
+                            // fallo de envío mientras el foco sigue en el campo de texto.
+                            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
@@ -1007,7 +1012,11 @@ private fun CalendarSyncStatusCard(
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
-                    color = if (status == CalendarSyncStatus.Synced) MaterialTheme.semanticColors.success
+                    // onSuccessContainer (no success) porque este texto va sobre
+                    // colorScheme.surfaceVariant: en el tema Naturaleza claro, success
+                    // (0xFF2E7D32) cae por debajo de 4.5:1 contra ese fondo concreto —
+                    // onSuccessContainer sí pasa AA en las 6 combinaciones tema×modo.
+                    color = if (status == CalendarSyncStatus.Synced) MaterialTheme.semanticColors.onSuccessContainer
                             else MaterialTheme.colorScheme.onSurfaceVariant
                 )
 

@@ -24,7 +24,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -87,7 +89,11 @@ internal fun StatsBody(householdId: String, memberId: String, statsModel: StatsS
                                         tint = MaterialTheme.colorScheme.error
                                     )
                                     Spacer(Modifier.width(8.dp))
-                                    Text(errorMessage, color = MaterialTheme.colorScheme.error)
+                                    Text(
+                                        errorMessage,
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                                    )
                                 }
                                 Spacer(Modifier.height(16.dp))
                                 Button(onClick = { statsModel.loadStats(householdId, memberId, appSettings.currentLanguage) }) { Text(s("tasks_retry")) }

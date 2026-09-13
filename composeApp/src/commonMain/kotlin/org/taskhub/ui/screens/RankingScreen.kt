@@ -15,6 +15,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,7 +80,11 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
                             tint = MaterialTheme.colorScheme.error
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(errorMessage, color = MaterialTheme.colorScheme.error)
+                        Text(
+                            errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        )
                     }
                     Spacer(Modifier.height(16.dp))
                     Button(onClick = { memberModel.loadMembers(householdId) }) { Text(s("tasks_retry")) }

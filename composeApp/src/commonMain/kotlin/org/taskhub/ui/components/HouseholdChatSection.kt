@@ -15,6 +15,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -99,7 +102,8 @@ fun HouseholdChatSection(
                             Text(
                                 text = messagesState.message,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
                         Spacer(Modifier.height(8.dp))
@@ -154,7 +158,7 @@ fun HouseholdChatSection(
                     ) {
                         Text(
                             text = "⚠️ $sendMessageError",
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )

@@ -260,6 +260,7 @@ private fun MemberCard(
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .heightIn(min = 48.dp)
                         // role = Button: semántica estructurada para TalkBack/VoiceOver
                         // (panel v7, Exp. 3, MENOR).
                         .clickable(enabled = member.userId != null, role = Role.Button) { onClick() }

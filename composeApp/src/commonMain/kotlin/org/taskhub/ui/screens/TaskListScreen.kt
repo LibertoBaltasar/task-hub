@@ -35,10 +35,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -283,7 +285,8 @@ data class TaskListScreen(
                                     Text(
                                         text = state.message,
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.error
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(16.dp))
@@ -1000,7 +1003,10 @@ private fun TaskCard(
                     Text(
                         text = "✅ ${formatDeadline(task.lastCompletedDate!!)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.semanticColors.success
+                        // onSuccessContainer (no success): este texto va sobre la card
+                        // surfaceVariant de una tarea completada — en Naturaleza claro,
+                        // success cae por debajo de 4.5:1 contra ese fondo concreto.
+                        color = MaterialTheme.semanticColors.onSuccessContainer
                     )
                 } else if (task.dueDate > 0) {
                     val deadlineText = formatDeadline(task.dueDate)

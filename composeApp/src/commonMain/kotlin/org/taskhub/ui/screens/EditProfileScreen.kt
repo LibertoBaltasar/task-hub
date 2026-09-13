@@ -20,8 +20,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -135,7 +137,10 @@ class EditProfileScreen : Screen {
                                 Text(
                                     state.message,
                                     color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    // Mismo patrón que AuthGateScreen/JoinHouseholdScreen: sin
+                                    // esto, TalkBack/VoiceOver no anuncia el error al aparecer.
+                                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                                 )
                             }
                             Spacer(Modifier.height(16.dp))
@@ -315,7 +320,10 @@ class EditProfileScreen : Screen {
                                 Text(
                                     (saveState as ProfileSaveState.Error).message,
                                     color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    // Mismo patrón que AuthGateScreen/JoinHouseholdScreen: sin
+                                    // esto, TalkBack/VoiceOver no anuncia el error al aparecer.
+                                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                                 )
                             }
                         }
