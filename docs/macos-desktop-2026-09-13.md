@@ -19,47 +19,69 @@ código real (`composeApp/src/jvmMain`) y decisión de qué implementar.
   una ventana real (no disponible en este entorno Linux) para ser más que
   especulativa.
 
-## NO implementado — requiere decisión (bloqueo principal)
+## Implementado (encargo 2026-09-13, segunda pasada) — Google Sign-In real en desktop
 
-**Google Sign-In en desktop** (`launchGoogleSignIn()` en `Platform.jvm.kt`,
-línea ~27) sigue señalizando "sin token" inmediatamente. Esto YA estaba
-documentado como pendiente de decisión de producto en
-`docs/google-only-auth-2026-09-12.md` (sección "SOLO PROPUESTA — requiere
-decisión", punto 1), de cuando se eliminó el modo anónimo: sin él, JVM/
-Desktop se queda permanentemente en `AuthGateScreen`.
+`launchGoogleSignIn()` (`Platform.jvm.kt`) ya no es un no-op: lanza el flujo
+OAuth 2.0 authorization-code + PKCE con redirect loopback completo, en un
+`CoroutineScope(Dispatchers.IO)` propio, sin bloquear el hilo de UI.
 
-El encargo pedía implementar el flujo OAuth completo (navegador + loopback
-callback local + intercambio por id_token vía `signInWithIdp`, que ya existe
-en `commonMain`). No se ha implementado porque requiere, antes que nada,
-**infraestructura nueva fuera del repo**: registrar un OAuth Client ID de
-tipo "Desktop app" en Google Cloud Console para el proyecto
-`task-hub-62f98` (distinto del client ID Android ya configurado — usa el
-flujo authorization-code + PKCE con redirect a loopback, y Google exige un
-`client_secret` embebido aunque para apps instaladas no se trate como
-secreto real). Eso implica acceso a la consola de Google Cloud del proyecto,
-generar credenciales nuevas y decidir cómo se empaquetan/distribuyen en el
-binario — justo el tipo de infraestructura/decisión de producto que este
-encargo automático no debe resolver por su cuenta. Entregar el código del
-flujo sin un client ID real sería además código no verificable end-to-end.
+**Archivos nuevos:**
+- `composeApp/src/jvmMain/kotlin/org/taskhub/platform/GoogleOAuthConfig.jvm.kt`
+  — `CLIENT_ID`/`CLIENT_SECRET`, vacíos por defecto, con el KDoc de dónde
+  rellenarlos.
+- `composeApp/src/jvmMain/kotlin/org/taskhub/platform/GoogleDesktopSignInHelper.kt`
+  — todo el flujo: genera `state` + PKCE (`code_verifier`/`code_challenge`
+  S256) con `SecureRandom`, abre el navegador del sistema
+  (`java.awt.Desktop.browse`) contra el `authorization_endpoint` de Google,
+  levanta un `ServerSocket` efímero en `127.0.0.1` para el callback
+  (`/callback?code=...&state=...`), valida `state`, sirve una página HTML de
+  cierre, y canjea el `code` por tokens en `POST oauth2.googleapis.com/token`
+  (Ktor, motor `ktor-client-java` ya presente en `jvmMain`) para obtener el
+  `id_token`.
 
-**Empaquetado DMG firmado/notarizado** (punto 4 del encargo) requiere un Mac
-con Xcode/`codesign` y una cuenta de Apple Developer — despliegue externo
-que no se puede hacer desde este entorno Linux ni sin esas credenciales.
+**Archivo modificado:**
+- `composeApp/src/jvmMain/kotlin/org/taskhub/platform/Platform.jvm.kt` —
+  `launchGoogleSignIn()` delega en `GoogleDesktopSignInHelper.signIn()` y
+  entrega el resultado a `GoogleSignInResultHolder.setResult(...)` EXACTAMENTE
+  igual que Android (`""` si falla/cancela/expira/config vacía, el id_token si
+  hay éxito) — de ahí en adelante el flujo es idéntico al de Android:
+  `GoogleAuthManager` lo intercambia por credenciales de Firebase vía
+  `accounts:signInWithIdp` (ya existente en `commonMain`, sin tocar).
 
-## Siguiente paso sugerido (fuera de este encargo)
+**Cómo probarlo en un Mac real:**
+1. En Google Cloud Console del proyecto `task-hub-62f98` → APIs y servicios
+   → Credenciales → Crear credenciales → ID de cliente de OAuth → tipo
+   **"Aplicación de escritorio"**. Copiar el `CLIENT_ID`/`CLIENT_SECRET`
+   resultantes en `GoogleOAuthConfig.jvm.kt`.
+2. Verificar en Firebase Console → Authentication → Sign-in method → Google
+   que ese nuevo client ID esté en la lista de "OAuth client IDs" aceptados
+   por el proveedor (si Firebase rechaza el `id_token` por audiencia
+   desconocida, añadirlo ahí) — no se ha podido comprobar este paso desde
+   este entorno.
+3. `./gradlew :composeApp:run` y pulsar "Iniciar sesión con Google" en
+   `AuthGateScreen`: se abre el navegador por defecto, tras el consentimiento
+   redirige a `http://127.0.0.1:<puerto>/callback`, la pestaña muestra "Ya
+   puedes cerrar esta pestaña" y la app debería quedar en `SignedIn`.
 
-1. Decidir y crear en Google Cloud Console un OAuth Client ID "Desktop app"
-   para `task-hub-62f98` (Liberto, con acceso al proyecto).
-2. Con ese client ID, un encargo de código puede implementar el flujo
-   loopback + `signInWithIdp` sobre `GoogleAuthManager`/
-   `GoogleSignInResultHolder` ya existentes.
-3. El empaquetado/firma del DMG es un paso manual en Mac, no automatizable
-   por Claude.
+**Qué no se ha podido verificar en este entorno** (Linux, sin client ID real
+ni navegador interactivo): el flujo end-to-end completo (apertura de
+navegador, consentimiento real, canje de código, y si Firebase acepta el
+`id_token` de un client ID "Desktop app" sin configuración adicional en la
+consola de Firebase). El código compila y las piezas (PKCE, parseo de la
+query del callback, submitForm) se han revisado a mano contra la spec
+(RFC 7636 para PKCE, RFC 6749 para el authorization code flow), pero no hay
+sustituto de probarlo con credenciales reales en un Mac.
+
+**Empaquetado DMG firmado/notarizado** (punto 4 del encargo original) sigue
+sin implementar — requiere un Mac con Xcode/`codesign` y una cuenta de Apple
+Developer, fuera del alcance de este entorno.
 
 ## Verificación
 
-- `./gradlew :composeApp:compileDebugKotlinAndroid :composeApp:compileKotlinJvm --console=plain` → **BUILD SUCCESSFUL**.
+- `./gradlew :composeApp:compileDebugKotlinAndroid --console=plain` → **BUILD SUCCESSFUL**.
+- `./gradlew :composeApp:compileKotlinJvm --console=plain` → **BUILD SUCCESSFUL**.
 - `./gradlew :composeApp:jvmTest --console=plain` → **BUILD SUCCESSFUL**. Conteo
   real de `composeApp/build/test-results/jvmTest/*.xml`: **257 tests, 0
-  failures, 0 errors**.
+  failures, 0 errors** (sin tests nuevos: el flujo OAuth no es verificable
+  sin credenciales reales ni navegador interactivo en este entorno).
 - No se ha hecho `git push` ni se ha desplegado nada.
