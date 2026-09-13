@@ -31,8 +31,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -347,7 +349,12 @@ data class CreateTaskScreen(
                                     Spacer(Modifier.width(8.dp))
                                     Text(
                                         text = (actionState as TaskActionState.Error).message,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        // Mismo patrón que AuthGateScreen/JoinHouseholdScreen:
+                                        // sin esto, TalkBack/VoiceOver no anuncia el error al
+                                        // aparecer, y el usuario no se entera de que "Guardar"
+                                        // falló si no navega manualmente hasta este texto.
+                                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                                     )
                                 }
                             }
@@ -537,6 +544,14 @@ data class CreateTaskScreen(
                                         if (key == "weekly" && recurrenceDays.isEmpty()) {
                                             recurrenceDays = (1..7).toSet()
                                         }
+                                        // Mismo problema que "semanal" sin días: "mensual"
+                                        // sin recurrenceDay caía silenciosamente en el
+                                        // camino de RecurrenceRules para "sin día fijado"
+                                        // (se comporta como diaria). Prerellenar con el
+                                        // día de hoy evita ese estado ambiguo por defecto.
+                                        if (key == "monthly" && recurrenceDay == null) {
+                                            recurrenceDay = today.dayOfMonth
+                                        }
                                     },
                                     label = { Text(label) },
                                     leadingIcon = filterChipCheckIcon(frequency == key),
@@ -702,6 +717,13 @@ data class CreateTaskScreen(
                                                 contentDescription = null,
                                                 modifier = Modifier.size(FilterChipDefaults.IconSize)
                                             )
+                                        },
+                                        // El chip solo anunciaba el texto de la etiqueta,
+                                        // sin indicar que pulsarlo la elimina (el icono va
+                                        // con contentDescription = null a propósito, para
+                                        // no duplicar el anuncio).
+                                        modifier = Modifier.semantics {
+                                            contentDescription = s("create_task_remove_tag_named").replace("%s", tag)
                                         }
                                     )
                                 }

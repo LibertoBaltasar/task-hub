@@ -691,6 +691,22 @@ class TaskScreenModel(
                 )
                 _reassignState.value = TaskActionState.Success
                 loadTaskDetail(householdId, taskId)
+
+                // Los puntos/historial ya se transfirieron en el servidor,
+                // pero a diferencia de completeTask/completeAssignment nadie
+                // revisaba logros para el nuevo autor de la compleción — un
+                // miembro podía cruzar un umbral (p.ej. "10 tareas") por una
+                // reasignación y no desbloquear el logro hasta su siguiente
+                // compleción propia. Best-effort, igual que en los otros dos
+                // flujos: un fallo aquí no debe pisar el Success ya publicado.
+                try {
+                    val newMember = repo.getMembers(householdId).find { it.id == newMemberId }
+                    if (newMember != null) {
+                        checkAndAwardAchievements(householdId, newMember)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

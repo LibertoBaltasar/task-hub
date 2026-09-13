@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import org.taskhub.network.FIRESTORE_GONE_MESSAGE
 import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.MAX_POLLED_NOTIFICATIONS
 import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.NotificationResponse
 import org.taskhub.storage.SettingsStore
@@ -54,18 +55,6 @@ sealed class NotificationUiState {
     /** Fallo al cargar; [message] ya viene traducido/listo para mostrar. */
     data class Error(val message: String) : NotificationUiState()
 }
-
-/**
- * Tope de notificaciones que trae [NotificationScreenModel.refreshUnreadCount]
- * (badge de la campanita, sondeado cada 30s desde
- * [org.taskhub.ui.screens.HouseholdScreen]) — antes releía la subcolección
- * `notifications` COMPLETA en cada ciclo (tarjeta kanban "Paginación
- * getMessages/getNotifications", 2026-09-13). No afecta a
- * [NotificationScreenModel.loadNotifications] (la pantalla de lista completa,
- * a demanda): capar ahí escondería para siempre una notificación sin leer
- * más antigua que este tope.
- */
-private const val MAX_POLLED_NOTIFICATIONS = 300
 
 /**
  * ScreenModel de notificaciones in-app. Carga las notificaciones de un
