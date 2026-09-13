@@ -11,6 +11,8 @@ captures/
 iosApp/Pods/
 iosApp/*.xcworkspace
 iosApp/DerivedData/
+**/xcuserdata/
+*.xcuserstate
 
 # Desktop
 *.dmg

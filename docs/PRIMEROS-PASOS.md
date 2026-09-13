@@ -59,13 +59,27 @@ Confirmado con `./gradlew tasks --all`: existen también `composeApp:runDistribu
 
 ### iOS
 
-No se ha encontrado documentación en el repo de un flujo de "ejecutar en simulador" con un único comando (no hay carpeta `iosApp/` con proyecto Xcode en este checkout). Lo que sí expone Gradle (confirmado con `./gradlew tasks --all`, solo compila, no lanza el simulador):
+**Requiere macOS + Xcode** (orientativo 16+, ver tabla de requisitos arriba). Este repo incluye ya el proyecto host `iosApp/iosApp.xcodeproj`, que consume el framework `ComposeApp` generado por `composeApp/build.gradle.kts` (`baseName = "ComposeApp"`, `isStatic = true`, deployment target iOS 13.0).
+
+**Abrir y ejecutar en simulador/dispositivo:**
+
+1. Clona/actualiza el repo en un Mac con Xcode instalado.
+2. Abre `iosApp/iosApp.xcodeproj` con Xcode (doble clic, o `open iosApp/iosApp.xcodeproj`).
+3. Selecciona el target **iosApp** y, en el desplegable de destino, un simulador (p. ej. "iPhone 15") o un dispositivo físico conectado.
+4. Si vas a ejecutar en un dispositivo físico (no en simulador), rellena `TEAM_ID` en `iosApp/Configuration/Config.xcconfig` con tu Team ID de Apple Developer (10 caracteres), o configúralo directamente en Xcode → target `iosApp` → pestaña **Signing & Capabilities** → Team. En simulador no hace falta.
+5. Pulsa ▶️ (Run). El primer build phase, **"Compile Kotlin Framework"**, invoca automáticamente `./gradlew :composeApp:embedAndSignAppleFrameworkForXcode` para compilar el framework Kotlin/Native y copiarlo a `composeApp/build/xcode-frameworks/<Configuration>/<SDK>`; después Xcode compila y enlaza la app Swift contra ese framework. No hace falta ejecutar Gradle a mano — Xcode lo dispara en cada build.
+
+**Regenerar el framework manualmente** (por ejemplo para depurar el paso de compilación sin abrir Xcode):
 
 ```bash
+./gradlew :composeApp:embedAndSignAppleFrameworkForXcode
+# o, solo para compilar sin firmar/incrustar:
 ./gradlew :composeApp:iosSimulatorArm64Binaries   # solo macOS, requiere Xcode + toolchain de Kotlin/Native
 ```
 
-Para ejecutar de verdad en un simulador/dispositivo hace falta un proyecto Xcode que consuma el framework `ComposeApp` generado (`baseName = "ComposeApp"` en `composeApp/build.gradle.kts`); no hay uno versionado en este repo — confirmar con el dueño del proyecto si existe en otro sitio o si aún no se ha creado. Ningún doc de `docs/` reporta haber compilado o probado el target iOS en este entorno (varios, p. ej. `docs/refactor-arquitectura-2026-08-31.md` y las rondas de panel de expertos, señalan explícitamente que no hay toolchain de Xcode/macOS disponible para verificarlo).
+**Pendiente / fuera de alcance de este host app:** Google Sign-In en iOS (URL schemes, `GIDSignIn`, client ID) no está configurado todavía — queda para un encargo posterior sobre `iosApp/`.
+
+Ningún entorno de este repo tiene Xcode/macOS disponible para compilar o ejecutar el target iOS realmente (confirmado con varios docs, p. ej. `docs/refactor-arquitectura-2026-08-31.md`); el proyecto Xcode se ha creado siguiendo la plantilla canónica de Compose Multiplatform 1.7.x pero su compilación real debe verificarse en un Mac.
 
 ---
 

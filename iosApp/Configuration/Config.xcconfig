@@ -1,0 +1,5 @@
+// Rellenar TEAM_ID en Xcode: Signing & Capabilities → Team, o aquí
+// directamente con el Team ID (10 caracteres) de tu cuenta de Apple Developer.
+TEAM_ID=
+BUNDLE_ID=org.taskhub
+APP_NAME=Task Hub
