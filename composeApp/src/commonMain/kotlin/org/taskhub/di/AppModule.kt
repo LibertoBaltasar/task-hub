@@ -29,6 +29,7 @@ import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
 import org.taskhub.storage.createSecureStore
 import org.taskhub.ui.models.CalendarSyncManager
+import org.taskhub.ui.models.CalendarSyncManagerImpl
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HomeScreenModel
@@ -119,7 +120,7 @@ val appModule: Module = module {
     single { GoogleAuthManager(repo = get(), settingsStore = get(), householdStore = get()) } onClose { it?.close() }
 
     // Orquesta la sincronización automática de tareas ↔ Google Calendar
-    single { CalendarSyncManager(repo = get(), calendarRepo = get(), settingsStore = get(), authManager = get()) }
+    single<CalendarSyncManager> { CalendarSyncManagerImpl(repo = get(), calendarRepo = get(), settingsStore = get(), authManager = get()) }
 
     // Platform notification scheduler
     single { createNotificationScheduler() }

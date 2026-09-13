@@ -96,7 +96,7 @@ const val RETENTION_90_DAYS_MILLIS = 90L * 24 * 60 * 60 * 1000
  * ese mismo [baseUrl] ya resuelto y construyen sus propias rutas con el mismo
  * patrón.
  */
-class FirestoreRepository(
+open class FirestoreRepository(
     private val projectId: String = DEFAULT_FIRESTORE_PROJECT_ID,
     private val apiKey: String = DEFAULT_API_KEY,
     private val taskCache: TaskCache,
@@ -158,7 +158,7 @@ class FirestoreRepository(
      * false ante cualquier fallo de red (best-effort, igual que el código que
      * sustituye).
      */
-    suspend fun isHouseholdOwner(householdId: String): Boolean {
+    open suspend fun isHouseholdOwner(householdId: String): Boolean {
         val localId = getLocalId() ?: return false
         val household = try {
             getHousehold(householdId)
@@ -360,7 +360,7 @@ class FirestoreRepository(
      * aquí solo retrasaría varios segundos el aviso de "sin conexión" en la
      * UI ([org.taskhub.ui.models.TaskScreenModel] lo usa para `_isOffline`).
      */
-    suspend fun isOnline(): Boolean {
+    open suspend fun isOnline(): Boolean {
         return try {
             client.get("$baseUrl/households/__ping__") {
                 parameter("key", apiKey)
@@ -421,7 +421,7 @@ class FirestoreRepository(
      * would keep showing a "ghost" household forever). Callers that need to prune
      * local state should catch [FirestoreException] and check [FirestoreException.statusCode].
      */
-    suspend fun getHousehold(id: String): HouseholdResponse = householdRepository.getHousehold(id)
+    open suspend fun getHousehold(id: String): HouseholdResponse = householdRepository.getHousehold(id)
 
     /**
      * Reconcilia los hogares guardados localmente en [store] contra Firestore
@@ -771,7 +771,7 @@ class FirestoreRepository(
     suspend fun isCurrentUserMember(householdId: String): Boolean =
         memberRepository.isCurrentUserMember(householdId)
 
-    suspend fun getMembers(householdId: String): List<MemberResponse> = memberRepository.getMembers(householdId)
+    open suspend fun getMembers(householdId: String): List<MemberResponse> = memberRepository.getMembers(householdId)
 
     suspend fun createMember(
         householdId: String,
@@ -783,7 +783,7 @@ class FirestoreRepository(
     ): MemberResponse = memberRepository.createMember(householdId, displayName, role, avatarUrl, userId, inviteCode)
 
     /** Ver [MemberRepository.resolveCurrentMember]. */
-    suspend fun resolveCurrentMember(householdId: String): String = memberRepository.resolveCurrentMember(householdId)
+    open suspend fun resolveCurrentMember(householdId: String): String = memberRepository.resolveCurrentMember(householdId)
 
     suspend fun ensurePersonalMember(householdId: String): String = memberRepository.ensurePersonalMember(householdId)
 
@@ -960,7 +960,7 @@ class FirestoreRepository(
      */
     suspend fun deleteFirebaseAccount() = firestoreClient.deleteFirebaseAccount()
 
-    suspend fun updateMemberStreak(
+    open suspend fun updateMemberStreak(
         householdId: String,
         memberId: String,
         currentStreak: Int,
@@ -995,10 +995,10 @@ class FirestoreRepository(
         amount: Int
     ): MemberRepository.DonateResult = memberRepository.donatePoints(householdId, fromMemberId, toMemberId, amount)
 
-    suspend fun getMemberAchievements(householdId: String, memberId: String): Set<String> =
+    open suspend fun getMemberAchievements(householdId: String, memberId: String): Set<String> =
         memberRepository.getMemberAchievements(householdId, memberId)
 
-    suspend fun addMemberAchievement(householdId: String, memberId: String, achievementId: String) =
+    open suspend fun addMemberAchievement(householdId: String, memberId: String, achievementId: String) =
         memberRepository.addMemberAchievement(householdId, memberId, achievementId)
 
     // ────────────────────────────────────────────────────────
@@ -1016,7 +1016,7 @@ class FirestoreRepository(
     // esa es la capa que conoce `cloudFunctionsClient`; no hay lógica de
     // negocio residual que mover — vive en `functions/src/`.
 
-    suspend fun createTask(
+    open suspend fun createTask(
         householdId: String,
         createdBy: String,
         title: String,
@@ -1039,10 +1039,10 @@ class FirestoreRepository(
         dueDate, assignmentRotation
     )
 
-    suspend fun getTasks(householdId: String): List<TaskResponse> = taskRepository.getTasks(householdId)
+    open suspend fun getTasks(householdId: String): List<TaskResponse> = taskRepository.getTasks(householdId)
 
     /** Get a single task by id. Used where only one task is needed (avoids an N+1 full-list fetch). */
-    suspend fun getTask(householdId: String, taskId: String): TaskResponse = taskRepository.getTask(householdId, taskId)
+    open suspend fun getTask(householdId: String, taskId: String): TaskResponse = taskRepository.getTask(householdId, taskId)
 
     /** Resultado de [completeTask]: puntos realmente otorgados (tras penalización) y puntualidad. */
     data class TaskCompletionResult(val completedAt: Long, val pointsAwarded: Int, val onTime: Boolean)
@@ -1105,7 +1105,7 @@ class FirestoreRepository(
      * se mapea a [TaskCompletionConflictException] (mismo tratamiento en
      * `TaskScreenModel` que antes, cero cambio en ese catch).
      */
-    suspend fun completeTask(
+    open suspend fun completeTask(
         householdId: String,
         taskId: String,
         memberId: String,
@@ -1165,7 +1165,7 @@ class FirestoreRepository(
      * a mano. Streak/racha del miembro sigue siendo responsabilidad del
      * cliente (la función no la toca) — ver `TaskScreenModel.undoCompleteTask`.
      */
-    suspend fun undoTaskCompletion(householdId: String, taskId: String, completedAt: Long) {
+    open suspend fun undoTaskCompletion(householdId: String, taskId: String, completedAt: Long) {
         cloudFunctionsClient.call<UndoTaskCompletionRequest, UndoTaskCompletionResult>(
             "undoTaskCompletion",
             UndoTaskCompletionRequest(householdId = householdId, taskId = taskId, completedAt = completedAt)
@@ -1177,7 +1177,7 @@ class FirestoreRepository(
     }
 
     /** Get all task history records for a household. */
-    suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = taskRepository.getTaskHistory(householdId)
+    open suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = taskRepository.getTaskHistory(householdId)
 
     /** Ver [TaskRepository.purgeOldTaskHistory]. */
     suspend fun purgeOldTaskHistory(householdId: String, all: List<TaskHistoryResponse>, maxAgeMillis: Long = RETENTION_90_DAYS_MILLIS) =
@@ -1199,7 +1199,7 @@ class FirestoreRepository(
      * no se reenvía a la función, que deriva el fallback de `task.points`
      * ella misma si no hay registro de historial.
      */
-    suspend fun reassignTaskCompletion(
+    open suspend fun reassignTaskCompletion(
         householdId: String,
         taskId: String,
         taskPoints: Int,
@@ -1216,7 +1216,7 @@ class FirestoreRepository(
     }
 
     /** Assign a task to one or more members with a due date. */
-    suspend fun assignTask(
+    open suspend fun assignTask(
         householdId: String,
         taskId: String,
         memberIds: List<String>,
@@ -1228,7 +1228,7 @@ class FirestoreRepository(
         taskRepository.assignTask(householdId, taskId, memberIds, mandatory, dueDate, taskTitle, assignedByMemberId)
 
     /** Get all assignments for a specific task. */
-    suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> =
+    open suspend fun getAssignments(householdId: String, taskId: String): List<TaskAssignmentResponse> =
         taskRepository.getAssignments(householdId, taskId)
 
     /** Borra todas las asignaciones de una tarea (para reasignar al editar). */
@@ -1254,7 +1254,7 @@ class FirestoreRepository(
      * antiguas puede dejar antiguas + nuevas duplicadas, un estado peor que
      * "sin cambios" pero mejor que "sin asignaciones").
      */
-    suspend fun replaceAssignments(
+    open suspend fun replaceAssignments(
         householdId: String,
         taskId: String,
         memberIds: List<String>,
@@ -1265,11 +1265,11 @@ class FirestoreRepository(
         taskRepository.replaceAssignments(householdId, taskId, memberIds, mandatory, dueDate, taskTitle)
 
     /** Get all assignments across all tasks for a household (peticiones en paralelo). */
-    suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> =
+    open suspend fun getAllAssignments(householdId: String): List<TaskAssignmentResponse> =
         taskRepository.getAllAssignments(householdId)
 
     /** Ver [TaskRepository.getAllAssignments] (overload que reutiliza tareas ya cargadas). */
-    suspend fun getAllAssignments(householdId: String, tasks: List<TaskResponse>): List<TaskAssignmentResponse> =
+    open suspend fun getAllAssignments(householdId: String, tasks: List<TaskResponse>): List<TaskAssignmentResponse> =
         taskRepository.getAllAssignments(householdId, tasks)
 
     /**
@@ -1286,7 +1286,7 @@ class FirestoreRepository(
      * [AssignmentCompletionConflictException] (mismo tratamiento en
      * `TaskScreenModel` que antes).
      */
-    suspend fun completeAssignment(
+    open suspend fun completeAssignment(
         householdId: String,
         taskId: String,
         task: TaskResponse,
@@ -1317,7 +1317,7 @@ class FirestoreRepository(
      * Vincula/desvincula el evento de Google Calendar de una asignación.
      * `googleEventId = null` limpia el campo (p. ej. tras borrar el evento).
      */
-    suspend fun updateAssignmentGoogleEventId(
+    open suspend fun updateAssignmentGoogleEventId(
         householdId: String,
         taskId: String,
         assignmentId: String,
@@ -1328,7 +1328,7 @@ class FirestoreRepository(
     //  Task helpers
     // ────────────────────────────────────────────────────────
 
-    suspend fun updateTask(
+    open suspend fun updateTask(
         householdId: String,
         taskId: String,
         title: String,
@@ -1356,7 +1356,7 @@ class FirestoreRepository(
      * Update only the subtasks array on a task document.
      * Used for quick toggling of individual subtask checkboxes.
      */
-    suspend fun updateSubtasks(
+    open suspend fun updateSubtasks(
         householdId: String,
         taskId: String,
         subtasks: List<Subtask>
@@ -1365,7 +1365,7 @@ class FirestoreRepository(
     /**
      * Delete a task document.
      */
-    suspend fun deleteTask(householdId: String, taskId: String) = taskRepository.deleteTask(householdId, taskId)
+    open suspend fun deleteTask(householdId: String, taskId: String) = taskRepository.deleteTask(householdId, taskId)
 
     // ────────────────────────────────────────────────────────
     //  Comments (subcollection under households/{id}/tasks/{taskId})

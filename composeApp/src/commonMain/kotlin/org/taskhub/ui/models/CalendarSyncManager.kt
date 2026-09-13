@@ -21,6 +21,46 @@ import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.storage.SettingsStore
 
 /**
+ * Contrato de [CalendarSyncManagerImpl] — extraído para poder inyectar un
+ * doble de prueba en tests de clase (p. ej. [org.taskhub.ui.models.TaskScreenModel])
+ * sin construir la cadena real [GoogleAuthManager]/[GoogleCalendarRepository]
+ * (la primera lanza una coroutine sobre `Dispatchers.Main` en su `init`, poco
+ * práctico de instanciar en un test JVM).
+ */
+interface CalendarSyncManager {
+    suspend fun onTaskAssigned(
+        householdId: String,
+        householdName: String,
+        isPersonal: Boolean,
+        assignments: List<TaskAssignmentResponse>
+    )
+
+    suspend fun onTaskUnassigned(householdId: String, assignment: TaskAssignmentResponse)
+
+    suspend fun onTaskCompleted(householdId: String, assignment: TaskAssignmentResponse)
+
+    suspend fun onDueDateChanged(
+        householdId: String,
+        householdName: String,
+        isPersonal: Boolean,
+        assignment: TaskAssignmentResponse,
+        newDueDate: Long,
+        taskTitle: String,
+        taskDescription: String = ""
+    )
+
+    suspend fun reconcile(householdId: String, householdName: String, isPersonal: Boolean)
+
+    suspend fun syncNow(
+        householdId: String,
+        householdName: String,
+        isPersonal: Boolean,
+        assignment: TaskAssignmentResponse,
+        task: org.taskhub.network.models.TaskResponse
+    ): Boolean
+}
+
+/**
  * Orquesta la sincronización automática de tareas con fecha → eventos en un
  * calendario de Google Calendar dedicado, uno por (usuario, espacio):
  * "Tareas personal" para el espacio Personal, "Tareas <hogar>" para hogares
@@ -35,12 +75,12 @@ import org.taskhub.storage.SettingsStore
  * se salta en silencio — [reconcile] se encarga de recuperar el estado más
  * tarde, sin bloquear la UI ni el flujo de tareas.
  */
-class CalendarSyncManager(
+class CalendarSyncManagerImpl(
     private val repo: FirestoreRepository,
     private val calendarRepo: GoogleCalendarRepository,
     private val settingsStore: SettingsStore,
     private val authManager: GoogleAuthManager
-) {
+) : CalendarSyncManager {
 
     /** Nombre del calendario dedicado para este espacio. */
     private fun calendarName(householdName: String, isPersonal: Boolean): String =
@@ -97,7 +137,7 @@ class CalendarSyncManager(
      * cada asignación mía con fecha, y persiste el `googleEventId`. Las
      * asignaciones sin fecha (`dueDate == 0`) o de otros miembros se ignoran.
      */
-    suspend fun onTaskAssigned(
+    override suspend fun onTaskAssigned(
         householdId: String,
         householdName: String,
         isPersonal: Boolean,
@@ -136,26 +176,26 @@ class CalendarSyncManager(
     }
 
     /** Al desasignar/borrar una tarea: borra el evento vinculado (si lo hay) y limpia el campo. */
-    suspend fun onTaskUnassigned(householdId: String, assignment: TaskAssignmentResponse) {
+    override suspend fun onTaskUnassigned(householdId: String, assignment: TaskAssignmentResponse) {
         if (!settingsStore.isCalendarSyncEnabled()) return
         deleteEventForAssignment(householdId, assignment)
     }
 
     /** Al completar una tarea: el evento ya no tiene sentido, se borra igual que al desasignar. */
-    suspend fun onTaskCompleted(householdId: String, assignment: TaskAssignmentResponse) {
+    override suspend fun onTaskCompleted(householdId: String, assignment: TaskAssignmentResponse) {
         if (!settingsStore.isCalendarSyncEnabled()) return
         deleteEventForAssignment(householdId, assignment)
     }
 
     /** Si cambia la fecha límite de una asignación ya sincronizada, actualiza el evento existente. */
-    suspend fun onDueDateChanged(
+    override suspend fun onDueDateChanged(
         householdId: String,
         householdName: String,
         isPersonal: Boolean,
         assignment: TaskAssignmentResponse,
         newDueDate: Long,
         taskTitle: String,
-        taskDescription: String = ""
+        taskDescription: String
     ) {
         if (!settingsStore.isCalendarSyncEnabled()) return
         try {
@@ -204,7 +244,7 @@ class CalendarSyncManager(
      * fecha que aún no tienen `googleEventId` (p. ej. porque el token no estaba
      * vinculado cuando se crearon). Idempotente — no toca nada que ya esté bien.
      */
-    suspend fun reconcile(householdId: String, householdName: String, isPersonal: Boolean) {
+    override suspend fun reconcile(householdId: String, householdName: String, isPersonal: Boolean) {
         if (!settingsStore.isCalendarSyncEnabled()) return
         try {
             val myMemberId = repo.resolveCurrentMember(householdId)
@@ -254,7 +294,7 @@ class CalendarSyncManager(
      * interruptor de sincronización automática — es una acción explícita del
      * usuario. Devuelve true si el evento quedó creado y enlazado.
      */
-    suspend fun syncNow(
+    override suspend fun syncNow(
         householdId: String,
         householdName: String,
         isPersonal: Boolean,
