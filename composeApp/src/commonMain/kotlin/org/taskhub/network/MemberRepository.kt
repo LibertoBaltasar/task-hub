@@ -139,11 +139,11 @@ class MemberRepository(
      */
     suspend fun getMembers(householdId: String): List<MemberResponse> {
         return try {
-            val response: FirestoreListResponse = client.getWithRetry("$baseUrl/households/$householdId/members") {
+            val documents = client.listAllDocuments("$baseUrl/households/$householdId/members") {
                 withAuth()
-            }.body()
+            }
 
-            val members = response.documents
+            val members = documents
                 .map { toMemberResponse(it, householdId) }
                 .filter { it.leftAt == 0L }  // ocultar miembros que abandonaron (soft-delete)
             taskCache.cacheMembers(householdId, members)

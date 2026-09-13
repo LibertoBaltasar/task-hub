@@ -147,6 +147,7 @@ class MemberScreenModel(
 
     /** Crea un miembro nuevo (p.ej. perfil infantil) en el hogar y recarga la lista. */
     fun addMember(householdId: String, displayName: String, role: String, userId: String? = null, inviteCode: String? = null) {
+        if (_uiState.value == MemberUiState.Loading) return // evita doble-tap
         screenModelScope.launch {
             _uiState.value = MemberUiState.Loading
             try {
@@ -258,6 +259,7 @@ class MemberScreenModel(
         cost: Int,
         icon: String
     ) {
+        if (_rewardActionState.value == RewardActionState.Loading) return // evita doble-tap
         screenModelScope.launch {
             _rewardActionState.value = RewardActionState.Loading
             try {
@@ -357,16 +359,23 @@ class MemberScreenModel(
         if (_appreciateActionState.value == AppreciateActionState.Loading) return
         screenModelScope.launch {
             _appreciateActionState.value = AppreciateActionState.Loading
-            when (val result = repo.appreciateMember(householdId, fromMemberId, toMemberId, amount)) {
-                is MemberRepository.AppreciateResult.Ok -> {
-                    loadMembers(householdId)
-                    _appreciateActionState.value = AppreciateActionState.Success(result.remaining)
-                    buzz(HapticKind.SUCCESS)
+            try {
+                when (val result = repo.appreciateMember(householdId, fromMemberId, toMemberId, amount)) {
+                    is MemberRepository.AppreciateResult.Ok -> {
+                        loadMembers(householdId)
+                        _appreciateActionState.value = AppreciateActionState.Success(result.remaining)
+                        buzz(HapticKind.SUCCESS)
+                    }
+                    is MemberRepository.AppreciateResult.Error -> {
+                        _appreciateActionState.value = AppreciateActionState.Error(appreciateErrorKey(result.reason))
+                        buzz(HapticKind.ERROR)
+                    }
                 }
-                is MemberRepository.AppreciateResult.Error -> {
-                    _appreciateActionState.value = AppreciateActionState.Error(appreciateErrorKey(result.reason))
-                    buzz(HapticKind.ERROR)
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _appreciateActionState.value = AppreciateActionState.Error("transfer_error_failed")
+                buzz(HapticKind.ERROR)
             }
         }
     }
@@ -381,16 +390,23 @@ class MemberScreenModel(
         if (_donateActionState.value == DonateActionState.Loading) return
         screenModelScope.launch {
             _donateActionState.value = DonateActionState.Loading
-            when (val result = repo.donatePoints(householdId, fromMemberId, toMemberId, amount)) {
-                is MemberRepository.DonateResult.Ok -> {
-                    loadMembers(householdId)
-                    _donateActionState.value = DonateActionState.Success(result.donorNewTotal)
-                    buzz(HapticKind.SUCCESS)
+            try {
+                when (val result = repo.donatePoints(householdId, fromMemberId, toMemberId, amount)) {
+                    is MemberRepository.DonateResult.Ok -> {
+                        loadMembers(householdId)
+                        _donateActionState.value = DonateActionState.Success(result.donorNewTotal)
+                        buzz(HapticKind.SUCCESS)
+                    }
+                    is MemberRepository.DonateResult.Error -> {
+                        _donateActionState.value = DonateActionState.Error(donateErrorKey(result.reason))
+                        buzz(HapticKind.ERROR)
+                    }
                 }
-                is MemberRepository.DonateResult.Error -> {
-                    _donateActionState.value = DonateActionState.Error(donateErrorKey(result.reason))
-                    buzz(HapticKind.ERROR)
-                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _donateActionState.value = DonateActionState.Error("transfer_error_failed")
+                buzz(HapticKind.ERROR)
             }
         }
     }

@@ -82,6 +82,7 @@ class HomeScreenModel(
 
             try {
                 val households = householdStore.getSavedHouseholds()
+                val failedHouseholdIds = mutableSetOf<String>()
 
                 val perHousehold = coroutineScope {
                     households.map { h ->
@@ -91,7 +92,11 @@ class HomeScreenModel(
                             } catch (e: CancellationException) {
                                 throw e
                             } catch (_: Exception) {
-                                // Silently skip households that fail (offline, deleted, etc.)
+                                // No se distingue "hogar borrado" de un fallo real
+                                // (token caducado, 500, blip de red) — se expone en
+                                // failedHouseholdIds para que la UI pueda avisar en
+                                // vez de silenciarlo como "0 tareas".
+                                failedHouseholdIds += h.id
                                 emptyList()
                             }
                         }
@@ -163,9 +168,13 @@ class HomeScreenModel(
             // datos crudos (mismo Job que rellena [rawTasksByHousehold]) para
             // reutilizarlos en vez de duplicar el fetch — ver KDoc de
             // [rawTasksByHousehold]. `join()` es no-op si ya terminó o si
-            // nunca se llamó (job null).
-            loadAllTasksJob?.join()
-            val cached = rawTasksByHousehold[householdId]
+            // nunca se llamó (job null). Se captura la referencia ANTES del
+            // `join()`: si ese Job fue CANCELADO (otro loadAllTasks() lo
+            // reemplazó), `join()` no lanza, así que sin esta comprobación
+            // se serviría `rawTasksByHousehold` obsoleto sin ningún aviso.
+            val job = loadAllTasksJob
+            job?.join()
+            val cached = if (job?.isCancelled == true) null else rawTasksByHousehold[householdId]
             if (cached != null) {
                 _previewTasks.value = _previewTasks.value + (householdId to HouseholdPreviewState.Success(previewFilter(cached)))
                 return@launch

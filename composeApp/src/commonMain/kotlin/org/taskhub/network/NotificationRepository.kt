@@ -14,6 +14,17 @@ import org.taskhub.network.models.NotificationResponse
 import org.taskhub.storage.TaskCache
 
 /**
+ * Tope de notificaciones "recientes razonables" para sondeos periódicos que
+ * no necesitan el histórico completo: lo usan tanto
+ * [org.taskhub.ui.models.NotificationScreenModel.refreshUnreadCount] (badge
+ * en primer plano, cada 30s) como `NotificationPollWorker` (sondeo en
+ * segundo plano, ~cada 30 min) al llamar a [NotificationRepository.getNotifications]
+ * con `limit`. Vive aquí (no en cada llamador) para que ambos sondeos usen
+ * el mismo tope sin duplicar la constante.
+ */
+internal const val MAX_POLLED_NOTIFICATIONS = 300
+
+/**
  * Notificaciones de un hogar (subcolección `households/{id}/notifications`).
  * Extraído de [FirestoreRepository] (ver docs/refactor-arquitectura-2026-08-31.md,
  * punto 6, fase 2.1 — el dominio más aislado, sin dependencias de la capa de
