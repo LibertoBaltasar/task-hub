@@ -188,6 +188,7 @@ fun HouseholdSettingsDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.9f)
+                .widthIn(max = 480.dp)
                 .fillMaxHeight(0.85f),
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surface
@@ -232,6 +233,7 @@ fun AppreciateDialog(
         errorText = (state as? AppreciateActionState.Error)?.let { s(it.messageKey) },
         isLoading = state is AppreciateActionState.Loading,
         emptyBudgetText = s("appreciate_no_budget"),
+        amountRangeHint = s("transfer_amount_range_hint").replace("%d", remaining.toString()),
         onConfirm = onConfirm,
         onDismiss = onDismiss
     )
@@ -265,6 +267,7 @@ fun DonateDialog(
         errorText = (state as? DonateActionState.Error)?.let { s(it.messageKey) },
         isLoading = state is DonateActionState.Loading,
         emptyBudgetText = s("donate_no_balance"),
+        amountRangeHint = s("transfer_amount_range_hint").replace("%d", balance.toString()),
         onConfirm = onConfirm,
         onDismiss = onDismiss
     )
@@ -287,12 +290,14 @@ private fun TransferAmountDialog(
     errorText: String?,
     isLoading: Boolean,
     emptyBudgetText: String? = null,
+    amountRangeHint: String,
     onConfirm: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     var amountText by remember { mutableStateOf("") }
     val amount = amountText.toIntOrNull() ?: 0
     val isValid = amount in 1..budget
+    val showRangeError = amountText.isNotBlank() && !isValid
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -317,6 +322,10 @@ private fun TransferAmountDialog(
                         onValueChange = { amountText = it.filter(Char::isDigit) },
                         label = { Text(amountLabel) },
                         singleLine = true,
+                        isError = showRangeError,
+                        // Antes el botón "Confirmar" solo se deshabilitaba sin
+                        // ninguna pista de por qué (importe fuera de rango).
+                        supportingText = { Text(amountRangeHint) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

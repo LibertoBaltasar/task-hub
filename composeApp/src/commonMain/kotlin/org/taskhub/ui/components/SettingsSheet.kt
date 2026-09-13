@@ -198,6 +198,7 @@ fun SettingsSheet(
         SettingsSection(title = s("calendar_settings_title")) {
             var isCalendarLinked by remember { mutableStateOf(settingsStore.hasGoogleLinked()) }
             var isCalendarSyncEnabled by remember { mutableStateOf(settingsStore.isCalendarSyncEnabled()) }
+            var showUnlinkConfirm by remember { mutableStateOf(false) }
             var isLinkingCalendar by remember { mutableStateOf(false) }
             val calendarScope = rememberCoroutineScope()
 
@@ -245,14 +246,28 @@ fun SettingsSheet(
                 )
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(
-                    onClick = {
-                        settingsStore.unlinkGoogleCalendar()
-                        isCalendarLinked = false
-                        isCalendarSyncEnabled = false
-                    },
+                    onClick = { showUnlinkConfirm = true },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(s("calendar_unlink_button"))
+                }
+                if (showUnlinkConfirm) {
+                    DestructiveConfirmDialog(
+                        title = s("calendar_unlink_confirm_title"),
+                        text = s("calendar_unlink_confirm_text"),
+                        s = s,
+                        confirmLabel = s("calendar_unlink_button"),
+                        // No destructivo: se puede volver a vincular cuando se
+                        // quiera, a diferencia de borrar hogar/cuenta/tarea.
+                        destructive = false,
+                        onDismiss = { showUnlinkConfirm = false },
+                        onConfirm = {
+                            showUnlinkConfirm = false
+                            settingsStore.unlinkGoogleCalendar()
+                            isCalendarLinked = false
+                            isCalendarSyncEnabled = false
+                        }
+                    )
                 }
             } else {
                 Text(

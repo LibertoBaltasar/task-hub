@@ -13,11 +13,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
-import org.taskhub.ui.theme.Coral300
-import org.taskhub.ui.theme.Coral500
-import org.taskhub.ui.theme.Teal200
-import org.taskhub.ui.theme.Teal500
-import org.taskhub.ui.theme.Teal800
 import org.taskhub.ui.theme.semanticColors
 
 /**
@@ -27,6 +22,15 @@ import org.taskhub.ui.theme.semanticColors
 @Composable
 fun EmptyTasksIllustration(modifier: Modifier = Modifier) {
     val successColor = MaterialTheme.semanticColors.success
+    // Colores del tema (no literales Teal*/Coral*) para que la ilustración
+    // se adapte a los 3 themes (DEFAULT, NATURALEZA, MINIMAL) en vez de
+    // quedar siempre teal/coral pase lo que elija el usuario en Ajustes —
+    // mismo criterio ya aplicado en PointsBadge.badgeToneColors.
+    val bgCircleColor = MaterialTheme.colorScheme.primaryContainer
+    val confettiPrimary = MaterialTheme.colorScheme.primary
+    val confettiSecondary = MaterialTheme.colorScheme.secondary
+    val confettiTertiary = MaterialTheme.colorScheme.tertiary
+    val confettiTertiaryContainer = MaterialTheme.colorScheme.tertiaryContainer
     Canvas(modifier = modifier.size(120.dp)) {
         val w = size.width
         val h = size.height
@@ -34,7 +38,7 @@ fun EmptyTasksIllustration(modifier: Modifier = Modifier) {
         val radius = size.minDimension * 0.34f
 
         // Círculo de fondo
-        drawCircle(color = Teal200.copy(alpha = 0.4f), radius = radius * 1.35f, center = center)
+        drawCircle(color = bgCircleColor.copy(alpha = 0.4f), radius = radius * 1.35f, center = center)
 
         // Anillo de éxito
         drawCircle(
@@ -62,11 +66,11 @@ fun EmptyTasksIllustration(modifier: Modifier = Modifier) {
 
         // Confeti: pequeños cuadrados/círculos dispersos alrededor del anillo
         val confetti = listOf(
-            Triple(Offset(w * 0.12f, h * 0.18f), Coral500, false),
-            Triple(Offset(w * 0.88f, h * 0.22f), Teal500, true),
-            Triple(Offset(w * 0.82f, h * 0.82f), Coral300, false),
-            Triple(Offset(w * 0.14f, h * 0.80f), Teal800, true),
-            Triple(Offset(w * 0.90f, h * 0.55f), Coral500, true),
+            Triple(Offset(w * 0.12f, h * 0.18f), confettiTertiary, false),
+            Triple(Offset(w * 0.88f, h * 0.22f), confettiPrimary, true),
+            Triple(Offset(w * 0.82f, h * 0.82f), confettiTertiaryContainer, false),
+            Triple(Offset(w * 0.14f, h * 0.80f), confettiSecondary, true),
+            Triple(Offset(w * 0.90f, h * 0.55f), confettiTertiary, true),
         )
         confetti.forEach { (offset, color, isCircle) ->
             if (isCircle) {
@@ -89,13 +93,19 @@ fun EmptyTasksIllustration(modifier: Modifier = Modifier) {
  */
 @Composable
 fun EmptyHouseholdsIllustration(modifier: Modifier = Modifier) {
+    // Colores del tema (no literales Teal*/Coral*) — mismo criterio que
+    // [EmptyTasksIllustration], para que la casita se adapte a los 3 themes.
+    val bgCircleColor = MaterialTheme.colorScheme.primaryContainer
+    val roofColor = MaterialTheme.colorScheme.tertiary
+    val bodyColor = MaterialTheme.colorScheme.secondary
+    val doorColor = MaterialTheme.colorScheme.primaryContainer
     Canvas(modifier = modifier.size(120.dp)) {
         val w = size.width
         val h = size.height
 
         // Círculo de fondo
         drawCircle(
-            color = Teal200.copy(alpha = 0.4f),
+            color = bgCircleColor.copy(alpha = 0.4f),
             radius = size.minDimension * 0.46f,
             center = Offset(w / 2f, h / 2f)
         )
@@ -107,18 +117,18 @@ fun EmptyHouseholdsIllustration(modifier: Modifier = Modifier) {
             lineTo(w * 0.78f, h * 0.52f)
             close()
         }
-        drawPath(path = roof, color = Coral500)
+        drawPath(path = roof, color = roofColor)
 
         // Cuerpo de la casa
         drawRect(
-            color = Teal800,
+            color = bodyColor,
             topLeft = Offset(w * 0.30f, h * 0.52f),
             size = androidx.compose.ui.geometry.Size(w * 0.40f, h * 0.28f)
         )
 
         // Puerta
         drawRect(
-            color = Teal200,
+            color = doorColor,
             topLeft = Offset(w * 0.45f, h * 0.60f),
             size = androidx.compose.ui.geometry.Size(w * 0.10f, h * 0.20f)
         )

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,9 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -506,21 +509,7 @@ private fun DayColumn(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Day number
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent,
-            modifier = Modifier.size(32.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = "${date.dayOfMonth}",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isToday) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
+        DayNumberBadge(day = date.dayOfMonth, isToday = isToday, size = 32.dp, textStyle = MaterialTheme.typography.labelLarge)
 
         Spacer(Modifier.height(4.dp))
 
@@ -535,6 +524,30 @@ private fun DayColumn(
                 text = "+${entries.size - 4}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * Insignia circular del número de día, compartida por [DayColumn] (vista
+ * semana) y [MonthDayCell] (vista mes) — antes duplicada casi literalmente
+ * entre ambas, solo variando tamaño y estilo de texto.
+ */
+@Composable
+private fun DayNumberBadge(day: Int, isToday: Boolean, size: Dp, textStyle: TextStyle) {
+    Surface(
+        shape = CircleShape,
+        color = if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent,
+        modifier = Modifier.size(size)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = "$day",
+                style = textStyle,
+                fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
+                color = if (isToday) MaterialTheme.colorScheme.onPrimary
+                else MaterialTheme.colorScheme.onSurface
             )
         }
     }
@@ -587,21 +600,7 @@ private fun MonthDayCell(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Day number
-        Surface(
-            shape = RoundedCornerShape(50),
-            color = if (isToday) MaterialTheme.colorScheme.primary else Color.Transparent,
-            modifier = Modifier.size(24.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = "${date.dayOfMonth}",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isToday) MaterialTheme.colorScheme.onPrimary
-                    else MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
+        DayNumberBadge(day = date.dayOfMonth, isToday = isToday, size = 24.dp, textStyle = MaterialTheme.typography.labelSmall)
 
         // Compact task indicators (dots)
         if (entries.isNotEmpty()) {
@@ -680,6 +679,7 @@ private fun DayTasksPopup(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.9f)
+                .widthIn(max = 480.dp)
                 .fillMaxHeight(0.7f),
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surface
