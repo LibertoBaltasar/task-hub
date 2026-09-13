@@ -550,7 +550,8 @@ data class CreateTaskScreen(
                                         // (se comporta como diaria). Prerellenar con el
                                         // día de hoy evita ese estado ambiguo por defecto.
                                         if (key == "monthly" && recurrenceDay == null) {
-                                            recurrenceDay = today.dayOfMonth
+                                            recurrenceDay = Clock.System.now()
+                                                .toLocalDateTime(TimeZone.currentSystemDefault()).date.dayOfMonth
                                         }
                                     },
                                     label = { Text(label) },
