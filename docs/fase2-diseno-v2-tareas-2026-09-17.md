@@ -167,5 +167,5 @@ no hizo falta actualizar tests existentes.
 
 ```
 $ git log --oneline -1
-<se completa tras el commit>
+d5da54c feat: diseño v2 tareas — fase 2 (apartado Puntuación con recompensas canjeables)
 ```
