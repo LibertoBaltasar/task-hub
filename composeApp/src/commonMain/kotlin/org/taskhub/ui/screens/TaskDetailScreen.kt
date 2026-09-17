@@ -22,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
@@ -41,6 +42,7 @@ import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.DestructiveConfirmDialog
@@ -75,6 +77,10 @@ data class TaskDetailScreen(
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
         val commentsModel = koinScreenModel<TaskCommentsScreenModel>()
+        // Solo para la sección "Puntuación" (recompensas disponibles) — carga
+        // perezosa bajo demanda, ver LaunchedEffect(pointsExpanded) en
+        // TaskDetailContent (diseño v2, fase 2, decisión 7).
+        val memberModel = koinScreenModel<MemberScreenModel>()
         val authManager = koinInject<GoogleAuthManager>()
         val coroutineScope = rememberCoroutineScope()
         val appSettings = LocalAppSettings.current
@@ -88,6 +94,7 @@ data class TaskDetailScreen(
         val commentsState by commentsModel.commentsState.collectAsState()
         val newCommentText by commentsModel.newCommentText.collectAsState()
         val sendCommentError by commentsModel.sendCommentError.collectAsState()
+        val rewardState by memberModel.rewardState.collectAsState()
 
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
@@ -186,6 +193,7 @@ data class TaskDetailScreen(
                             task = state.task,
                             assignments = state.assignments,
                             memberMap = memberMap,
+                            currentMemberId = currentMemberId,
                             actionState = actionState,
                             reassignState = reassignState,
                             isAdmin = isAdmin,
@@ -195,6 +203,11 @@ data class TaskDetailScreen(
                             onDismissSendCommentError = { commentsModel.clearSendCommentError() },
                             s = s,
                             myAssignment = myAssignment,
+                            rewardState = rewardState,
+                            onExpandPoints = { memberModel.loadRewards(householdId) },
+                            onViewAllRewards = {
+                                navigator.push(ExploreScreen(householdId, currentMemberId ?: "", initialTab = 2))
+                            },
                             isGoogleLinked = isGoogleLinked,
                             isCalendarSyncEnabled = isCalendarSyncEnabled,
                             isLinkingCalendar = isLinkingCalendar,
@@ -308,6 +321,7 @@ private fun TaskDetailContent(
     task: org.taskhub.network.models.TaskResponse,
     assignments: List<TaskAssignmentResponse>,
     memberMap: Map<String, MemberResponse>,
+    currentMemberId: String? = null,
     actionState: TaskActionState,
     reassignState: TaskActionState = TaskActionState.Idle,
     isAdmin: Boolean = false,
@@ -317,6 +331,9 @@ private fun TaskDetailContent(
     onDismissSendCommentError: () -> Unit = {},
     s: (String) -> String = { it },
     myAssignment: TaskAssignmentResponse? = null,
+    rewardState: RewardUiState = RewardUiState.Idle,
+    onExpandPoints: () -> Unit = {},
+    onViewAllRewards: () -> Unit = {},
     isGoogleLinked: Boolean = false,
     isCalendarSyncEnabled: Boolean = false,
     isLinkingCalendar: Boolean = false,
@@ -348,6 +365,15 @@ private fun TaskDetailContent(
     // "Otros" agrupa Calendar + Asignaciones completadas + Comentarios: contenido
     // secundario/infrecuente, plegado por defecto (diseño v2, fase 1).
     var otrosExpanded by remember { mutableStateOf(false) }
+
+    // "Puntuación": plegada por defecto, con teaser en la cabecera. Al
+    // expandirla por primera vez se dispara la carga de recompensas (coste de
+    // red aceptado solo para quien realmente abre la sección — diseño v2,
+    // fase 2, decisión 7).
+    var pointsExpanded by remember { mutableStateOf(false) }
+    LaunchedEffect(pointsExpanded) {
+        if (pointsExpanded) onExpandPoints()
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -493,40 +519,6 @@ private fun TaskDetailContent(
                             }
                         }
                     }
-
-                    // Penalty info
-                    if (task.penaltyMode != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = s("create_task_penalty_section"),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        val penaltyDesc = when (task.penaltyMode) {
-                            "fixed" -> s("task_detail_penalty_fixed_desc")
-                                .replace("%1", task.penaltyValue.toString())
-                                .replace("%2", intervalLabel(task.penaltyInterval, s))
-                            "percentage" -> s("task_detail_penalty_percent_desc")
-                                .replace("%1", task.penaltyValue.toString())
-                                .replace("%2", intervalLabel(task.penaltyInterval, s))
-                            else -> ""
-                        }
-                        Text(
-                            text = penaltyDesc,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        if (task.penaltyMax > 0) {
-                            Text(
-                                text = s("task_detail_penalty_max_desc").replace("%d", task.penaltyMax.toString()),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -575,6 +567,183 @@ private fun TaskDetailContent(
                         color = if (st.completed) MaterialTheme.colorScheme.onSurfaceVariant
                                 else MaterialTheme.colorScheme.onSurface
                     )
+                }
+            }
+        }
+
+        // ── Puntuación (NUEVA, diseño v2 fase 2) ──
+        // Plegada con teaser en la cabecera (visible aunque esté plegada);
+        // al expandir explica cómo se ganan los puntos, traslada aquí la
+        // penalización (antes en la tarjeta de info) y muestra el saldo del
+        // usuario actual (sin petición nueva) + hasta 3 recompensas
+        // canjeables (carga perezosa, ver LaunchedEffect(pointsExpanded)).
+        item {
+            ExpandableSectionHeader(
+                expanded = pointsExpanded,
+                onToggle = { pointsExpanded = !pointsExpanded },
+                chevronTint = MaterialTheme.colorScheme.primary
+            ) {
+                Text(
+                    text = "${s("task_detail_points_section")} · ${task.points} ${s("transfer_points_suffix")}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        if (pointsExpanded) {
+            item {
+                Text(
+                    text = s("task_detail_points_how_it_works"),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = s("task_detail_points_earn_desc").replace("%d", task.points.toString()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                // Penalización por retraso — trasladada aquí desde la tarjeta
+                // de info (mismas claves i18n, ninguna nueva).
+                if (task.penaltyMode != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = s("create_task_penalty_section"),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    val penaltyDesc = when (task.penaltyMode) {
+                        "fixed" -> s("task_detail_penalty_fixed_desc")
+                            .replace("%1", task.penaltyValue.toString())
+                            .replace("%2", intervalLabel(task.penaltyInterval, s))
+                        "percentage" -> s("task_detail_penalty_percent_desc")
+                            .replace("%1", task.penaltyValue.toString())
+                            .replace("%2", intervalLabel(task.penaltyInterval, s))
+                        else -> ""
+                    }
+                    Text(
+                        text = penaltyDesc,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (task.penaltyMax > 0) {
+                        Text(
+                            text = s("task_detail_penalty_max_desc").replace("%d", task.penaltyMax.toString()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // ── Tu saldo (memberMap ya cargado — sin petición nueva) ──
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = s("task_detail_points_your_balance"),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                val memberPoints = memberMap[currentMemberId]?.totalPoints ?: 0
+                Text(
+                    text = "⭐ $memberPoints ${s("transfer_points_suffix")}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            // ── Recompensas disponibles (carga perezosa vía onExpandPoints) ──
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = s("task_detail_points_rewards_header"),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            when (val rState = rewardState) {
+                is RewardUiState.Loading -> {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+
+                is RewardUiState.Success -> {
+                    val memberPoints = memberMap[currentMemberId]?.totalPoints ?: 0
+                    if (rState.rewards.isEmpty()) {
+                        item {
+                            Text(
+                                text = s("task_detail_points_rewards_empty"),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        val topRewards = rState.rewards.sortedBy { it.cost }.take(3)
+                        items(topRewards, key = { it.id }) { reward ->
+                            val canAfford = memberPoints >= reward.cost
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .alpha(if (canAfford) 1f else 0.5f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = reward.icon, style = MaterialTheme.typography.titleLarge)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = reward.title,
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    text = "⭐ ${reward.cost}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+
+                is RewardUiState.Error -> {
+                    item {
+                        Text(
+                            text = "⚠️ ${rState.message}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                is RewardUiState.Idle -> {}
+            }
+
+            item {
+                TextButton(onClick = onViewAllRewards) {
+                    Text(s("task_detail_points_view_all_rewards"))
                 }
             }
         }
