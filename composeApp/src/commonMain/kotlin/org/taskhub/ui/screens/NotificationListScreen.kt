@@ -232,7 +232,11 @@ private fun NotificationCard(
     // Default) y ya es un par accesible auditado en las 6 combinaciones
     // tema/modo, mismo criterio aplicado a otras 6+ cards de la app.
     val titleColor = if (!notification.read) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-    val secondaryColor = if (!notification.read) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
+    // Sin alpha: onPrimaryContainer.copy(alpha=0.8f) caía por debajo de 4.5:1
+    // en 4/6 combinaciones tema/modo (Default claro 4.06:1, Default oscuro
+    // 3.50:1, Naturaleza claro 3.89:1, Naturaleza oscuro 3.56:1) pese a que el
+    // par sólido subyacente sí está auditado — el alpha reintroducía el fallo.
+    val secondaryColor = if (!notification.read) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     // Idioma del LECTOR (este dispositivo), no el de quien la escribió — ver
     // NotificationText KDoc (panel de notificaciones 2026-09-05, IMPORTANTE).
     val displayTitle = remember(notification, appSettings.currentLanguage) {

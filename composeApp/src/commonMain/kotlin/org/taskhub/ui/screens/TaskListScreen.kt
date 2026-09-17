@@ -67,6 +67,7 @@ import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.filterChipCheckIcon
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.rememberHouseholdName
+import org.taskhub.ui.components.StatusDot
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.shouldReduceMotion
@@ -1203,11 +1204,7 @@ private fun GroupHeader(
             chevronSize = 20.dp
         ) {
             // Colored dot indicator
-            Surface(
-                modifier = Modifier.size(8.dp),
-                shape = MaterialTheme.shapes.extraSmall,
-                color = dotColor
-            ) {}
+            StatusDot(color = dotColor, size = 8.dp)
 
             Spacer(modifier = Modifier.width(10.dp))
 

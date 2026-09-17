@@ -49,6 +49,7 @@ import org.taskhub.network.models.TaskResponse
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
+import org.taskhub.ui.components.StatusDot
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.i18n.AppStrings
@@ -611,13 +612,7 @@ private fun MonthDayCell(
             ) {
                 // Show colored dots — max 6
                 entries.take(6).forEach { entry ->
-                    val color = entry.dotColor()
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(color)
-                    )
+                    StatusDot(color = entry.dotColor(), size = 6.dp)
                     Spacer(Modifier.width(1.dp))
                 }
                 if (entries.size > 6) {
@@ -642,7 +637,7 @@ private fun TaskChip(entry: DayTaskEntry) {
     val textColor = entry.onContainerColor()
 
     Surface(
-        shape = RoundedCornerShape(4.dp),
+        shape = MaterialTheme.shapes.extraSmall,
         color = bgColor,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -758,12 +753,7 @@ private fun TaskPopupItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Status indicator dot
-            Box(
-                modifier = Modifier
-                    .size(12.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(statusColor)
-            )
+            StatusDot(color = statusColor, size = 12.dp)
 
             Spacer(Modifier.width(12.dp))
 

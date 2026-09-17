@@ -200,9 +200,12 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
                 Text(
                     s("stats_current_streak_label"),
                     style = MaterialTheme.typography.bodySmall,
-                    // onTertiaryContainer (par accesible auditado, sigue el tema activo)
-                    // en vez del antiguo Coral800/Coral700/Teal800 fijos.
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    // onTertiaryContainer sólido (par accesible auditado, sigue el
+                    // tema activo) en vez del antiguo Coral800/Coral700/Teal800
+                    // fijos. Sin alpha: con .copy(alpha=0.8f) caía por debajo de
+                    // 4.5:1 en 3/6 combinaciones tema/modo (Default oscuro 3.43:1,
+                    // Naturaleza claro 3.22:1, Naturaleza oscuro 3.56:1).
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 Text(
                     s("stats_days_suffix").replace("%d", currentStreak.toString()),
@@ -216,7 +219,7 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
                 Text(
                     s("stats_best_streak_label"),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
                 )
                 Text(
                     s("stats_days_suffix").replace("%d", bestStreak.toString()),

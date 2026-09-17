@@ -17,7 +17,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -200,6 +203,7 @@ fun SettingsSheet(
             var isCalendarSyncEnabled by remember { mutableStateOf(settingsStore.isCalendarSyncEnabled()) }
             var showUnlinkConfirm by remember { mutableStateOf(false) }
             var isLinkingCalendar by remember { mutableStateOf(false) }
+            var calendarLinkError by remember { mutableStateOf<String?>(null) }
             val calendarScope = rememberCoroutineScope()
 
             if (isCalendarLinked) {
@@ -285,6 +289,7 @@ fun SettingsSheet(
                 Button(
                     onClick = {
                         isLinkingCalendar = true
+                        calendarLinkError = null
                         calendarScope.launch {
                             val linked = authManager.linkCalendar()
                             isLinkingCalendar = false
@@ -292,6 +297,14 @@ fun SettingsSheet(
                                 isCalendarLinked = true
                                 isCalendarSyncEnabled = true
                                 settingsStore.setCalendarSyncEnabled(true)
+                            } else {
+                                // Antes fallaba en silencio: solo se apagaba el
+                                // spinner y volvía a "No vinculado" sin ninguna
+                                // pista de si el usuario canceló o hubo un fallo
+                                // real (p. ej. plataformas sin soporte aún, ver
+                                // getGoogleCalendarAccessToken) — mismo mensaje
+                                // que ya usa TaskDetailScreen para este flujo.
+                                calendarLinkError = s("calendar_link_error")
                             }
                         }
                     },
@@ -309,6 +322,15 @@ fun SettingsSheet(
                     } else {
                         Text(s("calendar_link_button"))
                     }
+                }
+                if (calendarLinkError != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "⚠️ $calendarLinkError",
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }

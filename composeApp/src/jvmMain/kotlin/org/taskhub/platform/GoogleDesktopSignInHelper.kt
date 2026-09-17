@@ -161,10 +161,16 @@ object GoogleDesktopSignInHelper {
         }.toMap()
     }
 
-    /** Página de cierre servida al navegador tras el callback — éxito o error. */
+    /**
+     * Página de cierre servida al navegador tras el callback — éxito o error.
+     * [success] solo significa "se recibió un `code` válido de Google", NO
+     * que el inicio de sesión haya terminado: el canje del código por el
+     * token (`exchangeCodeForIdToken`) todavía no ha ocurrido en este punto
+     * (ver `signIn()`), así que el mensaje no puede afirmar éxito todavía.
+     */
     private fun writeCallbackResponse(socket: Socket, success: Boolean) {
         val message = if (success) {
-            "Sesión iniciada. Ya puedes cerrar esta pestaña y volver a Task Hub."
+            "Procesando inicio de sesión… ya puedes cerrar esta pestaña y volver a Task Hub."
         } else {
             "No se pudo completar el inicio de sesión. Ya puedes cerrar esta pestaña."
         }

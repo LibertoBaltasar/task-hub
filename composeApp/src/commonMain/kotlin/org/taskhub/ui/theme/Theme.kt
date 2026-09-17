@@ -326,6 +326,8 @@ private val MinimalDarkColorScheme = darkColorScheme(
 // ── Tipografía ────────────────────────────────────────────
 
 private val TaskHubTypography = Typography(
+    headlineLarge = TextStyle(fontWeight = FontWeight.Bold),
+    headlineMedium = TextStyle(fontWeight = FontWeight.Bold),
     headlineSmall = TextStyle(fontWeight = FontWeight.Bold),
     titleLarge = TextStyle(fontWeight = FontWeight.SemiBold),
     titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, letterSpacing = 0.15.sp),
