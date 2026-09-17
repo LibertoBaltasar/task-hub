@@ -49,6 +49,7 @@ import org.taskhub.ui.components.DestructiveConfirmDialog
 import org.taskhub.ui.components.ExpandableSectionHeader
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.StatChip
+import org.taskhub.ui.components.StatusDot
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.components.taskHubTextFieldColors
@@ -882,6 +883,8 @@ private fun TaskDetailContent(
         // comentarios — contenido secundario/infrecuente, plegado por defecto
         // (diseño v2, fase 1, ítem 4).
         item {
+            val otrosHasError = calendarActionState is TaskScreenModel.CalendarActionState.Error ||
+                sendCommentError != null
             ExpandableSectionHeader(
                 expanded = otrosExpanded,
                 onToggle = { otrosExpanded = !otrosExpanded },
@@ -894,6 +897,10 @@ private fun TaskDetailContent(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
+                if (!otrosExpanded && otrosHasError) {
+                    StatusDot(color = MaterialTheme.colorScheme.error, size = 8.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
             }
         }
 
