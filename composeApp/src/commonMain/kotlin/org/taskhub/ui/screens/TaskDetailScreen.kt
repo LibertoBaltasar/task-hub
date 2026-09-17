@@ -44,6 +44,7 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.DestructiveConfirmDialog
+import org.taskhub.ui.components.ExpandableSectionHeader
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.components.TaskHubTopBar
@@ -344,6 +345,9 @@ private fun TaskDetailContent(
     // Estado para el diálogo "¿quién ha hecho la tarea?" (editar quién la completó).
     var showChangeWhoDialog by remember { mutableStateOf(false) }
     var selectedCompleterId by remember { mutableStateOf(task.completedBy) }
+    // "Otros" agrupa Calendar + Asignaciones completadas + Comentarios: contenido
+    // secundario/infrecuente, plegado por defecto (diseño v2, fase 1).
+    var otrosExpanded by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -543,6 +547,11 @@ private fun TaskDetailContent(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
+                Text(
+                    text = s("create_task_section_checklist_hint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             items(task.subtasks, key = { it.id }) { st ->
                 Row(
@@ -583,7 +592,11 @@ private fun TaskDetailContent(
                     fontWeight = FontWeight.Bold,
                     color = if (isCompletedToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
                 )
-                if (!isCompletedToday) {
+                // D4: con asignaciones, completar pasa a ser siempre "completar mi
+                // asignación" vía AssignmentCard (sección Pendientes) — el botón
+                // "Hecho" de nivel-tarea desaparece de aquí para no ofrecer dos
+                // caminos de completar sin conexión visual entre sí.
+                if (!isCompletedToday && assignments.isEmpty()) {
                     Button(
                         onClick = onCompleteTask,
                         enabled = actionState !is TaskActionState.Loading,
@@ -650,26 +663,6 @@ private fun TaskDetailContent(
             }
         }
 
-        // ── Google Calendar sync status ──
-        item {
-            val calendarStatus = when {
-                myAssignment == null || myAssignment.dueDate <= 0 -> CalendarSyncStatus.NoDueDate
-                myAssignment.googleEventId != null -> CalendarSyncStatus.Synced
-                !isGoogleLinked -> CalendarSyncStatus.NotLinked
-                !isCalendarSyncEnabled -> CalendarSyncStatus.SyncDisabled
-                else -> CalendarSyncStatus.Pending
-            }
-            CalendarSyncStatusCard(
-                status = calendarStatus,
-                calendarActionState = calendarActionState,
-                isLinkingCalendar = isLinkingCalendar,
-                s = s,
-                onSyncNow = onSyncCalendarNow,
-                onLinkAccount = onLinkCalendar,
-                onEnableSync = onEnableCalendarSync
-            )
-        }
-
         // ── Pending assignments ──
         // Sin cabecera de conteo cuando no hay pendientes: la tarjeta de estado
         // vacío de abajo ya comunica lo mismo, evita el mensaje duplicado
@@ -716,189 +709,86 @@ private fun TaskDetailContent(
             }
         }
 
-        // ── Completed assignments ──
-        if (completedAssignments.isNotEmpty()) {
-            item {
+        // ── "Otros": sincronización Calendar + asignaciones completadas +
+        // comentarios — contenido secundario/infrecuente, plegado por defecto
+        // (diseño v2, fase 1, ítem 4).
+        item {
+            ExpandableSectionHeader(
+                expanded = otrosExpanded,
+                onToggle = { otrosExpanded = !otrosExpanded },
+                chevronTint = MaterialTheme.colorScheme.primary
+            ) {
                 Text(
-                    text = s("task_detail_completed_header").replace("%d", completedAssignments.size.toString()),
+                    text = s("task_detail_other_section"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        if (otrosExpanded) {
+            // ── Google Calendar sync status ──
+            item {
+                val calendarStatus = when {
+                    myAssignment == null || myAssignment.dueDate <= 0 -> CalendarSyncStatus.NoDueDate
+                    myAssignment.googleEventId != null -> CalendarSyncStatus.Synced
+                    !isGoogleLinked -> CalendarSyncStatus.NotLinked
+                    !isCalendarSyncEnabled -> CalendarSyncStatus.SyncDisabled
+                    else -> CalendarSyncStatus.Pending
+                }
+                CalendarSyncStatusCard(
+                    status = calendarStatus,
+                    calendarActionState = calendarActionState,
+                    isLinkingCalendar = isLinkingCalendar,
+                    s = s,
+                    onSyncNow = onSyncCalendarNow,
+                    onLinkAccount = onLinkCalendar,
+                    onEnableSync = onEnableCalendarSync
+                )
+            }
+
+            // ── Completed assignments ──
+            if (completedAssignments.isNotEmpty()) {
+                item {
+                    Text(
+                        text = s("task_detail_completed_header").replace("%d", completedAssignments.size.toString()),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                items(completedAssignments, key = { it.id }) { assignment ->
+                    val member = memberMap[assignment.memberId]
+                    AssignmentCard(
+                        assignment = assignment,
+                        member = member,
+                        now = now,
+                        showComplete = false
+                    )
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(32.dp)) }
+
+            // ── Comments section ──
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = s("task_detail_comments_title"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            items(completedAssignments, key = { it.id }) { assignment ->
-                val member = memberMap[assignment.memberId]
-                AssignmentCard(
-                    assignment = assignment,
-                    member = member,
-                    now = now,
-                    showComplete = false
-                )
-            }
-        }
-
-        item { Spacer(modifier = Modifier.height(32.dp)) }
-
-        // ── Comments section ──
-        item {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = s("task_detail_comments_title"),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        // Banner de error al ENVIAR un comentario — independiente de
-        // commentsState (que sigue mostrando la lista ya cargada, ver KDoc
-        // de TaskCommentsScreenModel.sendCommentError).
-        if (sendCommentError != null) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "⚠️ $sendCommentError",
-                            // liveRegion: sin esto, TalkBack/VoiceOver no anuncia el
-                            // fallo de envío mientras el foco sigue en el campo de texto.
-                            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        IconButton(onClick = onDismissSendCommentError) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = s("common_dismiss"),
-                                tint = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Comment input
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = newCommentText,
-                    onValueChange = onCommentTextChange,
-                    modifier = Modifier.weight(1f),
-                    label = { Text(s("task_detail_comment_label")) },
-                    placeholder = { Text(s("task_detail_comment_placeholder")) },
-                    maxLines = 2,
-                    singleLine = false,
-                    supportingText = {
-                        Text("${newCommentText.length}/200")
-                    },
-                    colors = taskHubTextFieldColors()
-                )
-                Spacer(Modifier.width(8.dp))
-                IconButton(
-                    onClick = onAddComment,
-                    enabled = newCommentText.isNotBlank()
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = s("messages_send"))
-                }
-            }
-        }
-
-        // Comments list
-        when (commentsState) {
-            is CommentsUiState.Loading -> {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(60.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 2.dp
-                        )
-                    }
-                }
-            }
-
-            is CommentsUiState.Success -> {
-                if (commentsState.comments.isEmpty()) {
-                    item {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Text(
-                                text = s("task_detail_no_comments"),
-                                modifier = Modifier.padding(16.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-                } else {
-                    items(commentsState.comments, key = { it.id }) { comment ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            // surfaceVariant (no Teal50 con alpha 0.5f): el alpha compuesto sobre
-                            // el fondo oscuro daba un contenedor de contraste insuficiente para
-                            // onSurfaceVariant/onSurface (2.1-2.8:1) — surfaceVariant ya está
-                            // pensado para combinarse con esos colores "on*" en los 3 temas/modos.
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = comment.authorName,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    if (comment.createdAt > 0) {
-                                        Text(
-                                            text = formatDateTime(comment.createdAt),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = comment.text,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            is CommentsUiState.Error -> {
+            // Banner de error al ENVIAR un comentario — independiente de
+            // commentsState (que sigue mostrando la lista ya cargada, ver KDoc
+            // de TaskCommentsScreenModel.sendCommentError).
+            if (sendCommentError != null) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -906,20 +796,164 @@ private fun TaskDetailContent(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         )
                     ) {
-                        Text(
-                            text = "⚠️ ${commentsState.message}",
-                            modifier = Modifier.padding(12.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "⚠️ $sendCommentError",
+                                // liveRegion: sin esto, TalkBack/VoiceOver no anuncia el
+                                // fallo de envío mientras el foco sigue en el campo de texto.
+                                modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            IconButton(onClick = onDismissSendCommentError) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = s("common_dismiss"),
+                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            is CommentsUiState.Idle -> {}
-        }
+            // Comment input
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newCommentText,
+                        onValueChange = onCommentTextChange,
+                        modifier = Modifier.weight(1f),
+                        label = { Text(s("task_detail_comment_label")) },
+                        placeholder = { Text(s("task_detail_comment_placeholder")) },
+                        maxLines = 2,
+                        singleLine = false,
+                        supportingText = {
+                            Text("${newCommentText.length}/200")
+                        },
+                        colors = taskHubTextFieldColors()
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(
+                        onClick = onAddComment,
+                        enabled = newCommentText.isNotBlank()
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = s("messages_send"))
+                    }
+                }
+            }
 
-        item { Spacer(modifier = Modifier.height(32.dp)) }
+            // Comments list
+            when (commentsState) {
+                is CommentsUiState.Loading -> {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = MaterialTheme.colorScheme.primary,
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    }
+                }
+
+                is CommentsUiState.Success -> {
+                    if (commentsState.comments.isEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Text(
+                                    text = s("task_detail_no_comments"),
+                                    modifier = Modifier.padding(16.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        items(commentsState.comments, key = { it.id }) { comment ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                // surfaceVariant (no Teal50 con alpha 0.5f): el alpha compuesto sobre
+                                // el fondo oscuro daba un contenedor de contraste insuficiente para
+                                // onSurfaceVariant/onSurface (2.1-2.8:1) — surfaceVariant ya está
+                                // pensado para combinarse con esos colores "on*" en los 3 temas/modos.
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = comment.authorName,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        if (comment.createdAt > 0) {
+                                            Text(
+                                                text = formatDateTime(comment.createdAt),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = comment.text,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                is CommentsUiState.Error -> {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Text(
+                                text = "⚠️ ${commentsState.message}",
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
+
+                is CommentsUiState.Idle -> {}
+            }
+
+            item { Spacer(modifier = Modifier.height(32.dp)) }
+        }
     }
 
     // ── Diálogo: cambiar quién ha hecho la tarea ──

@@ -51,6 +51,7 @@ import org.taskhub.ui.models.TaskScreenModel
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.HouseholdScreenModel
+import org.taskhub.ui.components.ExpandableSectionHeader
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.RecurrenceNextPreview
 import org.taskhub.ui.components.TaskHubTopBar
@@ -150,6 +151,13 @@ data class EditTaskScreen(
         var assignmentsLoadFailed by remember { mutableStateOf(false) }
         var assignmentsReloadTrigger by remember { mutableStateOf(0) }
 
+        // Estado de plegado de las secciones desplegables (diseño v2, fase 1).
+        var checklistExpanded by remember { mutableStateOf(task.subtasks.isNotEmpty()) }
+        var showCustomTagField by remember { mutableStateOf(false) }
+        var tagsExpanded by remember { mutableStateOf(task.tags.isNotEmpty()) }
+        var assignmentExpanded by remember { mutableStateOf(false) }
+        var otrosExpanded by remember { mutableStateOf(hasDeadline || hasPenalty || task.assignmentRotation.isNotEmpty()) }
+
         // Precargar fecha límite (una sola vez).
         LaunchedEffect(Unit) {
             if (task.dueDate > 0) {
@@ -169,6 +177,7 @@ data class EditTaskScreen(
                 if (assignments.isNotEmpty()) {
                     selectedMembers = assignments.map { it.memberId }.toSet()
                     mandatory = assignments.firstOrNull()?.mandatory ?: false
+                    assignmentExpanded = true
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -395,75 +404,90 @@ data class EditTaskScreen(
                         )
                     }
 
-                    // ── Checklist (subtareas) ──
+                    // ── Lista (antes "Checklist") ──
                     item {
-                        Text(
-                            text = s("create_task_section_checklist"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ExpandableSectionHeader(
+                            expanded = checklistExpanded,
+                            onToggle = { checklistExpanded = !checklistExpanded },
+                            chevronTint = MaterialTheme.colorScheme.primary
                         ) {
-                            OutlinedTextField(
-                                value = subtaskText,
-                                onValueChange = { subtaskText = it },
-                                label = { Text(s("create_task_add_item")) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                            )
-                            Button(
-                                onClick = {
-                                    val text = subtaskText.trim()
-                                    if (text.isNotBlank()) {
-                                        val id = kotlin.random.Random.nextLong().toString(36)
-                                        subtasks = subtasks + Subtask(id = id, text = text, completed = false)
-                                        subtaskText = ""
-                                    }
-                                },
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = s("create_task_add_item"))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = s("create_task_section_checklist"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = s("create_task_section_checklist_hint"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
 
-                    if (subtasks.isNotEmpty()) {
-                        items(subtasks, key = { it.id }) { st ->
+                    if (checklistExpanded) {
+                        item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Checkbox(
-                                    checked = st.completed,
-                                    onCheckedChange = { checked ->
-                                        subtasks = subtasks.map {
-                                            if (it.id == st.id) it.copy(completed = checked) else it
+                                OutlinedTextField(
+                                    value = subtaskText,
+                                    onValueChange = { subtaskText = it },
+                                    label = { Text(s("create_task_add_item")) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                                )
+                                Button(
+                                    onClick = {
+                                        val text = subtaskText.trim()
+                                        if (text.isNotBlank()) {
+                                            val id = kotlin.random.Random.nextLong().toString(36)
+                                            subtasks = subtasks + Subtask(id = id, text = text, completed = false)
+                                            subtaskText = ""
                                         }
                                     },
-                                    colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
-                                )
-                                Text(
-                                    text = st.text,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(start = 4.dp),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                TextButton(
-                                    onClick = { subtasks = subtasks.filter { it.id != st.id } },
-                                    colors = ButtonDefaults.textButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.error
-                                    )
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = s("common_delete"))
+                                    Icon(Icons.Default.Add, contentDescription = s("create_task_add_item"))
+                                }
+                            }
+                        }
+
+                        if (subtasks.isNotEmpty()) {
+                            items(subtasks, key = { it.id }) { st ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = st.completed,
+                                        onCheckedChange = { checked ->
+                                            subtasks = subtasks.map {
+                                                if (it.id == st.id) it.copy(completed = checked) else it
+                                            }
+                                        },
+                                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                                    )
+                                    Text(
+                                        text = st.text,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(start = 4.dp),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    TextButton(
+                                        onClick = { subtasks = subtasks.filter { it.id != st.id } },
+                                        colors = ButtonDefaults.textButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        )
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = s("common_delete"))
+                                    }
                                 }
                             }
                         }
@@ -618,263 +642,186 @@ data class EditTaskScreen(
                         }
                     }
 
-                    // ── Tags ──
+                    // ── Etiquetas ──
                     item {
-                        Text(
-                            text = s("create_task_section_tags"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ExpandableSectionHeader(
+                            expanded = tagsExpanded,
+                            onToggle = { tagsExpanded = !tagsExpanded },
+                            chevronTint = MaterialTheme.colorScheme.primary
                         ) {
-                            OutlinedTextField(
-                                value = tagsText,
-                                onValueChange = { tagsText = it },
-                                label = { Text(s("create_task_add_tag")) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                            Text(
+                                text = s("create_task_section_tags"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
                             )
-                            Button(
-                                onClick = {
-                                    val tag = tagsText.trim()
-                                    if (tag.isNotBlank() && tag !in tags) {
-                                        tags = tags + tag
-                                        tagsText = ""
-                                    }
-                                },
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = s("create_task_add_tag"))
-                            }
                         }
                     }
 
-                    if (tags.isNotEmpty()) {
+                    if (tagsExpanded) {
+                        // Predefined tags (FlowRow: los chips hacen wrap en vez de comprimirse),
+                        // seguidas del chip "+ Otra" que revela el campo de texto libre (C3).
                         item {
+                            val predefinedTags = listOf(
+                                "limpieza", "cocina", "compras", "mascotas",
+                                "mantenimiento", "niños", "exterior", "administración", "otro"
+                            )
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                tags.forEach { tag ->
-                                    InputChip(
-                                        selected = false,
-                                        onClick = { tags = tags - tag },
-                                        label = { Text(tag) },
-                                        trailingIcon = {
-                                            Icon(
-                                                Icons.Default.Close,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(FilterChipDefaults.IconSize)
-                                            )
+                                predefinedTags.forEach { tag ->
+                                    FilterChip(
+                                        selected = tag in tags,
+                                        onClick = {
+                                            tags = if (tag in tags) tags - tag else tags + tag
                                         },
-                                        // El chip solo anunciaba el texto de la etiqueta,
-                                        // sin indicar que pulsarlo la elimina (el icono va
-                                        // con contentDescription = null a propósito, para
-                                        // no duplicar el anuncio).
-                                        modifier = Modifier.semantics {
-                                            contentDescription = s("create_task_remove_tag_named").replace("%s", tag)
-                                        }
+                                        label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+                                        leadingIcon = filterChipCheckIcon(tag in tags)
                                     )
+                                }
+                                FilterChip(
+                                    selected = showCustomTagField,
+                                    onClick = { showCustomTagField = !showCustomTagField },
+                                    label = { Text(s("create_task_tag_other_chip"), style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+
+                        if (showCustomTagField) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = tagsText,
+                                        onValueChange = { tagsText = it },
+                                        label = { Text(s("create_task_add_tag")) },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                                    )
+                                    Button(
+                                        onClick = {
+                                            val tag = tagsText.trim()
+                                            if (tag.isNotBlank() && tag !in tags) {
+                                                tags = tags + tag
+                                                tagsText = ""
+                                            }
+                                        },
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = s("create_task_add_tag"))
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    // Predefined tags (FlowRow: los chips hacen wrap en vez de comprimirse)
-                    item {
-                        val predefinedTags = listOf(
-                            "limpieza", "cocina", "compras", "mascotas",
-                            "mantenimiento", "niños", "exterior", "administración", "otro"
-                        )
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            predefinedTags.forEach { tag ->
-                                FilterChip(
-                                    selected = tag in tags,
-                                    onClick = {
-                                        tags = if (tag in tags) tags - tag else tags + tag
-                                    },
-                                    label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
-                                    leadingIcon = filterChipCheckIcon(tag in tags)
-                                )
+                        if (tags.isNotEmpty()) {
+                            item {
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    tags.forEach { tag ->
+                                        InputChip(
+                                            selected = false,
+                                            onClick = { tags = tags - tag },
+                                            label = { Text(tag) },
+                                            trailingIcon = {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(FilterChipDefaults.IconSize)
+                                                )
+                                            },
+                                            // El chip solo anunciaba el texto de la etiqueta,
+                                            // sin indicar que pulsarlo la elimina (el icono va
+                                            // con contentDescription = null a propósito, para
+                                            // no duplicar el anuncio).
+                                            modifier = Modifier.semantics {
+                                                contentDescription = s("create_task_remove_tag_named").replace("%s", tag)
+                                            }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
 
                     // ── Assignment ──
                     item {
-                        Text(
-                            text = s("create_task_section_assignment"),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        if (assignmentsLoadFailed) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                        ExpandableSectionHeader(
+                            expanded = assignmentExpanded,
+                            onToggle = { assignmentExpanded = !assignmentExpanded },
+                            chevronTint = MaterialTheme.colorScheme.primary
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = s("edit_task_assignment_load_error"),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.weight(1f)
+                                    text = s("create_task_section_assignment"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
-                                TextButton(onClick = { assignmentsReloadTrigger++ }) {
-                                    Text(s("common_retry"))
-                                }
-                            }
-                        }
-                    }
-
-                    // Members list
-                    when (val mState = memberState) {
-                        is MemberUiState.Success -> {
-                            if (mState.members.isNotEmpty()) {
-                                item {
-                                    mState.members.forEach { member ->
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(min = 48.dp)
-                                                .clickable(role = Role.Checkbox) {
-                                                    selectedMembers = if (member.id in selectedMembers) {
-                                                        selectedMembers - member.id
-                                                    } else {
-                                                        selectedMembers + member.id
-                                                    }
-                                                }
-                                                .padding(vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Checkbox(
-                                                checked = member.id in selectedMembers,
-                                                // La Row exterior ya es clicable con role=Checkbox
-                                                // (línea 726): con onCheckedChange no-nulo aquí,
-                                                // TalkBack expone dos nodos interactivos superpuestos
-                                                // sobre el mismo control (panel de expertos
-                                                // 2026-09-11 v9 reintento, accesibilidad).
-                                                onCheckedChange = null,
-                                                colors = CheckboxDefaults.colors(
-                                                    checkedColor = MaterialTheme.colorScheme.primary
-                                                )
-                                            )
-                                            Text(
-                                                text = "${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}",
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
+                                if (assignmentsLoadFailed) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = s("edit_task_assignment_load_error"),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        TextButton(onClick = { assignmentsReloadTrigger++ }) {
+                                            Text(s("common_retry"))
                                         }
                                     }
                                 }
                             }
                         }
-
-                        is MemberUiState.Loading -> {
-                            item {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-
-                        else -> {}
                     }
 
-                    // Rotation toggle
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = s("edit_task_rotation_toggle"),
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Switch(
-                                checked = hasRotation,
-                                onCheckedChange = { hasRotation = it },
-                                colors = SwitchDefaults.colors(
-                                    checkedTrackColor = MaterialTheme.colorScheme.tertiary
-                                )
-                            )
-                        }
-                    }
-
-                    // Day-of-week rotation selectors
-                    if (hasRotation) {
+                    if (assignmentExpanded) {
+                        // Members list
                         when (val mState = memberState) {
                             is MemberUiState.Success -> {
-                                val members = mState.members
-                                val days = listOf(
-                                    1 to s("recurrence_day_monday"), 2 to s("recurrence_day_tuesday"), 3 to s("recurrence_day_wednesday"),
-                                    4 to s("recurrence_day_thursday"), 5 to s("recurrence_day_friday"), 6 to s("recurrence_day_saturday"), 7 to s("recurrence_day_sunday")
-                                )
-                                days.forEach { (day, label) ->
+                                if (mState.members.isNotEmpty()) {
                                     item {
-                                        var expanded by remember { mutableStateOf(false) }
-                                        val selectedMember = members.find { it.id == rotationSlots[day] }
-                                        val displayText = selectedMember?.displayName ?: s("edit_task_unassigned")
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                modifier = Modifier.width(80.dp),
-                                                fontWeight = FontWeight.Medium,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-
-                                            Box(modifier = Modifier.weight(1f)) {
-                                                OutlinedButton(
-                                                    onClick = { expanded = true },
-                                                    modifier = Modifier.fillMaxWidth()
-                                                ) {
-                                                    Text(
-                                                        text = displayText,
-                                                        modifier = Modifier.weight(1f),
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                                                }
-
-                                                DropdownMenu(
-                                                    expanded = expanded,
-                                                    onDismissRequest = { expanded = false }
-                                                ) {
-                                                    DropdownMenuItem(
-                                                        text = { Text(s("edit_task_unassigned")) },
-                                                        onClick = {
-                                                            rotationSlots = rotationSlots.toMutableMap().apply { put(day, "") }
-                                                            expanded = false
+                                        mState.members.forEach { member ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(min = 48.dp)
+                                                    .clickable(role = Role.Checkbox) {
+                                                        selectedMembers = if (member.id in selectedMembers) {
+                                                            selectedMembers - member.id
+                                                        } else {
+                                                            selectedMembers + member.id
                                                         }
-                                                    )
-                                                    members.forEach { member ->
-                                                        DropdownMenuItem(
-                                                            text = {
-                                                                Text("${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}")
-                                                            },
-                                                            onClick = {
-                                                                rotationSlots = rotationSlots.toMutableMap().apply { put(day, member.id) }
-                                                                expanded = false
-                                                            }
-                                                        )
                                                     }
-                                                }
+                                                    .padding(vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Checkbox(
+                                                    checked = member.id in selectedMembers,
+                                                    // La Row exterior ya es clicable con role=Checkbox
+                                                    // (línea 726): con onCheckedChange no-nulo aquí,
+                                                    // TalkBack expone dos nodos interactivos superpuestos
+                                                    // sobre el mismo control (panel de expertos
+                                                    // 2026-09-11 v9 reintento, accesibilidad).
+                                                    onCheckedChange = null,
+                                                    colors = CheckboxDefaults.colors(
+                                                        checkedColor = MaterialTheme.colorScheme.primary
+                                                    )
+                                                )
+                                                Text(
+                                                    text = "${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}",
+                                                    style = MaterialTheme.typography.bodyLarge
+                                                )
                                             }
                                         }
                                     }
@@ -889,10 +836,50 @@ data class EditTaskScreen(
 
                             else -> {}
                         }
+
+                        // Obligatoria
+                        if (selectedMembers.isNotEmpty()) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = s("create_task_mandatory_label"),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    Switch(
+                                        checked = mandatory,
+                                        onCheckedChange = { mandatory = it },
+                                        colors = SwitchDefaults.colors(
+                                            checkedTrackColor = MaterialTheme.colorScheme.tertiary
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
 
-                    // Obligatoria
-                    if (selectedMembers.isNotEmpty()) {
+                    // ── "Otros" (Fecha límite + Penalización + Rotación) ──
+                    item {
+                        ExpandableSectionHeader(
+                            expanded = otrosExpanded,
+                            onToggle = { otrosExpanded = !otrosExpanded },
+                            chevronTint = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = s("task_detail_other_section"),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    if (otrosExpanded) {
+                        // ── Fecha límite ──
                         item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -900,212 +887,295 @@ data class EditTaskScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = s("create_task_mandatory_label"),
-                                    style = MaterialTheme.typography.bodyLarge
+                                    text = s("create_task_deadline_section"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                                 Switch(
-                                    checked = mandatory,
-                                    onCheckedChange = { mandatory = it },
+                                    checked = hasDeadline,
+                                    onCheckedChange = {
+                                        hasDeadline = it
+                                        if (it && deadlineDay.isBlank()) {
+                                            val now = Clock.System.now()
+                                            val local = now.toLocalDateTime(TimeZone.currentSystemDefault())
+                                            deadlineDay = "${local.year}-${local.monthNumber.toString().padStart(2, '0')}-${local.dayOfMonth.toString().padStart(2, '0')}"
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        if (hasDeadline) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { showDatePicker = true },
+                                        modifier = Modifier.weight(1f).height(56.dp)
+                                    ) {
+                                        Icon(Icons.Default.DateRange, contentDescription = s("create_task_pick_date"))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = if (deadlineDay.isBlank()) s("create_task_pick_date") else deadlineDay,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    OutlinedTextField(
+                                        value = deadlineTime,
+                                        onValueChange = { deadlineTime = it },
+                                        label = { Text(s("create_task_time_label")) },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true,
+                                        isError = !deadlineTime.isValidTimeFormat(),
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+                                    )
+                                }
+                            }
+                        }
+
+                        // ── Penalty ──
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = s("create_task_penalty_section"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Switch(
+                                    checked = hasPenalty,
+                                    onCheckedChange = { hasPenalty = it }
+                                )
+                            }
+                        }
+
+                        if (hasPenalty) {
+                            // Penalty mode
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = penaltyMode == "fixed",
+                                        onClick = { penaltyMode = "fixed" },
+                                        label = { Text(s("create_task_penalty_fixed")) },
+                                        leadingIcon = filterChipCheckIcon(penaltyMode == "fixed"),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    )
+                                    FilterChip(
+                                        selected = penaltyMode == "percentage",
+                                        onClick = { penaltyMode = "percentage" },
+                                        label = { Text(s("create_task_penalty_percentage")) },
+                                        leadingIcon = filterChipCheckIcon(penaltyMode == "percentage"),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    )
+                                }
+                            }
+
+                            item {
+                                OutlinedTextField(
+                                    value = penaltyValue,
+                                    onValueChange = { penaltyValue = it },
+                                    label = {
+                                        Text(if (penaltyMode == "fixed") s("create_task_penalty_points_label") else s("create_task_penalty_percent_label"))
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                    isError = (penaltyValue.toIntOrNull() ?: -1) <= 0,
+                                    supportingText = {
+                                        Text(if (penaltyMode == "fixed")
+                                            s("create_task_penalty_fixed_hint")
+                                        else s("create_task_penalty_percent_hint"))
+                                    }
+                                )
+                            }
+
+                            item {
+                                Text(
+                                    text = s("create_task_penalty_interval_label"),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    FilterChip(
+                                        selected = penaltyInterval == "day",
+                                        onClick = { penaltyInterval = "day" },
+                                        label = { Text(s("create_task_interval_daily")) },
+                                        leadingIcon = filterChipCheckIcon(penaltyInterval == "day"),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    )
+                                    FilterChip(
+                                        selected = penaltyInterval == "week",
+                                        onClick = { penaltyInterval = "week" },
+                                        label = { Text(s("recurrence_weekly")) },
+                                        leadingIcon = filterChipCheckIcon(penaltyInterval == "week"),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    )
+                                    FilterChip(
+                                        selected = penaltyInterval == "month",
+                                        onClick = { penaltyInterval = "month" },
+                                        label = { Text(s("recurrence_monthly")) },
+                                        leadingIcon = filterChipCheckIcon(penaltyInterval == "month"),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                    )
+                                }
+                            }
+
+                            item {
+                                OutlinedTextField(
+                                    value = penaltyMax,
+                                    onValueChange = { penaltyMax = it },
+                                    label = { Text(s("create_task_penalty_max_label")) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                    // A diferencia de sus campos hermanos ("Puntos", penaltyValue),
+                                    // este no validaba nada. 0/vacío SÍ es válido (sin tope), solo
+                                    // un negativo o texto no numérico es error.
+                                    isError = penaltyMax.isNotBlank() && (penaltyMax.toIntOrNull() ?: -1) < 0,
+                                    supportingText = {
+                                        Text(s("create_task_penalty_max_hint"))
+                                    }
+                                )
+                            }
+                        }
+
+                        // ── Rotación de asignación ──
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = s("edit_task_rotation_toggle"),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Switch(
+                                    checked = hasRotation,
+                                    onCheckedChange = { hasRotation = it },
                                     colors = SwitchDefaults.colors(
                                         checkedTrackColor = MaterialTheme.colorScheme.tertiary
                                     )
                                 )
                             }
                         }
-                    }
 
-                    // ── Fecha límite ──
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = s("create_task_deadline_section"),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Switch(
-                                checked = hasDeadline,
-                                onCheckedChange = {
-                                    hasDeadline = it
-                                    if (it && deadlineDay.isBlank()) {
-                                        val now = Clock.System.now()
-                                        val local = now.toLocalDateTime(TimeZone.currentSystemDefault())
-                                        deadlineDay = "${local.year}-${local.monthNumber.toString().padStart(2, '0')}-${local.dayOfMonth.toString().padStart(2, '0')}"
+                        // Day-of-week rotation selectors
+                        if (hasRotation) {
+                            when (val mState = memberState) {
+                                is MemberUiState.Success -> {
+                                    val members = mState.members
+                                    val days = listOf(
+                                        1 to s("recurrence_day_monday"), 2 to s("recurrence_day_tuesday"), 3 to s("recurrence_day_wednesday"),
+                                        4 to s("recurrence_day_thursday"), 5 to s("recurrence_day_friday"), 6 to s("recurrence_day_saturday"), 7 to s("recurrence_day_sunday")
+                                    )
+                                    days.forEach { (day, label) ->
+                                        item {
+                                            var expanded by remember { mutableStateOf(false) }
+                                            val selectedMember = members.find { it.id == rotationSlots[day] }
+                                            val displayText = selectedMember?.displayName ?: s("edit_task_unassigned")
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = label,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    modifier = Modifier.width(80.dp),
+                                                    fontWeight = FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+
+                                                Box(modifier = Modifier.weight(1f)) {
+                                                    OutlinedButton(
+                                                        onClick = { expanded = true },
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Text(
+                                                            text = displayText,
+                                                            modifier = Modifier.weight(1f),
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                                    }
+
+                                                    DropdownMenu(
+                                                        expanded = expanded,
+                                                        onDismissRequest = { expanded = false }
+                                                    ) {
+                                                        DropdownMenuItem(
+                                                            text = { Text(s("edit_task_unassigned")) },
+                                                            onClick = {
+                                                                rotationSlots = rotationSlots.toMutableMap().apply { put(day, "") }
+                                                                expanded = false
+                                                            }
+                                                        )
+                                                        members.forEach { member ->
+                                                            DropdownMenuItem(
+                                                                text = {
+                                                                    Text("${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}")
+                                                                },
+                                                                onClick = {
+                                                                    rotationSlots = rotationSlots.toMutableMap().apply { put(day, member.id) }
+                                                                    expanded = false
+                                                                }
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            )
-                        }
-                    }
 
-                    if (hasDeadline) {
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedButton(
-                                    onClick = { showDatePicker = true },
-                                    modifier = Modifier.weight(1f).height(56.dp)
-                                ) {
-                                    Icon(Icons.Default.DateRange, contentDescription = s("create_task_pick_date"))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text = if (deadlineDay.isBlank()) s("create_task_pick_date") else deadlineDay,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                is MemberUiState.Loading -> {
+                                    item {
+                                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                    }
                                 }
-                                OutlinedTextField(
-                                    value = deadlineTime,
-                                    onValueChange = { deadlineTime = it },
-                                    label = { Text(s("create_task_time_label")) },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true,
-                                    isError = !deadlineTime.isValidTimeFormat(),
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
-                                )
+
+                                else -> {}
                             }
-                        }
-                    }
-
-                    // ── Penalty ──
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = s("create_task_penalty_section"),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Switch(
-                                checked = hasPenalty,
-                                onCheckedChange = { hasPenalty = it }
-                            )
-                        }
-                    }
-
-                    if (hasPenalty) {
-                        // Penalty mode
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = penaltyMode == "fixed",
-                                    onClick = { penaltyMode = "fixed" },
-                                    label = { Text(s("create_task_penalty_fixed")) },
-                                    leadingIcon = filterChipCheckIcon(penaltyMode == "fixed"),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                    )
-                                )
-                                FilterChip(
-                                    selected = penaltyMode == "percentage",
-                                    onClick = { penaltyMode = "percentage" },
-                                    label = { Text(s("create_task_penalty_percentage")) },
-                                    leadingIcon = filterChipCheckIcon(penaltyMode == "percentage"),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                    )
-                                )
-                            }
-                        }
-
-                        item {
-                            OutlinedTextField(
-                                value = penaltyValue,
-                                onValueChange = { penaltyValue = it },
-                                label = {
-                                    Text(if (penaltyMode == "fixed") s("create_task_penalty_points_label") else s("create_task_penalty_percent_label"))
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                                isError = (penaltyValue.toIntOrNull() ?: -1) <= 0,
-                                supportingText = {
-                                    Text(if (penaltyMode == "fixed")
-                                        s("create_task_penalty_fixed_hint")
-                                    else s("create_task_penalty_percent_hint"))
-                                }
-                            )
-                        }
-
-                        item {
-                            Text(
-                                text = s("create_task_penalty_interval_label"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = penaltyInterval == "day",
-                                    onClick = { penaltyInterval = "day" },
-                                    label = { Text(s("create_task_interval_daily")) },
-                                    leadingIcon = filterChipCheckIcon(penaltyInterval == "day"),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                    )
-                                )
-                                FilterChip(
-                                    selected = penaltyInterval == "week",
-                                    onClick = { penaltyInterval = "week" },
-                                    label = { Text(s("recurrence_weekly")) },
-                                    leadingIcon = filterChipCheckIcon(penaltyInterval == "week"),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                    )
-                                )
-                                FilterChip(
-                                    selected = penaltyInterval == "month",
-                                    onClick = { penaltyInterval = "month" },
-                                    label = { Text(s("recurrence_monthly")) },
-                                    leadingIcon = filterChipCheckIcon(penaltyInterval == "month"),
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                    )
-                                )
-                            }
-                        }
-
-                        item {
-                            OutlinedTextField(
-                                value = penaltyMax,
-                                onValueChange = { penaltyMax = it },
-                                label = { Text(s("create_task_penalty_max_label")) },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                                // A diferencia de sus campos hermanos ("Puntos", penaltyValue),
-                                // este no validaba nada. 0/vacío SÍ es válido (sin tope), solo
-                                // un negativo o texto no numérico es error.
-                                isError = penaltyMax.isNotBlank() && (penaltyMax.toIntOrNull() ?: -1) < 0,
-                                supportingText = {
-                                    Text(s("create_task_penalty_max_hint"))
-                                }
-                            )
                         }
                     }
 

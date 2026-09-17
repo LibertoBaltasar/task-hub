@@ -609,6 +609,11 @@ private fun TaskListContent(
     // Collapse state per group
     val collapsedGroups = remember { mutableStateMapOf<String, Boolean>() }
 
+    // Búsqueda colapsada a icono expandible (L4): el campo de texto solo
+    // ocupa espacio cuando el usuario lo pide, en vez de siempre a tamaño
+    // completo (diseño v2, fase 1, ítem 10).
+    var searchExpanded by remember { mutableStateOf(searchQuery.isNotBlank()) }
+
     // Track which tasks are being completed (loading state)
     val loadingTaskIds = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -632,19 +637,24 @@ private fun TaskListContent(
                 tagFilter = tagFilter,
                 allTags = allTags,
                 s = s,
+                searchExpanded = searchExpanded,
+                hasActiveSearch = searchQuery.isNotBlank(),
                 onFilterChange = onFilterChange,
                 onSortChange = onSortChange,
-                onTagFilterChange = onTagFilterChange
+                onTagFilterChange = onTagFilterChange,
+                onToggleSearch = { searchExpanded = !searchExpanded }
             )
         }
 
-        // Search bar
-        item {
-            SearchBar(
-                query = searchQuery,
-                s = s,
-                onQueryChange = onSearchQueryChange
-            )
+        // Search bar — solo ocupa espacio cuando el usuario expande el icono.
+        if (searchExpanded) {
+            item {
+                SearchBar(
+                    query = searchQuery,
+                    s = s,
+                    onQueryChange = onSearchQueryChange
+                )
+            }
         }
 
         // ── DEBUG: always show task count (only in debug builds) ──
@@ -1284,9 +1294,12 @@ private fun FilterChipsRow(
     tagFilter: String?,
     allTags: List<String>,
     s: (String) -> String,
+    searchExpanded: Boolean,
+    hasActiveSearch: Boolean,
     onFilterChange: (TaskFilter) -> Unit,
     onSortChange: (TaskSort) -> Unit,
-    onTagFilterChange: (String?) -> Unit
+    onTagFilterChange: (String?) -> Unit,
+    onToggleSearch: () -> Unit
 ) {
     var expandedSort by remember { mutableStateOf(false) }
 
@@ -1328,6 +1341,20 @@ private fun FilterChipsRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Búsqueda colapsada a icono (L4): antes la SearchBar se pintaba
+            // siempre a tamaño completo aunque se usara ocasionalmente.
+            IconButton(onClick = onToggleSearch) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = s(if (searchExpanded) "common_collapse" else "task_list_search_content_desc"),
+                    tint = if (searchExpanded || hasActiveSearch) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+
             if (allTags.isNotEmpty()) {
                 // Tag filter dropdown
                 var tagExpanded by remember { mutableStateOf(false) }
