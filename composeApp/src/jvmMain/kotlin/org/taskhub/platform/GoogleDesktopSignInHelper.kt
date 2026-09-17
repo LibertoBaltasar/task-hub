@@ -17,6 +17,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.forms.submitForm
 import io.ktor.http.Parameters
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -80,6 +81,13 @@ object GoogleDesktopSignInHelper {
 
             val code = awaitCallback(serverSocket, state) ?: return null
             exchangeCodeForIdToken(code, clientId, clientSecret, redirectUri, codeVerifier)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // El KDoc de esta función promete "nunca lanza salvo config
+            // vacía" — sin este catch, un fallo real de red/serialización en
+            // exchangeCodeForIdToken (HTTP a Google) rompía esa promesa.
+            null
         } finally {
             runCatching { serverSocket.close() }
         }
@@ -137,8 +145,18 @@ object GoogleDesktopSignInHelper {
             } catch (e: SocketTimeoutException) {
                 return@withContext null
             }
+            // serverSocket.soTimeout solo cubre accept() — el Socket que
+            // devuelve NO hereda el timeout. Sin fijarlo aquí, una conexión
+            // que llega pero nunca envía la petición (pre-connect del propio
+            // navegador, escáner de puerto local, etc.) deja readCallbackParams
+            // bloqueado en readLine() indefinidamente, sin límite alguno.
+            socket.soTimeout = CALLBACK_TIMEOUT_MILLIS
             socket.use {
-                val params = readCallbackParams(it) ?: emptyMap()
+                val params = try {
+                    readCallbackParams(it)
+                } catch (e: SocketTimeoutException) {
+                    null
+                } ?: emptyMap()
                 val ok = params["error"] == null &&
                     params["state"] != null &&
                     params["state"] == expectedState &&

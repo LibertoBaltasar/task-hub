@@ -16,6 +16,15 @@ expect fun saveWidgetThemeToCache(theme: String)
 /** Actualiza el widget con la lista actual de tareas pendientes (una por línea). */
 expect fun updateWidgetPendingTasks(taskList: String)
 
+/**
+ * `true` solo en Android, la única plataforma con widget de pantalla de
+ * inicio real — en el resto, [saveWidgetThemeToCache]/[updateWidgetPendingTasks]
+ * son no-ops. Permite ocultar la sección "Tema del widget" de Ajustes donde
+ * no tiene ningún efecto, en vez de dejar que el usuario configure algo que
+ * no existe en su plataforma.
+ */
+expect val hasHomeScreenWidget: Boolean
+
 /** Lanza el flujo de Google Sign-In para vincular una cuenta de Google (integración con Calendar). */
 expect fun launchGoogleSignIn()
 

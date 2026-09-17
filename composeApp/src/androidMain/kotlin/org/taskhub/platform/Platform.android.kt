@@ -31,6 +31,8 @@ actual fun shareText(text: String, title: String) {
     context.startActivity(chooser)
 }
 
+actual val hasHomeScreenWidget: Boolean = true
+
 /** Guarda el tema del widget en SharedPreferences ("widget_cache"), leídas por [TaskHubWidgetProvider]. */
 actual fun saveWidgetThemeToCache(theme: String) {
     val context = AndroidContextHolder.context ?: return

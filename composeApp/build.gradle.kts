@@ -62,6 +62,11 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
+            // Coordenada Maven fija, no ligada a `compose-multiplatform` del
+            // catálogo: material-icons-core no publica release 1.8.0 (el
+            // último artefacto disponible en Maven es 1.7.3) — un intento de
+            // interpolar la versión del catálogo aquí rompe la resolución de
+            // dependencias (verificado: "Could not find ...material-icons-core:1.8.0").
             implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
 
             implementation(libs.ktor.client.core)

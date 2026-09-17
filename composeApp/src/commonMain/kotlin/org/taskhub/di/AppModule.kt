@@ -110,8 +110,9 @@ val appModule: Module = module {
         )
     }
 
-    // Google Calendar integration
-    single { GoogleCalendarRepository() }
+    // Google Calendar integration — comparte el HttpClient de FirestoreClient
+    // (mismo patrón que CloudFunctionsClient arriba, panel v12 arquitectura).
+    single { GoogleCalendarRepository(client = get<FirestoreClient>().client) }
 
     // Google login / auth manager (compartido entre HomeScreen y Ajustes).
     // onClose cancela su CoroutineScope interno si Koin cierra el contenedor

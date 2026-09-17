@@ -32,6 +32,7 @@ import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.theme.TaskHubThemeType
+import org.taskhub.platform.hasHomeScreenWidget
 import org.taskhub.platform.saveWidgetThemeToCache
 
 /** Misma URL publicada en la ficha de Play (ver docs/play-store-listing.md). */
@@ -402,37 +403,42 @@ fun SettingsSheet(
             )
         }
 
-        Spacer(Modifier.height(24.dp))
+        // Solo Android tiene widget de pantalla de inicio real — en el resto
+        // de plataformas esta sección no tenía ningún efecto (ver
+        // hasHomeScreenWidget en platform/Platform.kt).
+        if (hasHomeScreenWidget) {
+            Spacer(Modifier.height(24.dp))
 
-        // ── Widget Theme ────────────────────────────────
-        SettingsSection(title = s("settings_widget_theme_title")) {
-            RadioOptionRow(
-                label = s("widget_theme_light"),
-                selected = widgetTheme == "light",
-                onClick = {
-                    widgetTheme = "light"
-                    settingsStore.setWidgetTheme("light")
-                    saveWidgetThemeToCache("light")
-                }
-            )
-            RadioOptionRow(
-                label = s("widget_theme_dark"),
-                selected = widgetTheme == "dark",
-                onClick = {
-                    widgetTheme = "dark"
-                    settingsStore.setWidgetTheme("dark")
-                    saveWidgetThemeToCache("dark")
-                }
-            )
-            RadioOptionRow(
-                label = s("widget_theme_system"),
-                selected = widgetTheme == "system",
-                onClick = {
-                    widgetTheme = "system"
-                    settingsStore.setWidgetTheme("system")
-                    saveWidgetThemeToCache("system")
-                }
-            )
+            // ── Widget Theme ────────────────────────────────
+            SettingsSection(title = s("settings_widget_theme_title")) {
+                RadioOptionRow(
+                    label = s("widget_theme_light"),
+                    selected = widgetTheme == "light",
+                    onClick = {
+                        widgetTheme = "light"
+                        settingsStore.setWidgetTheme("light")
+                        saveWidgetThemeToCache("light")
+                    }
+                )
+                RadioOptionRow(
+                    label = s("widget_theme_dark"),
+                    selected = widgetTheme == "dark",
+                    onClick = {
+                        widgetTheme = "dark"
+                        settingsStore.setWidgetTheme("dark")
+                        saveWidgetThemeToCache("dark")
+                    }
+                )
+                RadioOptionRow(
+                    label = s("widget_theme_system"),
+                    selected = widgetTheme == "system",
+                    onClick = {
+                        widgetTheme = "system"
+                        settingsStore.setWidgetTheme("system")
+                        saveWidgetThemeToCache("system")
+                    }
+                )
+            }
         }
 
         Spacer(Modifier.height(24.dp))

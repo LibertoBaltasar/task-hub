@@ -53,12 +53,12 @@ class RewardsRepository(
      */
     suspend fun getRewards(householdId: String): List<RewardResponse> {
         return try {
-            val response: FirestoreListResponse = client.getWithRetry(
+            val documents = client.listAllDocuments(
                 "$baseUrl/households/$householdId/rewards"
             ) {
                 withAuth()
-            }.body()
-            val rewards = response.documents.map { doc -> FirestoreParsers.toRewardResponse(doc, householdId) }
+            }
+            val rewards = documents.map { doc -> FirestoreParsers.toRewardResponse(doc, householdId) }
             taskCache.cacheRewards(householdId, rewards)
             rewards
         } catch (e: CancellationException) {
@@ -116,12 +116,12 @@ class RewardsRepository(
      */
     suspend fun getRewardRedemptions(householdId: String): List<RewardRedemption> {
         return try {
-            val response: FirestoreListResponse = client.getWithRetry(
+            val documents = client.listAllDocuments(
                 "$baseUrl/households/$householdId/rewardRedemptions"
             ) {
                 withAuth()
-            }.body()
-            val redemptions = response.documents.map { doc -> FirestoreParsers.toRewardRedemption(doc) }
+            }
+            val redemptions = documents.map { doc -> FirestoreParsers.toRewardRedemption(doc) }
             taskCache.cacheRewardRedemptions(householdId, redemptions)
             redemptions
         } catch (e: CancellationException) {

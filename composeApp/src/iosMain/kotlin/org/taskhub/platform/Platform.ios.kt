@@ -16,6 +16,9 @@ actual fun shareText(text: String, title: String) {
     println("shareText not implemented on iOS: $title")
 }
 
+/** Todavía no existe un widget de iOS (WidgetKit). */
+actual val hasHomeScreenWidget: Boolean = false
+
 /**
  * Implementación iOS del `expect` [saveWidgetThemeToCache] (`platform/Platform.kt`).
  *

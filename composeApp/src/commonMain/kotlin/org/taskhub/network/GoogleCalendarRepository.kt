@@ -19,7 +19,6 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * Cliente REST de Google Calendar API v3.
@@ -33,22 +32,18 @@ import kotlinx.serialization.json.Json
  * Documentación de la API:
  *   https://developers.google.com/calendar/api/v3/reference/events/insert
  */
-class GoogleCalendarRepository {
+class GoogleCalendarRepository(
+    // Mismo HttpClient que [FirestoreClient] (Koin lo comparte, ver
+    // `AppModule.kt`, mismo patrón que [CloudFunctionsClient]): idéntica
+    // configuración de JSON/timeouts a la que este archivo instanciaba por su
+    // cuenta, evita duplicar el engine/pool de conexiones de Ktor por
+    // plataforma (relevante ahora que hay 4 targets). El `catch (_: Exception)`
+    // genérico de este archivo sigue funcionando igual si el
+    // `HttpResponseValidator` de FirestoreClient envuelve un error de la API
+    // de Calendar en una excepción.
+    private val client: HttpClient
+) {
     private val calendarBaseUrl = "https://www.googleapis.com/calendar/v3"
-
-    private val client = HttpClient {
-        install(ContentNegotiation) {
-            json(Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-                encodeDefaults = false
-            })
-        }
-        install(HttpTimeout) {
-            connectTimeoutMillis = 15_000
-            requestTimeoutMillis = 30_000
-        }
-    }
 
     /**
      * Busca un calendario propio/suscrito del usuario cuyo `summary` (nombre

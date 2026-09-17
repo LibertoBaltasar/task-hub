@@ -27,6 +27,9 @@ actual fun shareText(text: String, title: String) {
     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }
 
+/** JVM: no hay widget de escritorio. */
+actual val hasHomeScreenWidget: Boolean = false
+
 /** JVM: no hay widget de escritorio — no-op. */
 actual fun saveWidgetThemeToCache(theme: String) {
     // JVM: no widget — no-op

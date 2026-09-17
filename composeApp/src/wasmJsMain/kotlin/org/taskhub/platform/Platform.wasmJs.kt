@@ -19,6 +19,9 @@ actual fun shareText(text: String, title: String) {
     println("shareText not implemented on web: $title")
 }
 
+/** Web: no hay widget de home screen. */
+actual val hasHomeScreenWidget: Boolean = false
+
 /** Web: no hay widget de home screen — no-op. */
 actual fun saveWidgetThemeToCache(theme: String) {
     // Web: no widget — no-op
