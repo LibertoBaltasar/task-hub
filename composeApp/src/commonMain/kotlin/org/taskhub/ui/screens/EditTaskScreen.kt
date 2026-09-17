@@ -156,7 +156,14 @@ data class EditTaskScreen(
         var showCustomTagField by remember { mutableStateOf(false) }
         var tagsExpanded by remember { mutableStateOf(task.tags.isNotEmpty()) }
         var assignmentExpanded by remember { mutableStateOf(false) }
-        var otrosExpanded by remember { mutableStateOf(hasDeadline || hasPenalty || task.assignmentRotation.isNotEmpty()) }
+        // La penalización y la rotación ahora viven en apartados distintos
+        // ("Puntuación" y este condicionado a frecuencia semanal): "Otros"
+        // solo necesita abrirse por defecto si hay fecha límite, o rotación
+        // ya guardada en una tarea que además sigue siendo semanal (una
+        // tarea legado con rotación pero frecuencia ya cambiada no debería
+        // forzar la apertura de un apartado donde esa rotación ni se ve).
+        var otrosExpanded by remember { mutableStateOf(hasDeadline || (task.assignmentRotation.isNotEmpty() && task.frequency == "weekly")) }
+        var puntuacionExpanded by remember { mutableStateOf(true) }
 
         // Precargar fecha límite (una sola vez).
         LaunchedEffect(Unit) {
@@ -251,15 +258,7 @@ data class EditTaskScreen(
                                     } else 0L
 
                                     // Build assignment rotation from rotation slots
-                                    val rotation: List<AssignmentSlot> = if (hasRotation) {
-                                        rotationSlots.entries
-                                            .filter { it.value.isNotBlank() }
-                                            .map { (day, memberId) ->
-                                                AssignmentSlot(dayOfWeek = day, memberId = memberId)
-                                            }
-                                    } else {
-                                        emptyList()
-                                    }
+                                    val rotation = resolvedRotation(hasRotation, frequency, rotationSlots)
 
                                     taskModel.updateTask(
                                         householdId = householdId,
@@ -272,7 +271,7 @@ data class EditTaskScreen(
                                         recurrenceDay = if (frequency == "monthly") recurrenceDay else null,
                                         tags = tags,
                                         subtasks = subtasks,
-                                        penaltyMode = if (hasPenalty) penaltyMode else null,
+                                        penaltyMode = resolvedPenaltyMode(hasPenalty, hasDeadline, penaltyMode),
                                         penaltyValue = pValue,
                                         penaltyInterval = penaltyInterval,
                                         penaltyMax = pMax,
@@ -381,26 +380,6 @@ data class EditTaskScreen(
                             minLines = 2,
                             maxLines = 4,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                        )
-                    }
-
-                    item {
-                        OutlinedTextField(
-                            value = pointsText,
-                            onValueChange = { pointsText = it },
-                            label = { Text(s("public_profile_stat_points")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                            isError = (pointsText.toIntOrNull() ?: -1) <= 0,
-                            supportingText = {
-                                if (pointsText.toIntOrNull() == null) {
-                                    Text(s("create_task_points_error_nan"))
-                                } else if ((pointsText.toIntOrNull() ?: -1) <= 0) {
-                                    Text(s("create_task_points_error_positive"))
-                                }
-                            }
                         )
                     }
 
@@ -536,6 +515,14 @@ data class EditTaskScreen(
                                         if (key == "monthly" && recurrenceDay == null) {
                                             recurrenceDay = Clock.System.now()
                                                 .toLocalDateTime(TimeZone.currentSystemDefault()).date.dayOfMonth
+                                        }
+                                        // La rotación por día de la semana solo tiene sentido
+                                        // con frecuencia semanal: al cambiar a otra frecuencia
+                                        // se descarta para no dejar un estado residual sin
+                                        // apartado visible donde revisarlo.
+                                        if (key != "weekly") {
+                                            hasRotation = false
+                                            rotationSlots = (1..7).associateWith { "" }.toMutableMap()
                                         }
                                     },
                                     label = { Text(label) },
@@ -861,7 +848,7 @@ data class EditTaskScreen(
                         }
                     }
 
-                    // ── "Otros" (Fecha límite + Penalización + Rotación) ──
+                    // ── "Otros" (Fecha límite + Rotación semanal) ──
                     item {
                         ExpandableSectionHeader(
                             expanded = otrosExpanded,
@@ -901,6 +888,17 @@ data class EditTaskScreen(
                                             val local = now.toLocalDateTime(TimeZone.currentSystemDefault())
                                             deadlineDay = "${local.year}-${local.monthNumber.toString().padStart(2, '0')}-${local.dayOfMonth.toString().padStart(2, '0')}"
                                         }
+                                        // La penalización por retraso no tiene sentido sin
+                                        // fecha límite: al desactivarla se descarta también
+                                        // el estado de penalización en vez de dejarlo oculto
+                                        // pero listo para colarse en el guardado.
+                                        if (!it) {
+                                            hasPenalty = false
+                                            penaltyMode = "fixed"
+                                            penaltyValue = ""
+                                            penaltyInterval = "day"
+                                            penaltyMax = ""
+                                        }
                                     }
                                 )
                             }
@@ -939,242 +937,302 @@ data class EditTaskScreen(
                             }
                         }
 
-                        // ── Penalty ──
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = s("create_task_penalty_section"),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Switch(
-                                    checked = hasPenalty,
-                                    onCheckedChange = { hasPenalty = it }
-                                )
-                            }
-                        }
-
-                        if (hasPenalty) {
-                            // Penalty mode
+                        // ── Rotación de asignación (solo tiene sentido con frecuencia
+                        // semanal: sin ella no hay "días de la semana" que asignar) ──
+                        if (frequency == "weekly") {
                             item {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    FilterChip(
-                                        selected = penaltyMode == "fixed",
-                                        onClick = { penaltyMode = "fixed" },
-                                        label = { Text(s("create_task_penalty_fixed")) },
-                                        leadingIcon = filterChipCheckIcon(penaltyMode == "fixed"),
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                        )
+                                    Text(
+                                        text = s("edit_task_rotation_toggle"),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f)
                                     )
-                                    FilterChip(
-                                        selected = penaltyMode == "percentage",
-                                        onClick = { penaltyMode = "percentage" },
-                                        label = { Text(s("create_task_penalty_percentage")) },
-                                        leadingIcon = filterChipCheckIcon(penaltyMode == "percentage"),
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                    Switch(
+                                        checked = hasRotation,
+                                        onCheckedChange = { hasRotation = it },
+                                        colors = SwitchDefaults.colors(
+                                            checkedTrackColor = MaterialTheme.colorScheme.tertiary
                                         )
                                     )
                                 }
                             }
 
-                            item {
-                                OutlinedTextField(
-                                    value = penaltyValue,
-                                    onValueChange = { penaltyValue = it },
-                                    label = {
-                                        Text(if (penaltyMode == "fixed") s("create_task_penalty_points_label") else s("create_task_penalty_percent_label"))
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                                    isError = (penaltyValue.toIntOrNull() ?: -1) <= 0,
-                                    supportingText = {
-                                        Text(if (penaltyMode == "fixed")
-                                            s("create_task_penalty_fixed_hint")
-                                        else s("create_task_penalty_percent_hint"))
-                                    }
-                                )
-                            }
-
-                            item {
-                                Text(
-                                    text = s("create_task_penalty_interval_label"),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            item {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    FilterChip(
-                                        selected = penaltyInterval == "day",
-                                        onClick = { penaltyInterval = "day" },
-                                        label = { Text(s("create_task_interval_daily")) },
-                                        leadingIcon = filterChipCheckIcon(penaltyInterval == "day"),
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            // Day-of-week rotation selectors
+                            if (hasRotation) {
+                                when (val mState = memberState) {
+                                    is MemberUiState.Success -> {
+                                        val members = mState.members
+                                        val days = listOf(
+                                            1 to s("recurrence_day_monday"), 2 to s("recurrence_day_tuesday"), 3 to s("recurrence_day_wednesday"),
+                                            4 to s("recurrence_day_thursday"), 5 to s("recurrence_day_friday"), 6 to s("recurrence_day_saturday"), 7 to s("recurrence_day_sunday")
                                         )
-                                    )
-                                    FilterChip(
-                                        selected = penaltyInterval == "week",
-                                        onClick = { penaltyInterval = "week" },
-                                        label = { Text(s("recurrence_weekly")) },
-                                        leadingIcon = filterChipCheckIcon(penaltyInterval == "week"),
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                        )
-                                    )
-                                    FilterChip(
-                                        selected = penaltyInterval == "month",
-                                        onClick = { penaltyInterval = "month" },
-                                        label = { Text(s("recurrence_monthly")) },
-                                        leadingIcon = filterChipCheckIcon(penaltyInterval == "month"),
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                            selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                        )
-                                    )
-                                }
-                            }
+                                        days.forEach { (day, label) ->
+                                            item {
+                                                var expanded by remember { mutableStateOf(false) }
+                                                val selectedMember = members.find { it.id == rotationSlots[day] }
+                                                val displayText = selectedMember?.displayName ?: s("edit_task_unassigned")
 
-                            item {
-                                OutlinedTextField(
-                                    value = penaltyMax,
-                                    onValueChange = { penaltyMax = it },
-                                    label = { Text(s("create_task_penalty_max_label")) },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                                    // A diferencia de sus campos hermanos ("Puntos", penaltyValue),
-                                    // este no validaba nada. 0/vacío SÍ es válido (sin tope), solo
-                                    // un negativo o texto no numérico es error.
-                                    isError = penaltyMax.isNotBlank() && (penaltyMax.toIntOrNull() ?: -1) < 0,
-                                    supportingText = {
-                                        Text(s("create_task_penalty_max_hint"))
-                                    }
-                                )
-                            }
-                        }
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Text(
+                                                        text = label,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        modifier = Modifier.width(80.dp),
+                                                        fontWeight = FontWeight.Medium,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
 
-                        // ── Rotación de asignación ──
-                        item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(
-                                    text = s("edit_task_rotation_toggle"),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Switch(
-                                    checked = hasRotation,
-                                    onCheckedChange = { hasRotation = it },
-                                    colors = SwitchDefaults.colors(
-                                        checkedTrackColor = MaterialTheme.colorScheme.tertiary
-                                    )
-                                )
-                            }
-                        }
+                                                    Box(modifier = Modifier.weight(1f)) {
+                                                        OutlinedButton(
+                                                            onClick = { expanded = true },
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        ) {
+                                                            Text(
+                                                                text = displayText,
+                                                                modifier = Modifier.weight(1f),
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                                                        }
 
-                        // Day-of-week rotation selectors
-                        if (hasRotation) {
-                            when (val mState = memberState) {
-                                is MemberUiState.Success -> {
-                                    val members = mState.members
-                                    val days = listOf(
-                                        1 to s("recurrence_day_monday"), 2 to s("recurrence_day_tuesday"), 3 to s("recurrence_day_wednesday"),
-                                        4 to s("recurrence_day_thursday"), 5 to s("recurrence_day_friday"), 6 to s("recurrence_day_saturday"), 7 to s("recurrence_day_sunday")
-                                    )
-                                    days.forEach { (day, label) ->
-                                        item {
-                                            var expanded by remember { mutableStateOf(false) }
-                                            val selectedMember = members.find { it.id == rotationSlots[day] }
-                                            val displayText = selectedMember?.displayName ?: s("edit_task_unassigned")
-
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Text(
-                                                    text = label,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    modifier = Modifier.width(80.dp),
-                                                    fontWeight = FontWeight.Medium,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-
-                                                Box(modifier = Modifier.weight(1f)) {
-                                                    OutlinedButton(
-                                                        onClick = { expanded = true },
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    ) {
-                                                        Text(
-                                                            text = displayText,
-                                                            modifier = Modifier.weight(1f),
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
-                                                        Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                                                    }
-
-                                                    DropdownMenu(
-                                                        expanded = expanded,
-                                                        onDismissRequest = { expanded = false }
-                                                    ) {
-                                                        DropdownMenuItem(
-                                                            text = { Text(s("edit_task_unassigned")) },
-                                                            onClick = {
-                                                                rotationSlots = rotationSlots.toMutableMap().apply { put(day, "") }
-                                                                expanded = false
-                                                            }
-                                                        )
-                                                        members.forEach { member ->
+                                                        DropdownMenu(
+                                                            expanded = expanded,
+                                                            onDismissRequest = { expanded = false }
+                                                        ) {
                                                             DropdownMenuItem(
-                                                                text = {
-                                                                    Text("${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}")
-                                                                },
+                                                                text = { Text(s("edit_task_unassigned")) },
                                                                 onClick = {
-                                                                    rotationSlots = rotationSlots.toMutableMap().apply { put(day, member.id) }
+                                                                    rotationSlots = rotationSlots.toMutableMap().apply { put(day, "") }
                                                                     expanded = false
                                                                 }
                                                             )
+                                                            members.forEach { member ->
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Text("${s(if (member.role == "admin") "member_role_admin_short" else "member_role_child_short")} ${member.displayName}")
+                                                                    },
+                                                                    onClick = {
+                                                                        rotationSlots = rotationSlots.toMutableMap().apply { put(day, member.id) }
+                                                                        expanded = false
+                                                                    }
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
                                         }
                                     }
-                                }
 
-                                is MemberUiState.Loading -> {
-                                    item {
-                                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                    is MemberUiState.Loading -> {
+                                        item {
+                                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+
+                                    else -> {}
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Puntuación (puntos + penalización por retraso) ──
+                    item {
+                        ExpandableSectionHeader(
+                            expanded = puntuacionExpanded,
+                            onToggle = { puntuacionExpanded = !puntuacionExpanded },
+                            chevronTint = MaterialTheme.colorScheme.primary
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = s("task_detail_points_section"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = s("create_task_section_points_hint"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    if (puntuacionExpanded) {
+                        item {
+                            OutlinedTextField(
+                                value = pointsText,
+                                onValueChange = { pointsText = it },
+                                label = { Text(s("public_profile_stat_points")) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                isError = (pointsText.toIntOrNull() ?: -1) <= 0,
+                                supportingText = {
+                                    if (pointsText.toIntOrNull() == null) {
+                                        Text(s("create_task_points_error_nan"))
+                                    } else if ((pointsText.toIntOrNull() ?: -1) <= 0) {
+                                        Text(s("create_task_points_error_positive"))
+                                    }
+                                }
+                            )
+                        }
+
+                        // La penalización por retraso solo tiene sentido si la tarea
+                        // tiene fecha límite (activable en "Otros"): sin eso no hay
+                        // "retraso" que penalizar.
+                        if (hasDeadline) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = s("create_task_penalty_section"),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Switch(
+                                        checked = hasPenalty,
+                                        onCheckedChange = { hasPenalty = it }
+                                    )
+                                }
+                            }
+
+                            if (hasPenalty) {
+                                // Penalty mode
+                                item {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        FilterChip(
+                                            selected = penaltyMode == "fixed",
+                                            onClick = { penaltyMode = "fixed" },
+                                            label = { Text(s("create_task_penalty_fixed")) },
+                                            leadingIcon = filterChipCheckIcon(penaltyMode == "fixed"),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                            )
+                                        )
+                                        FilterChip(
+                                            selected = penaltyMode == "percentage",
+                                            onClick = { penaltyMode = "percentage" },
+                                            label = { Text(s("create_task_penalty_percentage")) },
+                                            leadingIcon = filterChipCheckIcon(penaltyMode == "percentage"),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                            )
+                                        )
                                     }
                                 }
 
-                                else -> {}
+                                item {
+                                    OutlinedTextField(
+                                        value = penaltyValue,
+                                        onValueChange = { penaltyValue = it },
+                                        label = {
+                                            Text(if (penaltyMode == "fixed") s("create_task_penalty_points_label") else s("create_task_penalty_percent_label"))
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                        isError = (penaltyValue.toIntOrNull() ?: -1) <= 0,
+                                        supportingText = {
+                                            Text(if (penaltyMode == "fixed")
+                                                s("create_task_penalty_fixed_hint")
+                                            else s("create_task_penalty_percent_hint"))
+                                        }
+                                    )
+                                }
+
+                                item {
+                                    Text(
+                                        text = s("create_task_penalty_interval_label"),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                item {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        FilterChip(
+                                            selected = penaltyInterval == "day",
+                                            onClick = { penaltyInterval = "day" },
+                                            label = { Text(s("create_task_interval_daily")) },
+                                            leadingIcon = filterChipCheckIcon(penaltyInterval == "day"),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                            )
+                                        )
+                                        FilterChip(
+                                            selected = penaltyInterval == "week",
+                                            onClick = { penaltyInterval = "week" },
+                                            label = { Text(s("recurrence_weekly")) },
+                                            leadingIcon = filterChipCheckIcon(penaltyInterval == "week"),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                            )
+                                        )
+                                        FilterChip(
+                                            selected = penaltyInterval == "month",
+                                            onClick = { penaltyInterval = "month" },
+                                            label = { Text(s("recurrence_monthly")) },
+                                            leadingIcon = filterChipCheckIcon(penaltyInterval == "month"),
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                                selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                            )
+                                        )
+                                    }
+                                }
+
+                                item {
+                                    OutlinedTextField(
+                                        value = penaltyMax,
+                                        onValueChange = { penaltyMax = it },
+                                        label = { Text(s("create_task_penalty_max_label")) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                                        // A diferencia de sus campos hermanos ("Puntos", penaltyValue),
+                                        // este no validaba nada. 0/vacío SÍ es válido (sin tope), solo
+                                        // un negativo o texto no numérico es error.
+                                        isError = penaltyMax.isNotBlank() && (penaltyMax.toIntOrNull() ?: -1) < 0,
+                                        supportingText = {
+                                            Text(s("create_task_penalty_max_hint"))
+                                        }
+                                    )
+                                }
+                            }
+                        } else {
+                            item {
+                                Text(
+                                    text = s("create_task_penalty_requires_deadline_hint"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }

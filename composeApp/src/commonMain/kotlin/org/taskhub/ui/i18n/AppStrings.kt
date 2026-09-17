@@ -566,6 +566,7 @@ object AppStrings {
             "create_task_title" to "Nueva tarea",
             "create_task_submit" to "Crear",
             "create_task_section_basic_info" to "📝 Información básica",
+            "create_task_section_points_hint" to "Puntos que otorga la tarea y penalización por retraso.",
             "create_task_title_field" to "Título de la tarea *",
             "create_task_title_required" to "El título es obligatorio",
             "create_task_creator_not_resolved" to "Espera un momento: aún se está identificando quién crea la tarea",
@@ -607,6 +608,7 @@ object AppStrings {
             "create_task_interval_daily" to "Diario",
             "create_task_penalty_max_label" to "Tope máximo (opcional)",
             "create_task_penalty_max_hint" to "Penalización nunca superará este valor. 0 = sin tope.",
+            "create_task_penalty_requires_deadline_hint" to "Activa la fecha límite (en «Otros») para configurar la penalización por retraso.",
             "create_task_templates_title" to "Plantillas rápidas",
             "create_task_templates_hint" to "Toca una plantilla para rellenar el formulario automáticamente.",
 
@@ -1214,6 +1216,7 @@ object AppStrings {
             "create_task_title" to "New task",
             "create_task_submit" to "Create",
             "create_task_section_basic_info" to "📝 Basic info",
+            "create_task_section_points_hint" to "Points the task grants and the late penalty.",
             "create_task_title_field" to "Task title *",
             "create_task_title_required" to "Title is required",
             "create_task_creator_not_resolved" to "Please wait a moment: still identifying who is creating the task",
@@ -1255,6 +1258,7 @@ object AppStrings {
             "create_task_interval_daily" to "Daily",
             "create_task_penalty_max_label" to "Maximum cap (optional)",
             "create_task_penalty_max_hint" to "Penalty will never exceed this value. 0 = no cap.",
+            "create_task_penalty_requires_deadline_hint" to "Enable the due date (in \"Other\") to configure the late penalty.",
             "create_task_templates_title" to "Quick templates",
             "create_task_templates_hint" to "Tap a template to fill in the form automatically.",
 
