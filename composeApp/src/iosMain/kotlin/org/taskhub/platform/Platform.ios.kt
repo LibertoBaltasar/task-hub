@@ -19,6 +19,9 @@ actual fun shareText(text: String, title: String) {
 /** Todavía no existe un widget de iOS (WidgetKit). */
 actual val hasHomeScreenWidget: Boolean = false
 
+/** iOS: Google Sign-In no está implementado — nunca hay token de Calendar. */
+actual val hasCalendarSupport: Boolean = false
+
 /**
  * Implementación iOS del `expect` [saveWidgetThemeToCache] (`platform/Platform.kt`).
  *

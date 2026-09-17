@@ -32,6 +32,7 @@ import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.theme.TaskHubThemeType
+import org.taskhub.platform.hasCalendarSupport
 import org.taskhub.platform.hasHomeScreenWidget
 import org.taskhub.platform.saveWidgetThemeToCache
 
@@ -196,6 +197,12 @@ fun SettingsSheet(
             }
         }
 
+        // Solo Android puede vincular Google Calendar hoy (ver
+        // hasCalendarSupport en platform/Platform.kt) — en JVM/wasmJs,
+        // getGoogleCalendarAccessToken() está hardcodeado a null, así que
+        // mostrar esta sección solo llevaba al usuario a completar un flujo
+        // OAuth entero (en desktop, real) para acabar viendo un error.
+        if (hasCalendarSupport) {
         Spacer(Modifier.height(24.dp))
 
         // ── Google Calendar ──────────────────────────────
@@ -334,6 +341,7 @@ fun SettingsSheet(
                     )
                 }
             }
+        }
         }
 
         Spacer(Modifier.height(24.dp))

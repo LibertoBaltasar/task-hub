@@ -25,6 +25,17 @@ expect fun updateWidgetPendingTasks(taskList: String)
  */
 expect val hasHomeScreenWidget: Boolean
 
+/**
+ * `true` solo donde [getGoogleCalendarAccessToken] puede devolver un token
+ * real (Android/iOS) — en JVM/wasmJs está hardcodeado a `null` (soporte de
+ * Calendar aún no implementado ahí). Permite ocultar la sección "Google
+ * Calendar" de Ajustes donde vincular nunca puede tener éxito: sin esto, en
+ * desktop el usuario completaba el flujo OAuth entero en el navegador (que sí
+ * funciona) solo para que la app descartara el resultado al no poder pedir
+ * el access token de Calendar.
+ */
+expect val hasCalendarSupport: Boolean
+
 /** Lanza el flujo de Google Sign-In para vincular una cuenta de Google (integración con Calendar). */
 expect fun launchGoogleSignIn()
 

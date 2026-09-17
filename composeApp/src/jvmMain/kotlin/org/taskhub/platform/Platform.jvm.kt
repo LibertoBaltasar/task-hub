@@ -30,6 +30,9 @@ actual fun shareText(text: String, title: String) {
 /** JVM: no hay widget de escritorio. */
 actual val hasHomeScreenWidget: Boolean = false
 
+/** JVM: getGoogleCalendarAccessToken() está hardcodeado a null (ver abajo). */
+actual val hasCalendarSupport: Boolean = false
+
 /** JVM: no hay widget de escritorio — no-op. */
 actual fun saveWidgetThemeToCache(theme: String) {
     // JVM: no widget — no-op

@@ -3,13 +3,11 @@
  * El navegador no tiene hoja de compartir nativa fiable ni widget de home
  * screen, así que `shareText` queda como no-op (log a consola) y el widget
  * no-op; Google Sign-In queda como no-op configurable (ver
- * `docs/` — pendiente para un encargo posterior); `secureRandomInt` usa
- * `kotlin.random.Random` como placeholder (NO es un CSPRNG real todavía,
- * ver hueco documentado en el resumen del encargo web).
+ * `docs/` — pendiente para un encargo posterior); `secureRandomInt` usa el
+ * CSPRNG del navegador (`crypto.getRandomValues`), igual que el resto de
+ * plataformas.
  */
 package org.taskhub.platform
-
-import kotlin.random.Random
 
 /**
  * Web: no hay Web Share API cableada todavía (queda como no-op con log a
@@ -21,6 +19,9 @@ actual fun shareText(text: String, title: String) {
 
 /** Web: no hay widget de home screen. */
 actual val hasHomeScreenWidget: Boolean = false
+
+/** Web: getGoogleCalendarAccessToken() está hardcodeado a null (ver abajo). */
+actual val hasCalendarSupport: Boolean = false
 
 /** Web: no hay widget de home screen — no-op. */
 actual fun saveWidgetThemeToCache(theme: String) {
@@ -53,9 +54,15 @@ actual suspend fun revokeGoogleCalendarAccess() {
 }
 
 /**
- * Placeholder: `kotlin.random.Random` NO es un CSPRNG. Pendiente cablear
- * `crypto.getRandomValues` del navegador (hueco documentado en el resumen
- * del encargo web) antes de confiar en este valor para códigos de invitación
- * en producción web.
+ * Índice aleatorio en [0, bound) usando `crypto.getRandomValues` del
+ * navegador (Web Crypto API, disponible en todos los navegadores modernos
+ * incluidos los que ejecutan Wasm) — antes usaba `kotlin.random.Random`, que
+ * NO es un CSPRNG, para `inviteCode` (`HouseholdRepository.generateInviteCode`),
+ * la única barrera para unirse a un hogar ajeno sin invitación explícita.
+ * Sesgo de módulo despreciable para los `bound` pequeños usados hoy (36, el
+ * tamaño del alfabeto de `inviteCode`).
  */
-actual fun secureRandomInt(bound: Int): Int = Random.nextInt(bound)
+@JsFun("(bound) => { const arr = new Uint32Array(1); crypto.getRandomValues(arr); return Math.floor((arr[0] / 4294967296) * bound); }")
+private external fun jsSecureRandomInt(bound: Int): Int
+
+actual fun secureRandomInt(bound: Int): Int = jsSecureRandomInt(bound)
