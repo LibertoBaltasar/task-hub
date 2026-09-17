@@ -96,5 +96,5 @@ Ninguna. No se tocó `firestore.rules`, el modelo de datos, los repos, ni la ló
 
 ```
 git log --oneline -1
+855af43 feat: revisión final — pestaña Puntuación unificada + Pendientes sin fecha fuera del calendario
 ```
-(ver hash tras el commit de este cambio, tal y como pide el encargo)
