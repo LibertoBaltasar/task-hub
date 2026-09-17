@@ -208,6 +208,26 @@ private fun TaskRow(task: TaskResponse, onClick: () -> Unit) {
                     )
                 }
             }
+            // Progreso de subtareas — mismo badge que TaskListScreen.TaskCard,
+            // para que la vista previa de Home no quede desactualizada respecto
+            // a la lista completa (revisión UX 2026-09-17, H1).
+            if (task.subtasks.isNotEmpty()) {
+                val completedSubtasks = task.subtasks.count { it.completed }
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.tertiaryContainer
+                ) {
+                    Text(
+                        text = AppStrings.get("task_list_subtask_badge", lang)
+                            .replace("%1", completedSubtasks.toString())
+                            .replace("%2", task.subtasks.size.toString()),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+            }
             if (task.dueDate > 0) {
                 Text(
                     text = formatDueDate(task.dueDate, lang),

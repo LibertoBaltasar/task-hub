@@ -403,6 +403,38 @@ data class CreateTaskScreen(
                         )
                     }
 
+                    item {
+                        OutlinedTextField(
+                            value = description,
+                            onValueChange = { description = it },
+                            label = { Text(s("create_task_description_label")) },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            maxLines = 4,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                        )
+                    }
+
+                    item {
+                        OutlinedTextField(
+                            value = pointsText,
+                            onValueChange = { pointsText = it },
+                            label = { Text(s("public_profile_stat_points")) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                            isError = (pointsText.toIntOrNull() ?: -1) <= 0,
+                            supportingText = {
+                                if (pointsText.toIntOrNull() == null) {
+                                    Text(s("create_task_points_error_nan"))
+                                } else if ((pointsText.toIntOrNull() ?: -1) <= 0) {
+                                    Text(s("create_task_points_error_positive"))
+                                }
+                            }
+                        )
+                    }
+
                     // ── Checklist ──
                     item {
                         Text(
@@ -475,38 +507,6 @@ data class CreateTaskScreen(
                                 }
                             }
                         }
-                    }
-
-                    item {
-                        OutlinedTextField(
-                            value = description,
-                            onValueChange = { description = it },
-                            label = { Text(s("create_task_description_label")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 2,
-                            maxLines = 4,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                        )
-                    }
-
-                    item {
-                        OutlinedTextField(
-                            value = pointsText,
-                            onValueChange = { pointsText = it },
-                            label = { Text(s("public_profile_stat_points")) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                            isError = (pointsText.toIntOrNull() ?: -1) <= 0,
-                            supportingText = {
-                                if (pointsText.toIntOrNull() == null) {
-                                    Text(s("create_task_points_error_nan"))
-                                } else if ((pointsText.toIntOrNull() ?: -1) <= 0) {
-                                    Text(s("create_task_points_error_positive"))
-                                }
-                            }
-                        )
                     }
 
                     // ── Frequency ──

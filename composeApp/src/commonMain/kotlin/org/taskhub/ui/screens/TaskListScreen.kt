@@ -947,7 +947,10 @@ private fun TaskCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Frequency + Tags
+            // Metadata row: puntos + progreso de subtareas + frecuencia/etiquetas.
+            // Frecuencia/etiquetas con menor contraste que la fila de vencimiento
+            // (996-1063), que es la relevante para decidir qué hacer hoy (revisión
+            // UX 2026-09-17, L1).
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -956,39 +959,41 @@ private fun TaskCard(
                 // Points badge
                 PointsBadge(text = "${task.points} ${s("transfer_points_suffix")}")
 
-                // Frequency badge
-                val freqLabel = when (task.frequency) {
-                    "daily" -> s("task_list_freq_daily")
-                    "weekly" -> s("task_list_freq_weekly")
-                    "monthly" -> if (task.recurrenceDay != null) s("task_list_freq_monthly_day").replace("%d", task.recurrenceDay.toString()) else s("task_list_freq_monthly")
-                    else -> s("task_list_freq_once")
-                }
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Text(
-                        text = freqLabel,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-
-                // Tags
-                task.tags.take(2).forEach { tag ->
+                // Progreso de subtareas — antes invisible fuera del detalle de la
+                // tarea (revisión UX 2026-09-17, L2/H1).
+                if (task.subtasks.isNotEmpty()) {
+                    val completedSubtasks = task.subtasks.count { it.completed }
                     Surface(
                         shape = MaterialTheme.shapes.small,
                         color = MaterialTheme.colorScheme.tertiaryContainer
                     ) {
                         Text(
-                            text = tag,
+                            text = s("task_list_subtask_badge")
+                                .replace("%1", completedSubtasks.toString())
+                                .replace("%2", task.subtasks.size.toString()),
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                     }
                 }
+
+                // Frecuencia + etiquetas, agrupadas en texto plano de menor contraste
+                val freqLabel = when (task.frequency) {
+                    "daily" -> s("task_list_freq_daily")
+                    "weekly" -> s("task_list_freq_weekly")
+                    "monthly" -> if (task.recurrenceDay != null) s("task_list_freq_monthly_day").replace("%d", task.recurrenceDay.toString()) else s("task_list_freq_monthly")
+                    else -> s("task_list_freq_once")
+                }
+                val metaLabel = (listOf(freqLabel) + task.tags.take(2)).joinToString(" · ")
+                Text(
+                    text = metaLabel,
+                    modifier = Modifier.weight(1f, fill = false),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1386,6 +1391,11 @@ private fun FilterChipsRow(
                             TaskSort.POINTS_DESC -> "⭐"
                             TaskSort.CREATED_DESC -> "🕐"
                         },
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = currentSortLabel,
                         style = MaterialTheme.typography.labelLarge
                     )
                 }

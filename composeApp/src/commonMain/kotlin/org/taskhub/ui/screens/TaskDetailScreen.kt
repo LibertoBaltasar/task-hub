@@ -425,36 +425,49 @@ private fun TaskDetailContent(
                         )
                     }
 
-                    // Recurrence days
-                    if (task.recurrenceDays.isNotEmpty()) {
+                    // Recurrencia (días / día del mes) — mismo tratamiento de
+                    // sub-bloque con label que "Penalización", en vez de texto
+                    // suelto con emoji 🔄 (revisión UX 2026-09-17, D1).
+                    if (task.recurrenceDays.isNotEmpty() || (task.frequency == "monthly" && task.recurrenceDay != null)) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f))
                         Spacer(modifier = Modifier.height(8.dp))
-                        val daysStr = task.recurrenceDays.joinToString(", ") { day ->
-                            when (day) {
-                                1 -> s("recurrence_day_monday")
-                                2 -> s("recurrence_day_tuesday")
-                                3 -> s("recurrence_day_wednesday")
-                                4 -> s("recurrence_day_thursday")
-                                5 -> s("recurrence_day_friday")
-                                6 -> s("recurrence_day_saturday")
-                                7 -> s("recurrence_day_sunday")
-                                else -> "?"
-                            }
-                        }
                         Text(
-                            text = "🔄 $daysStr",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            text = s("task_detail_recurrence_section"),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.SemiBold
                         )
-                    }
 
-                    // Recurrence day of month
-                    if (task.frequency == "monthly" && task.recurrenceDay != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = s("task_detail_monthly_recurrence").replace("%d", task.recurrenceDay.toString()),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+                        if (task.recurrenceDays.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val daysStr = task.recurrenceDays.joinToString(", ") { day ->
+                                when (day) {
+                                    1 -> s("recurrence_day_monday")
+                                    2 -> s("recurrence_day_tuesday")
+                                    3 -> s("recurrence_day_wednesday")
+                                    4 -> s("recurrence_day_thursday")
+                                    5 -> s("recurrence_day_friday")
+                                    6 -> s("recurrence_day_saturday")
+                                    7 -> s("recurrence_day_sunday")
+                                    else -> "?"
+                                }
+                            }
+                            Text(
+                                text = daysStr,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+
+                        if (task.frequency == "monthly" && task.recurrenceDay != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = s("task_detail_monthly_recurrence").replace("%d", task.recurrenceDay.toString()),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
 
                     // Tags
@@ -510,6 +523,49 @@ private fun TaskDetailContent(
                             )
                         }
                     }
+                }
+            }
+        }
+
+        // ── Subtasks checklist ──
+        // Movido justo después de la tarjeta de info (antes iba tras el estado
+        // de sincronización de calendario): es contenido accionable propio de
+        // la tarea, no debe quedar bajo un estado auxiliar de integración
+        // externa (revisión UX 2026-09-17, D3).
+        if (task.subtasks.isNotEmpty()) {
+            item {
+                val completedCount = task.subtasks.count { it.completed }
+                Text(
+                    text = s("task_detail_checklist_header")
+                        .replace("%1", completedCount.toString())
+                        .replace("%2", task.subtasks.size.toString()),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            items(task.subtasks, key = { it.id }) { st ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = st.completed,
+                        onCheckedChange = { onToggleSubtask(st.id) },
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                    )
+                    Text(
+                        text = st.text,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 4.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        textDecoration = if (st.completed) TextDecoration.LineThrough else TextDecoration.None,
+                        color = if (st.completed) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -614,53 +670,19 @@ private fun TaskDetailContent(
             )
         }
 
-        // ── Subtasks checklist ──
-        if (task.subtasks.isNotEmpty()) {
+        // ── Pending assignments ──
+        // Sin cabecera de conteo cuando no hay pendientes: la tarjeta de estado
+        // vacío de abajo ya comunica lo mismo, evita el mensaje duplicado
+        // "Pendientes (0)" + "Sin asignaciones" (revisión UX 2026-09-17, D5).
+        if (pendingAssignments.isNotEmpty()) {
             item {
-                val completedCount = task.subtasks.count { it.completed }
                 Text(
-                    text = s("task_detail_checklist_header")
-                        .replace("%1", completedCount.toString())
-                        .replace("%2", task.subtasks.size.toString()),
+                    text = s("task_detail_pending_header").replace("%d", pendingAssignments.size.toString()),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            items(task.subtasks, key = { it.id }) { st ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = st.completed,
-                        onCheckedChange = { onToggleSubtask(st.id) },
-                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
-                    )
-                    Text(
-                        text = st.text,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 4.dp),
-                        style = MaterialTheme.typography.bodyLarge,
-                        textDecoration = if (st.completed) TextDecoration.LineThrough else TextDecoration.None,
-                        color = if (st.completed) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-
-        // ── Pending assignments ──
-        item {
-            Text(
-                text = s("task_detail_pending_header").replace("%d", pendingAssignments.size.toString()),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
         }
 
         if (pendingAssignments.isEmpty()) {
