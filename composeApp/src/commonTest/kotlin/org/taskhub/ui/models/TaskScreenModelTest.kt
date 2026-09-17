@@ -7,7 +7,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
-import org.taskhub.network.FIRESTORE_GONE_MESSAGE
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.platform.NoOpAdController
@@ -117,7 +116,7 @@ class TaskScreenModelTest {
 
         val state = model.listState.value
         assertIs<TaskListUiState.Error>(state)
-        assertEquals(FIRESTORE_GONE_MESSAGE, state.message)
+        assertEquals(AppStrings.get("error_gone_or_forbidden", "es"), state.message)
         assertTrue(!model.isOffline.value, "un 404/403 es 'sin acceso', no 'sin conexión'")
     }
 
