@@ -109,6 +109,12 @@ entender *por qué* el código quedó como quedó en ciertos puntos.
   inutilizable tras la decisión Google-only de arriba. Puente JS↔Kotlin/Wasm
   por polling (sin pasar lambdas Kotlin a JS) y dónde vive ahora el
   `WEB_CLIENT_ID` compartido con Android.
+- **[ios-instalacion-local-2026-09-18.md](ios-instalacion-local-2026-09-18.md)**
+  — Google Sign-In real en iOS (Safari + URL scheme, sin `GIDSignIn`/SDK),
+  share nativo (`UIActivityViewController`) y dos fixes al build de Xcode
+  (sandboxing de scripts, `env -i` en "Compile Kotlin Framework") que iban a
+  romper el primer build real en Mac. Incluye guía completa de instalación
+  local (sideload) y troubleshooting para el miembro del equipo con Mac.
 - **[correcciones-2026-09-05-propuestas-aprobadas.md](correcciones-2026-09-05-propuestas-aprobadas.md)**
   y **[correcciones-2026-09-05-notificaciones.md](correcciones-2026-09-05-notificaciones.md)**
   — ronda de correcciones aprobadas y el cierre del flujo de notificaciones

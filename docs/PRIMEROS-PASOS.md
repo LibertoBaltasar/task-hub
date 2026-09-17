@@ -77,7 +77,7 @@ Confirmado con `./gradlew tasks --all`: existen también `composeApp:runDistribu
 ./gradlew :composeApp:iosSimulatorArm64Binaries   # solo macOS, requiere Xcode + toolchain de Kotlin/Native
 ```
 
-**Pendiente / fuera de alcance de este host app:** Google Sign-In en iOS (URL schemes, `GIDSignIn`, client ID) no está configurado todavía — queda para un encargo posterior sobre `iosApp/`.
+**Google Sign-In en iOS** (URL scheme, `Info.plist`, client ID) ya está implementado — ver guía completa de instalación local y troubleshooting en [`ios-instalacion-local-2026-09-18.md`](ios-instalacion-local-2026-09-18.md).
 
 Ningún entorno de este repo tiene Xcode/macOS disponible para compilar o ejecutar el target iOS realmente (confirmado con varios docs, p. ej. `docs/refactor-arquitectura-2026-08-31.md`); el proyecto Xcode se ha creado siguiendo la plantilla canónica de Compose Multiplatform 1.7.x pero su compilación real debe verificarse en un Mac.
 

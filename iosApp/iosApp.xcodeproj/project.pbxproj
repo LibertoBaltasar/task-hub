@@ -20,6 +20,7 @@
 		AAAAAAAAAAAAAAAAAAAAAA0E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AAAAAAAAAAAAAAAAAAAAAA0F /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		AAAAAAAAAAAAAAAAAAAAAA12 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
+		AAAAAAAAAAAAAAAAAAAAAA1D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,6 +57,7 @@
 				AAAAAAAAAAAAAAAAAAAAAA0C /* iOSApp.swift */,
 				AAAAAAAAAAAAAAAAAAAAAA0D /* ContentView.swift */,
 				AAAAAAAAAAAAAAAAAAAAAA0E /* Assets.xcassets */,
+				AAAAAAAAAAAAAAAAAAAAAA1D /* Info.plist */,
 				AAAAAAAAAAAAAAAAAAAAAA10 /* Preview Content */,
 			);
 			path = iosApp;
@@ -160,7 +162,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "cd \"$SRCROOT/..\"\n# env -i limpia el entorno de build de Xcode (ARCHS, SDKROOT, etc.) antes\n# de invocar Gradle: esas variables filtradas por xcodebuild pueden chocar\n# con la resolucion de toolchain/JDK de Gradle y romper el build de Kotlin/Native.\nenv -i PATH=\"$PATH\" HOME=\"$HOME\" ./gradlew :composeApp:embedAndSignAppleFrameworkForXcode\n";
+			shellScript = "cd \"$SRCROOT/..\"\n# NOTA: antes este script usaba \"env -i PATH=\\\"$PATH\\\" HOME=\\\"$HOME\\\"\" para\n# invocar Gradle, pensando que limpiar el entorno evitaria choques con la\n# resolucion de toolchain/JDK de Gradle. En la practica \"env -i\" elimina\n# tambien las variables de build que Xcode exporta para este script\n# (CONFIGURATION, SDK_NAME, ARCHS, TARGET_BUILD_DIR, FRAMEWORKS_FOLDER_PATH,\n# etc.), que el task embedAndSignAppleFrameworkForXcode necesita para saber\n# que framework generar y donde copiarlo/firmarlo: el build fallaba.\nif [ -z \"${JAVA_HOME:-}\" ] && [ -x /usr/libexec/java_home ]; then\n  export JAVA_HOME=\"$(/usr/libexec/java_home 2>/dev/null || true)\"\nfi\n./gradlew :composeApp:embedAndSignAppleFrameworkForXcode\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -213,7 +215,8 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				/* Desactivado: el sandbox de scripts de usuario bloquea las escrituras de Gradle (fuera de $DERIVED_FILE_DIR) que hace el script "Compile Kotlin Framework" al generar/firmar el framework ComposeApp. */
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -274,7 +277,8 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				/* Ver comentario equivalente en la configuración Debug. */
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -306,6 +310,7 @@
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iosApp/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_NAME)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -339,6 +344,7 @@
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = "$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "iosApp/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_NAME)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
