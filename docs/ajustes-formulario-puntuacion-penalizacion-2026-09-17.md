@@ -91,6 +91,6 @@ Incluye la suite nueva `org.taskhub.ui.screens.TaskFormSaveInvariantsTest: 6 tes
 ## Commit
 
 ```
-git log --oneline -1
+$ git log --oneline -1
+695c1c2 feat: formulario tarea — apartado Puntuación unificado, penalización ligada a fecha límite y rotación a frecuencia semanal
 ```
-(pendiente de ejecutar tras el commit — ver mensaje: `feat: formulario tarea — apartado Puntuación unificado, penalización ligada a fecha límite y rotación a frecuencia semanal`)
