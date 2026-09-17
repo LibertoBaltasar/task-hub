@@ -62,6 +62,7 @@ kotlin {
             implementation(compose.ui)
             implementation(compose.components.resources)
             implementation(compose.components.uiToolingPreview)
+            implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
 
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
