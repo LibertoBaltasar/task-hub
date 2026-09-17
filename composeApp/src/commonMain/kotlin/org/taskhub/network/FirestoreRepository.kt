@@ -968,8 +968,8 @@ open class FirestoreRepository(
         lastStreakDate: Long
     ) = memberRepository.updateMemberStreak(householdId, memberId, currentStreak, bestStreak, lastStreakDate)
 
-    suspend fun addMemberPoints(householdId: String, memberId: String, delta: Int) =
-        memberRepository.addMemberPoints(householdId, memberId, delta)
+    suspend fun addMemberPoints(householdId: String, memberId: String, delta: Int, floor: Int? = null) =
+        memberRepository.addMemberPoints(householdId, memberId, delta, floor)
 
     // NOTA: `AppreciateResult`/`AppreciateErrorReason`/`DonateResult`/
     // `DonateErrorReason` ya NO son clases anidadas de FirestoreRepository —
@@ -1072,17 +1072,6 @@ open class FirestoreRepository(
     class AssignmentCompletionConflictException(message: String) : Exception(message)
 
     /**
-     * Lanzada por [redeemReward] cuando el saldo del miembro ya no alcanza
-     * para el coste de la recompensa. Tipada (en vez de un `IllegalStateException`
-     * con texto fijo en español) para que el catch del ScreenModel pueda
-     * mapearla a `AppStrings` por tipo — antes `e.message` nunca era null, así
-     * que el fallback de i18n del catch nunca se usaba y un usuario con la
-     * app en otro idioma veía el texto en español (panel de revisión
-     * 2026-09-10, Experto 2, IMPORTANTE, NUEVO).
-     */
-    class InsufficientBalanceException(message: String) : Exception(message)
-
-    /**
      * Completa una tarea recurrente delegando en la Cloud Function
      * `completeRecurringTask` (ver
      * `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`,
@@ -1111,24 +1100,35 @@ open class FirestoreRepository(
         memberId: String,
         task: TaskResponse
     ): TaskCompletionResult {
-        val result = try {
-            cloudFunctionsClient.call<CompleteRecurringTaskRequest, TaskCompletionFunctionResult>(
-                "completeRecurringTask",
-                CompleteRecurringTaskRequest(
-                    householdId = householdId,
-                    taskId = taskId,
-                    memberId = memberId,
-                    expectedLastCompletedDate = task.lastCompletedDate
+        // Invalidación de caché movida a `finally`: un timeout de red no
+        // distingue "la llamada nunca llegó al servidor" de "sí se aplicó
+        // pero la respuesta se perdió" — antes solo se invalidaba en el
+        // camino feliz, así que ese segundo caso (ambiguo) dejaba
+        // `taskCache` sirviendo la foto PRE-compleción indefinidamente si el
+        // dispositivo quedaba offline justo después (panel v12, Red/offline).
+        // Invalidar de más es barato (una lectura de red extra); no
+        // invalidar de menos puede mostrar datos incorrectos.
+        try {
+            val result = try {
+                cloudFunctionsClient.call<CompleteRecurringTaskRequest, TaskCompletionFunctionResult>(
+                    "completeRecurringTask",
+                    CompleteRecurringTaskRequest(
+                        householdId = householdId,
+                        taskId = taskId,
+                        memberId = memberId,
+                        expectedLastCompletedDate = task.lastCompletedDate
+                    )
                 )
-            )
-        } catch (e: CloudFunctionException) {
-            throw mapToTaskCompletionConflict(e)
+            } catch (e: CloudFunctionException) {
+                throw mapToTaskCompletionConflict(e)
+            }
+            return TaskCompletionResult(result.completedAt, result.pointsAwarded, result.onTime)
+        } finally {
+            taskCache.clearTasks(householdId)
+            taskCache.clearTaskHistory(householdId)
+            taskCache.clearMembers(householdId)
+            taskCache.clearAssignments(householdId, taskId)
         }
-        taskCache.clearTasks(householdId)
-        taskCache.clearTaskHistory(householdId)
-        taskCache.clearMembers(householdId)
-        taskCache.clearAssignments(householdId, taskId)
-        return TaskCompletionResult(result.completedAt, result.pointsAwarded, result.onTime)
     }
 
     /** `true` si [status] (de [CloudFunctionException]) señala un conflicto de concurrencia (perdedor de una carrera). */
@@ -1166,14 +1166,18 @@ open class FirestoreRepository(
      * cliente (la función no la toca) — ver `TaskScreenModel.undoCompleteTask`.
      */
     open suspend fun undoTaskCompletion(householdId: String, taskId: String, completedAt: Long) {
-        cloudFunctionsClient.call<UndoTaskCompletionRequest, UndoTaskCompletionResult>(
-            "undoTaskCompletion",
-            UndoTaskCompletionRequest(householdId = householdId, taskId = taskId, completedAt = completedAt)
-        )
-        taskCache.clearTasks(householdId)
-        taskCache.clearTaskHistory(householdId)
-        taskCache.clearMembers(householdId)
-        taskCache.clearAssignments(householdId, taskId)
+        // Invalidación en `finally`: mismo motivo que [completeTask].
+        try {
+            cloudFunctionsClient.call<UndoTaskCompletionRequest, UndoTaskCompletionResult>(
+                "undoTaskCompletion",
+                UndoTaskCompletionRequest(householdId = householdId, taskId = taskId, completedAt = completedAt)
+            )
+        } finally {
+            taskCache.clearTasks(householdId)
+            taskCache.clearTaskHistory(householdId)
+            taskCache.clearMembers(householdId)
+            taskCache.clearAssignments(householdId, taskId)
+        }
     }
 
     /** Get all task history records for a household. */
@@ -1496,7 +1500,15 @@ open class FirestoreRepository(
         //    fallido, pero tampoco puede haber doble registro con un único
         //    descuento).
         try {
-            addMemberPoints(householdId, memberId, -pointsSpent)
+            // floor = 0: revalida el saldo contra el valor fresco en cada
+            // reintento de addMemberPoints, no solo contra la lectura de
+            // arriba (que puede estar obsoleta si otro dispositivo canjeó/
+            // donó entre medias) — cierra la carrera de dos canjes
+            // concurrentes que podía dejar totalPoints negativo (panel v12,
+            // Red/offline). Al lanzar InsufficientBalanceException, este
+            // mismo catch borra el redemption huérfano y la relanza tal cual,
+            // igual que cualquier otro fallo de esta escritura.
+            addMemberPoints(householdId, memberId, -pointsSpent, floor = 0)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

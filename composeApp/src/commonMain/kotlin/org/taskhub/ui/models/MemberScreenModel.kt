@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import org.taskhub.network.FIRESTORE_GONE_MESSAGE
 import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.InsufficientBalanceException
 import org.taskhub.network.MemberRepository
 import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.MemberResponse
@@ -320,7 +321,7 @@ class MemberScreenModel(
                 loadMembers(householdId)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: FirestoreRepository.InsufficientBalanceException) {
+            } catch (e: InsufficientBalanceException) {
                 // Por tipo, no por e.message (que viene fijo en español desde
                 // el repo y nunca es null, así que el fallback de i18n de
                 // abajo nunca se disparaba) — panel de revisión 2026-09-10,

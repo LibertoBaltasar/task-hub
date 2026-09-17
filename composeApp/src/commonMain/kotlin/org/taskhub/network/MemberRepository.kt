@@ -15,6 +15,16 @@ import org.taskhub.network.models.UserProfile
 import org.taskhub.storage.TaskCache
 
 /**
+ * Lanzada por [MemberRepository.addMemberPoints] cuando se pide un [floor] y
+ * el resultado del descuento lo incumpliría — ver su KDoc. Vive a nivel de
+ * paquete (no anidada en [FirestoreRepository]) para que [MemberRepository]
+ * pueda lanzarla sin depender de la fachada (evita el ciclo
+ * `MemberRepository` → `FirestoreRepository` → `MemberRepository`, mismo
+ * motivo que el resto de este archivo, ver su KDoc de cabecera).
+ */
+class InsufficientBalanceException(message: String) : Exception(message)
+
+/**
  * Miembros (colección `members`, subcolección de `households/{id}`), perfiles
  * globales (`users/{userId}`) y puntos (agradecer/donar/logros). Extraído de
  * [FirestoreRepository] (ver docs/review-panel-expertos-v3-2026-09-01.md,
@@ -502,11 +512,22 @@ class MemberRepository(
      * entre la lectura y la escritura, Firestore rechaza el PATCH
      * (FAILED_PRECONDITION/ABORTED) y reintentamos con el valor fresco, en vez
      * de sobrescribir a ciegas y perder el incremento concurrente.
+     *
+     * [floor], si se indica, se revalida en CADA intento contra el valor
+     * `current` recién leído (no contra el saldo que el caller pudo haber
+     * comprobado antes con una lectura ya obsoleta) — sin esto, dos descuentos
+     * concurrentes sobre el mismo miembro (p.ej. `redeemReward`/`donatePoints`
+     * desde dos dispositivos) podían dejar `totalPoints` negativo: cada
+     * escritura es individualmente válida vista contra SU propia lectura
+     * fresca, ninguna sabe del descuento concurrente del otro (panel v12,
+     * Red/offline). Lanza [InsufficientBalanceException] en vez de escribir
+     * si se incumpliría.
      */
     suspend fun addMemberPoints(
         householdId: String,
         memberId: String,
-        delta: Int
+        delta: Int,
+        floor: Int? = null
     ) {
         if (delta == 0) return
         val docUrl = "$baseUrl/households/$householdId/members/$memberId"
@@ -518,6 +539,11 @@ class MemberRepository(
                 throw e
             }
             val newTotal = (current.fields["totalPoints"]?.integerValue?.toIntOrNull() ?: 0) + delta
+            if (floor != null && newTotal < floor) {
+                throw InsufficientBalanceException(
+                    "Saldo insuficiente: el descuento dejaría $newTotal puntos (mínimo $floor)"
+                )
+            }
             try {
                 client.patch(docUrl) {
                     withAuth()
@@ -715,7 +741,19 @@ class MemberRepository(
         // Restar primero al donante: si la segunda escritura falla a mitad de
         // camino, el peor caso es que los puntos "desaparezcan" (recuperable
         // reintentando la donación), nunca que se dupliquen de la nada.
-        addMemberPoints(householdId, fromMemberId, -amount)
+        // floor = 0: revalida el saldo contra el valor fresco en cada intento
+        // (no solo el `fromMember.totalPoints` ya comprobado arriba, que puede
+        // estar obsoleto si otro dispositivo donó/canjeó entre medias) — sin
+        // esto, dos donaciones concurrentes del mismo donante podían dejarlo
+        // en negativo (panel v12, Red/offline, mismo bug que se cerró en
+        // redeemReward).
+        try {
+            addMemberPoints(householdId, fromMemberId, -amount, floor = 0)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: InsufficientBalanceException) {
+            return DonateResult.Error(DonateErrorReason.INSUFFICIENT_BALANCE)
+        }
         try {
             addMemberPoints(householdId, toMemberId, amount)
         } catch (e: CancellationException) {

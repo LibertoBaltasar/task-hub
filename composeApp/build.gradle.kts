@@ -61,7 +61,6 @@ kotlin {
             implementation(compose.material3)
             implementation(compose.ui)
             implementation(compose.components.resources)
-            implementation(compose.components.uiToolingPreview)
             // Coordenada Maven fija, no ligada a `compose-multiplatform` del
             // catálogo: material-icons-core no publica release 1.8.0 (el
             // último artefacto disponible en Maven es 1.7.3) — un intento de
