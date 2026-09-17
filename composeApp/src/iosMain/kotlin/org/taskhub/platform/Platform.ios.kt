@@ -22,6 +22,9 @@ actual val hasHomeScreenWidget: Boolean = false
 /** iOS: Google Sign-In no está implementado — nunca hay token de Calendar. */
 actual val hasCalendarSupport: Boolean = false
 
+/** iOS: createNotificationScheduler() devuelve NoOpNotificationScheduler. */
+actual val hasNotificationSupport: Boolean = false
+
 /**
  * Implementación iOS del `expect` [saveWidgetThemeToCache] (`platform/Platform.kt`).
  *

@@ -36,6 +36,17 @@ expect val hasHomeScreenWidget: Boolean
  */
 expect val hasCalendarSupport: Boolean
 
+/**
+ * `true` solo donde [org.taskhub.platform.createNotificationScheduler]
+ * devuelve un scheduler real (Android, ver `NotificationScheduler.android.kt`)
+ * — en iOS/JVM/wasmJs siempre devuelve `NoOpNotificationScheduler`. Permite
+ * ocultar el interruptor "Notificaciones" de Ajustes donde no tiene ningún
+ * efecto: sin esto, activar/desactivar ese interruptor en esas 3 plataformas
+ * no cambiaba nada, sin ninguna pista de que los recordatorios locales no
+ * están implementados ahí todavía.
+ */
+expect val hasNotificationSupport: Boolean
+
 /** Lanza el flujo de Google Sign-In para vincular una cuenta de Google (integración con Calendar). */
 expect fun launchGoogleSignIn()
 

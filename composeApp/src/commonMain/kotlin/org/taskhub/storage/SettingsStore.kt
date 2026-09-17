@@ -43,18 +43,34 @@ class SettingsStore(
 
     // ── Language ──────────────────────────────────────────
 
-    /** Idioma preferido de la UI ("es"/"en"). Español por defecto si no se ha elegido ninguno. */
+    /**
+     * Idioma preferido de la UI ("es"/"en"). Español por defecto si no se ha
+     * elegido ninguno, o si el storage subyacente no está disponible — se lee
+     * en la primera composición de `App()`, ANTES de montar el splash; en web
+     * `localStorage` puede lanzar (storage bloqueado por el navegador/
+     * política de privacidad), y sin capturarlo aquí la app entera se quedaba
+     * sin montar nada, en vez de arrancar con el idioma por defecto (panel
+     * v12, Web).
+     */
     fun getLanguage(): String =
-        settings.getString(KEY_LANGUAGE, "es")
+        try {
+            settings.getString(KEY_LANGUAGE, "es")
+        } catch (_: Throwable) {
+            "es"
+        }
 
     fun setLanguage(lang: String) =
         settings.putString(KEY_LANGUAGE, lang)
 
     // ── Theme ─────────────────────────────────────────────
 
-    /** Nombre del tema visual elegido ("DEFAULT"/"NATURALEZA"/"MINIMAL" — ver [org.taskhub.ui.theme.TaskHubThemeType]). */
+    /** Nombre del tema visual elegido ("DEFAULT"/"NATURALEZA"/"MINIMAL" — ver [org.taskhub.ui.theme.TaskHubThemeType]). Mismo fallback que [getLanguage] si el storage no está disponible. */
     fun getTheme(): String =
-        settings.getString(KEY_THEME, "DEFAULT")
+        try {
+            settings.getString(KEY_THEME, "DEFAULT")
+        } catch (_: Throwable) {
+            "DEFAULT"
+        }
 
     fun setTheme(theme: String) =
         settings.putString(KEY_THEME, theme)

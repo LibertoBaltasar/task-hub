@@ -32,12 +32,30 @@ class TaskCache(private val settings: Settings) {
         isLenient = true
     }
 
+    /**
+     * Escribe en [settings], tragando cualquier excepción: en web,
+     * `localStorage` puede lanzar `QuotaExceededError`/`SecurityError` (cuota
+     * de ~5-10MB del origen superada, storage bloqueado por el navegador) —
+     * sin esto, un fallo al ESCRIBIR la caché (best-effort por definición)
+     * se colaba en el `catch` de los repos que la llaman justo después de una
+     * lectura de red que SÍ tuvo éxito, descartando esos datos buenos y
+     * cayendo a una foto de caché más vieja (o a un error) en su lugar (panel
+     * v12, Web). Todos los `cache*` de abajo pasan por aquí.
+     */
+    private fun putSafely(key: String, value: String) {
+        try {
+            settings.putString(key, value)
+        } catch (_: Exception) {
+            // Best-effort: ver KDoc de la función.
+        }
+    }
+
     // ── Tasks ───────────────────────────────────────────────
 
     /** Sobrescribe la caché de tareas de [householdId] con [tasks] (llamado tras cada lectura exitosa de red). */
     fun cacheTasks(householdId: String, tasks: List<TaskResponse>) {
         val key = "cache_tasks_$householdId"
-        settings.putString(key, json.encodeToString(tasks))
+        putSafely(key, json.encodeToString(tasks))
     }
 
     /** Tareas cacheadas de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
@@ -58,7 +76,7 @@ class TaskCache(private val settings: Settings) {
     /** Sobrescribe la caché del documento de hogar (llamado tras cada lectura exitosa de red). */
     fun cacheHousehold(household: HouseholdResponse) {
         val key = "cache_household_${household.id}"
-        settings.putString(key, json.encodeToString(household))
+        putSafely(key, json.encodeToString(household))
     }
 
     /** Documento de hogar cacheado, o `null` si no hay caché o el JSON guardado está corrupto. */
@@ -77,7 +95,7 @@ class TaskCache(private val settings: Settings) {
     /** Sobrescribe la caché de miembros de [householdId] con [members] (llamado tras cada lectura exitosa de red). */
     fun cacheMembers(householdId: String, members: List<MemberResponse>) {
         val key = "cache_members_$householdId"
-        settings.putString(key, json.encodeToString(members))
+        putSafely(key, json.encodeToString(members))
     }
 
     /** Miembros cacheados de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
@@ -101,7 +119,7 @@ class TaskCache(private val settings: Settings) {
 
     /** Sobrescribe la caché de historial de [householdId] con [history] (llamado tras cada lectura exitosa de red). */
     fun cacheTaskHistory(householdId: String, history: List<TaskHistoryResponse>) {
-        settings.putString("cache_task_history_$householdId", json.encodeToString(history))
+        putSafely("cache_task_history_$householdId", json.encodeToString(history))
     }
 
     /** Historial cacheado de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
@@ -130,7 +148,7 @@ class TaskCache(private val settings: Settings) {
 
     /** Sobrescribe la caché de asignaciones de [taskId] con [assignments] (llamado tras cada lectura exitosa de red). */
     fun cacheAssignments(householdId: String, taskId: String, assignments: List<TaskAssignmentResponse>) {
-        settings.putString("cache_assignments_${householdId}_$taskId", json.encodeToString(assignments))
+        putSafely("cache_assignments_${householdId}_$taskId", json.encodeToString(assignments))
     }
 
     /** Asignaciones cacheadas de [taskId], o `null` si no hay caché o el JSON guardado está corrupto. */
@@ -153,7 +171,7 @@ class TaskCache(private val settings: Settings) {
 
     /** Sobrescribe la caché de recompensas de [householdId] con [rewards] (llamado tras cada lectura exitosa de red). */
     fun cacheRewards(householdId: String, rewards: List<RewardResponse>) {
-        settings.putString("cache_rewards_$householdId", json.encodeToString(rewards))
+        putSafely("cache_rewards_$householdId", json.encodeToString(rewards))
     }
 
     /** Recompensas cacheadas de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
@@ -173,7 +191,7 @@ class TaskCache(private val settings: Settings) {
 
     /** Sobrescribe la caché de canjes de [householdId] con [redemptions] (llamado tras cada lectura exitosa de red). */
     fun cacheRewardRedemptions(householdId: String, redemptions: List<RewardRedemption>) {
-        settings.putString("cache_reward_redemptions_$householdId", json.encodeToString(redemptions))
+        putSafely("cache_reward_redemptions_$householdId", json.encodeToString(redemptions))
     }
 
     /** Canjes cacheados de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */
@@ -199,7 +217,7 @@ class TaskCache(private val settings: Settings) {
 
     /** Sobrescribe la caché de notificaciones de [householdId] con [notifications] (llamado tras cada lectura exitosa de red). */
     fun cacheNotifications(householdId: String, notifications: List<NotificationResponse>) {
-        settings.putString("cache_notifications_$householdId", json.encodeToString(notifications))
+        putSafely("cache_notifications_$householdId", json.encodeToString(notifications))
     }
 
     /** Notificaciones cacheadas de [householdId], o `null` si no hay caché o el JSON guardado está corrupto. */

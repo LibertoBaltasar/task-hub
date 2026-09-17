@@ -34,6 +34,7 @@ import org.taskhub.ui.models.GoogleAuthState
 import org.taskhub.ui.theme.TaskHubThemeType
 import org.taskhub.platform.hasCalendarSupport
 import org.taskhub.platform.hasHomeScreenWidget
+import org.taskhub.platform.hasNotificationSupport
 import org.taskhub.platform.saveWidgetThemeToCache
 
 /** Misma URL publicada en la ficha de Play (ver docs/play-store-listing.md). */
@@ -344,6 +345,11 @@ fun SettingsSheet(
         }
         }
 
+        // Solo Android agenda recordatorios locales reales hoy (ver
+        // hasNotificationSupport en platform/Platform.kt) — en iOS/JVM/web,
+        // createNotificationScheduler() siempre es un no-op, así que este
+        // interruptor no tenía ningún efecto ahí.
+        if (hasNotificationSupport) {
         Spacer(Modifier.height(24.dp))
 
         // ── Notifications ────────────────────────────────
@@ -372,6 +378,7 @@ fun SettingsSheet(
                     )
                 )
             }
+        }
         }
 
         Spacer(Modifier.height(24.dp))

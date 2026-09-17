@@ -17,13 +17,31 @@ private const val KEY_PREFIX = "taskhub_secure_"
 actual fun createSecureStore(): SecureStore = WasmJsSecureStore()
 
 private class WasmJsSecureStore : SecureStore {
-    override fun getString(key: String): String? = localStorage.getItem(KEY_PREFIX + key)
+    // `localStorage` puede lanzar (SecurityError con cookies/storage bloqueado
+    // por el usuario o política del navegador, QuotaExceededError al escribir)
+    // — sin capturarlo, un storage no disponible rompía la lectura de ajustes
+    // en el arranque de `App()` antes de montar nada (panel v12, Web).
+    override fun getString(key: String): String? =
+        try {
+            localStorage.getItem(KEY_PREFIX + key)
+        } catch (_: Throwable) {
+            null
+        }
 
     override fun putString(key: String, value: String) {
-        localStorage.setItem(KEY_PREFIX + key, value)
+        try {
+            localStorage.setItem(KEY_PREFIX + key, value)
+        } catch (_: Throwable) {
+            // Best-effort: sin storage disponible no hay dónde persistir la
+            // sesión, pero no debe tumbar el flujo que la está guardando.
+        }
     }
 
     override fun remove(key: String) {
-        localStorage.removeItem(KEY_PREFIX + key)
+        try {
+            localStorage.removeItem(KEY_PREFIX + key)
+        } catch (_: Throwable) {
+            // Best-effort, mismo motivo que putString.
+        }
     }
 }

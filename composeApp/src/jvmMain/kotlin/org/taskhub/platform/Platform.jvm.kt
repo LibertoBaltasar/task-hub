@@ -33,6 +33,9 @@ actual val hasHomeScreenWidget: Boolean = false
 /** JVM: getGoogleCalendarAccessToken() está hardcodeado a null (ver abajo). */
 actual val hasCalendarSupport: Boolean = false
 
+/** JVM: createNotificationScheduler() devuelve NoOpNotificationScheduler. */
+actual val hasNotificationSupport: Boolean = false
+
 /** JVM: no hay widget de escritorio — no-op. */
 actual fun saveWidgetThemeToCache(theme: String) {
     // JVM: no widget — no-op

@@ -23,6 +23,9 @@ actual val hasHomeScreenWidget: Boolean = false
 /** Web: getGoogleCalendarAccessToken() está hardcodeado a null (ver abajo). */
 actual val hasCalendarSupport: Boolean = false
 
+/** Web: createNotificationScheduler() devuelve NoOpNotificationScheduler. */
+actual val hasNotificationSupport: Boolean = false
+
 /** Web: no hay widget de home screen — no-op. */
 actual fun saveWidgetThemeToCache(theme: String) {
     // Web: no widget — no-op
