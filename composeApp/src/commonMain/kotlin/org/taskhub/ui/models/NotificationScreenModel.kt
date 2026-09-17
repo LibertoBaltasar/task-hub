@@ -25,14 +25,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.taskhub.network.FIRESTORE_GONE_MESSAGE
-import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.MAX_POLLED_NOTIFICATIONS
-import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.NotificationResponse
 import org.taskhub.storage.SettingsStore
-import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 
 /** Estado de la pantalla de lista de notificaciones. */
 sealed class NotificationUiState {
@@ -112,13 +109,9 @@ class NotificationScreenModel(
                 } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: FirestoreException) {
-                _uiState.value = NotificationUiState.Error(
-                    if (e.isGoneOrForbidden) FIRESTORE_GONE_MESSAGE else e.message
-                )
             } catch (e: Exception) {
                 _uiState.value = NotificationUiState.Error(
-                    e.message ?: AppStrings.get("notification_error_loading", settingsStore.getLanguage())
+                    e.toUserMessage(settingsStore.getLanguage(), "notification_error_loading")
                 )
             }
         }

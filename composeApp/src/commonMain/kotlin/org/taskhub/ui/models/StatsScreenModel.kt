@@ -25,6 +25,7 @@ import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskHistoryResponse
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 
 /**
  * Resultado agregado de [computeStats] para un miembro: rachas, series
@@ -132,7 +133,7 @@ class StatsScreenModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.value = StatsUiState.Error(
-                    e.message ?: AppStrings.get("stats_error_loading", lang)
+                    e.toUserMessage(lang, "stats_error_loading")
                 )
             }
         }

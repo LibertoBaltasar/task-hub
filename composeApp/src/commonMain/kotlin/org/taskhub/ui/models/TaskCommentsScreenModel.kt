@@ -15,6 +15,7 @@ import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.CommentResponse
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 
 // ── Comments State ────────────────────────────────────────
 
@@ -91,7 +92,7 @@ class TaskCommentsScreenModel(
                 throw e
             } catch (e: Exception) {
                 _commentsState.value = CommentsUiState.Error(
-                    e.message ?: s("task_comment_error_loading")
+                    e.toUserMessage(settingsStore.getLanguage(), "task_comment_error_loading")
                 )
             }
         }
@@ -131,7 +132,7 @@ class TaskCommentsScreenModel(
                 throw e
             } catch (e: Exception) {
                 _newCommentText.value = text
-                _sendCommentError.value = e.message ?: s("task_comment_error_adding")
+                _sendCommentError.value = e.toUserMessage(settingsStore.getLanguage(), "task_comment_error_adding")
             }
         }
     }

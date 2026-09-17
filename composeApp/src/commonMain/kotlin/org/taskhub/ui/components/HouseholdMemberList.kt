@@ -203,7 +203,7 @@ fun LazyListScope.householdMemberList(
                     )
                 ) {
                     Text(
-                        text = s("household_member_list_error").replace("%s", memberState.message),
+                        text = memberState.message,
                         modifier = Modifier.padding(16.dp),
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )

@@ -25,7 +25,7 @@ import org.taskhub.platform.launchGoogleSignIn
 import org.taskhub.platform.revokeGoogleCalendarAccess
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
-import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 
 /**
  * Estado del login del usuario.
@@ -349,18 +349,22 @@ class GoogleAuthManager(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Siempre el mensaje genérico (nunca `e.message`, panel de expertos
-            // v10, UX): `repo.signInWithGoogle` puede lanzar un `FirestoreException`
-            // con el `error.message` crudo de Identity Toolkit (p.ej.
+            // Nunca `e.message` crudo (panel de expertos v10, UX):
+            // `repo.signInWithGoogle` puede lanzar un `FirestoreException` con
+            // el `error.message` crudo de Identity Toolkit (p.ej.
             // "INVALID_IDP_RESPONSE : ...", "TOO_MANY_ATTEMPTS_TRY_LATER") o una
             // excepción de transporte ya saneada de la apiKey pero con texto de
             // Ktor sin traducir — `AuthGateScreen` es el ÚNICO punto de entrada
             // de la app (Google-only, ver `docs/google-only-auth-2026-09-12.md`)
             // y muestra `authState.message` tal cual, sin pasar por ninguna
-            // capa de traducción de errores (a diferencia del patrón
+            // otra capa de traducción de errores (a diferencia del patrón
             // `appreciateErrorKey`/`donateErrorKey` de `MemberScreenModel.kt`).
+            // Sí se clasifica por categoría (sin conexión / servidor / resto)
+            // vía [toUserMessage] — antes mostraba siempre el mismo mensaje
+            // genérico sin distinguir "no hay internet" de un fallo real de
+            // Identity Toolkit (`docs/mensajes-error-usuario-2026-09-16.md`).
             _state.value = GoogleAuthState.Error(
-                AppStrings.get("google_auth_error_sign_in", settingsStore.getLanguage())
+                e.toUserMessage(settingsStore.getLanguage(), "google_auth_error_sign_in")
             )
         }
     }

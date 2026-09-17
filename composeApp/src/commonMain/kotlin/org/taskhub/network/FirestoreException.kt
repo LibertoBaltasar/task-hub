@@ -29,9 +29,6 @@ class FirestoreException(
 val FirestoreException.isGoneOrForbidden: Boolean
     get() = statusCode == 404 || statusCode == 403
 
-/** Mensaje legible para mostrar al usuario cuando el recurso ya no existe o no hay acceso. */
-const val FIRESTORE_GONE_MESSAGE = "Este espacio ya no existe o ya no tienes acceso a él."
-
 /**
  * Señala que [FirestoreRepository.deleteHousehold] no pudo borrar TODAS las
  * subcolecciones del hogar (fallo puntual en algún documento — red, timeout,

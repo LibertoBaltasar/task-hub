@@ -15,19 +15,18 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.taskhub.network.FIRESTORE_GONE_MESSAGE
-import org.taskhub.network.FirestoreException
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.InsufficientBalanceException
 import org.taskhub.network.MemberRepository
-import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.network.models.RewardRedemption
+import org.taskhub.network.toUserMessageKey
 import org.taskhub.platform.HapticKind
 import org.taskhub.platform.vibrate
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 
 /** Estados de carga de la lista de miembros de un hogar. */
 sealed class MemberUiState {
@@ -134,13 +133,9 @@ class MemberScreenModel(
                 _uiState.value = MemberUiState.Success(members)
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: FirestoreException) {
-                _uiState.value = MemberUiState.Error(
-                    if (e.isGoneOrForbidden) FIRESTORE_GONE_MESSAGE else e.message
-                )
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
-                    e.message ?: s("member_error_loading")
+                    e.toUserMessage(settingsStore.getLanguage(), "member_error_loading")
                 )
             }
         }
@@ -162,7 +157,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.value = MemberUiState.Error(
-                    e.message ?: s("member_error_adding")
+                    e.toUserMessage(settingsStore.getLanguage(), "member_error_adding")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -184,7 +179,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _memberActionState.value = MemberActionState.Error(
-                    e.message ?: s("member_error_removing")
+                    e.toUserMessage(settingsStore.getLanguage(), "member_error_removing")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -209,7 +204,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _memberActionState.value = MemberActionState.Error(
-                    e.message ?: s("member_error_role")
+                    e.toUserMessage(settingsStore.getLanguage(), "member_error_role")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -246,7 +241,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _rewardState.value = RewardUiState.Error(
-                    e.message ?: s("reward_error_loading")
+                    e.toUserMessage(settingsStore.getLanguage(), "reward_error_loading")
                 )
             }
         }
@@ -274,7 +269,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
-                    e.message ?: s("reward_error_creating")
+                    e.toUserMessage(settingsStore.getLanguage(), "reward_error_creating")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -292,7 +287,7 @@ class MemberScreenModel(
                 throw e
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
-                    e.message ?: s("reward_error_deleting")
+                    e.toUserMessage(settingsStore.getLanguage(), "reward_error_deleting")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -330,7 +325,7 @@ class MemberScreenModel(
                 buzz(HapticKind.ERROR)
             } catch (e: Exception) {
                 _rewardActionState.value = RewardActionState.Error(
-                    e.message ?: s("reward_error_redeeming")
+                    e.toUserMessage(settingsStore.getLanguage(), "reward_error_redeeming")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -375,7 +370,7 @@ class MemberScreenModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _appreciateActionState.value = AppreciateActionState.Error("transfer_error_failed")
+                _appreciateActionState.value = AppreciateActionState.Error(e.toUserMessageKey("transfer_error_failed"))
                 buzz(HapticKind.ERROR)
             }
         }
@@ -406,7 +401,7 @@ class MemberScreenModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _donateActionState.value = DonateActionState.Error("transfer_error_failed")
+                _donateActionState.value = DonateActionState.Error(e.toUserMessageKey("transfer_error_failed"))
                 buzz(HapticKind.ERROR)
             }
         }

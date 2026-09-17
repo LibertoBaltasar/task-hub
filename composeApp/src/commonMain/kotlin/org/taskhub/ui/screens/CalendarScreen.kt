@@ -295,7 +295,7 @@ data class CalendarScreen(
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = s("calendar_error_prefix").replace("%s", state.message),
+                                    text = state.message,
                                     color = MaterialTheme.colorScheme.error
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))

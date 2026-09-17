@@ -56,11 +56,20 @@ class CloudFunctionsClient(
                 setBody(CallableRequest(data))
             }
         } catch (e: FirestoreException) {
-            throw CloudFunctionException(e.code ?: "unknown", e.message)
+            throw CloudFunctionException(e.code ?: "unknown", e.statusCode, e.message)
         }
         return response.body<CallableResult<R>>().result
     }
 }
 
-/** Error de una Cloud Function callable: [status] es el código simbólico (p.ej. `"ABORTED"`, `"NOT_FOUND"`). */
-class CloudFunctionException(val status: String, message: String) : Exception(message)
+/**
+ * Error de una Cloud Function callable: [status] es el código simbólico
+ * (p.ej. `"ABORTED"`, `"NOT_FOUND"`). [httpStatusCode] conserva el status HTTP
+ * real de la respuesta (el mismo [FirestoreException.statusCode] que la
+ * disparó) para que [errorCategory] pueda clasificar este fallo exactamente
+ * igual que uno de Firestore (sin conexión / sin acceso / servidor /
+ * operación) — sin este campo se perdía en la conversión y todo fallo de una
+ * Cloud Function (completar/deshacer/reasignar tarea) cae en la misma
+ * categoría genérica sin importar si fue un 403 o un 500.
+ */
+class CloudFunctionException(val status: String, val httpStatusCode: Int, message: String) : Exception(message)

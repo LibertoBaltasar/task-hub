@@ -29,7 +29,7 @@ import org.taskhub.platform.updateWidgetPendingTasks
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SavedHousehold
 import org.taskhub.storage.SettingsStore
-import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 
 /**
  * ViewModel compartido para [HomeScreen].
@@ -132,7 +132,7 @@ class HomeScreenModel(
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: AppStrings.get("task_error_loading", settingsStore.getLanguage())
+                    error = e.toUserMessage(settingsStore.getLanguage(), "task_error_loading")
                 )
             }
         }
@@ -193,7 +193,7 @@ class HomeScreenModel(
             } catch (e: Exception) {
                 _previewTasks.value = _previewTasks.value + (
                     householdId to HouseholdPreviewState.Error(
-                        e.message ?: AppStrings.get("task_error_loading", settingsStore.getLanguage())
+                        e.toUserMessage(settingsStore.getLanguage(), "task_error_loading")
                     )
                 )
             }

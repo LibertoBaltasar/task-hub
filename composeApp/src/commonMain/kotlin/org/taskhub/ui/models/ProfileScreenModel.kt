@@ -19,6 +19,7 @@ import org.taskhub.platform.HapticKind
 import org.taskhub.platform.vibrate
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 
 /**
  * Estados de carga del perfil de usuario (propio o ajeno).
@@ -69,7 +70,7 @@ class ProfileScreenModel(
      */
     fun loadMyProfile() {
         val userId = repo.getLocalId() ?: run {
-            _myProfileState.value = ProfileUiState.Error("No estás autenticado. Inicia sesión primero.")
+            _myProfileState.value = ProfileUiState.Error(s("profile_error_not_authenticated"))
             return
         }
         screenModelScope.launch {
@@ -88,7 +89,7 @@ class ProfileScreenModel(
                 throw e
             } catch (e: Exception) {
                 _myProfileState.value = ProfileUiState.Error(
-                    e.message ?: s("profile_error_loading_own")
+                    e.toUserMessage(settingsStore.getLanguage(), "profile_error_loading_own")
                 )
             }
         }
@@ -112,7 +113,7 @@ class ProfileScreenModel(
                 throw e
             } catch (e: Exception) {
                 _otherProfileState.value = ProfileUiState.Error(
-                    e.message ?: s("profile_error_loading")
+                    e.toUserMessage(settingsStore.getLanguage(), "profile_error_loading")
                 )
             }
         }
@@ -126,7 +127,7 @@ class ProfileScreenModel(
         avatarEmoji: String
     ) {
         val userId = repo.getLocalId() ?: run {
-            _saveState.value = ProfileSaveState.Error("No estás autenticado")
+            _saveState.value = ProfileSaveState.Error(s("profile_error_not_authenticated"))
             return
         }
         // Preserva la avatarUrl (foto de Google) ya cargada: upsertUserProfile
@@ -149,7 +150,7 @@ class ProfileScreenModel(
                 throw e
             } catch (e: Exception) {
                 _saveState.value = ProfileSaveState.Error(
-                    e.message ?: s("profile_error_saving")
+                    e.toUserMessage(settingsStore.getLanguage(), "profile_error_saving")
                 )
                 buzz(HapticKind.ERROR)
             }

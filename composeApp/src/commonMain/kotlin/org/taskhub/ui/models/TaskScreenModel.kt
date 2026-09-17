@@ -14,11 +14,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.taskhub.network.FIRESTORE_GONE_MESSAGE
-import org.taskhub.network.FirestoreException
+import org.taskhub.network.ErrorCategory
+import org.taskhub.network.errorCategory
 import org.taskhub.network.FirestoreRepository
-import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
@@ -285,16 +285,15 @@ class TaskScreenModel(
                 // (ver `loadTasksJob?.cancel()` arriba) y puede sobrescribir el
                 // resultado correcto de la carga nueva con un "Error" obsoleto.
                 throw e
-            } catch (e: FirestoreException) {
-                // No es un problema de conexión: no marcar offline (evita confundir
-                // "sin acceso" con "sin conexión", ver HouseholdScreenModel.loadHousehold).
-                _listState.value = TaskListUiState.Error(
-                    if (e.isGoneOrForbidden) FIRESTORE_GONE_MESSAGE else e.message
-                )
             } catch (e: Exception) {
-                _isOffline.value = true
+                // Solo se marca offline si el fallo es de TRANSPORTE (sin
+                // respuesta HTTP) — un 403/404/5xx significa que la conexión
+                // llegó al servidor, así que no es "sin conexión" (evita
+                // confundir "sin acceso"/"servidor caído" con "sin conexión",
+                // ver HouseholdScreenModel.loadHousehold).
+                _isOffline.value = e.errorCategory() == ErrorCategory.NO_CONNECTION
                 _listState.value = TaskListUiState.Error(
-                    e.message ?: s("task_error_loading")
+                    e.toUserMessage(settingsStore.getLanguage(), "task_error_loading")
                 )
             }
         }
@@ -418,7 +417,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
-                    e.message ?: s("task_error_creating")
+                    e.toUserMessage(settingsStore.getLanguage(), "task_error_creating")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -610,7 +609,7 @@ class TaskScreenModel(
                     loadTasks(householdId)
                 } else {
                     _actionState.value = TaskActionState.Error(
-                        e.message ?: s("task_error_completing")
+                        e.toUserMessage(settingsStore.getLanguage(), "task_error_completing")
                     )
                 }
                 buzz(HapticKind.ERROR)
@@ -657,7 +656,7 @@ class TaskScreenModel(
                 // revertida (ver KDoc arriba) — no crítico para la
                 // integridad de datos, pero SÍ debe ser visible: antes no
                 // había ninguna señal observable de este fallo parcial.
-                _undoError.value = e.message ?: s("task_error_undo")
+                _undoError.value = e.toUserMessage(settingsStore.getLanguage(), "task_error_undo")
             }
         }
     }
@@ -711,7 +710,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _reassignState.value = TaskActionState.Error(
-                    e.message ?: s("task_error_reassigning")
+                    e.toUserMessage(settingsStore.getLanguage(), "task_error_reassigning")
                 )
             }
         }
@@ -798,7 +797,7 @@ class TaskScreenModel(
                     loadTaskDetail(householdId, taskId)
                 } else {
                     _actionState.value = TaskActionState.Error(
-                        e.message ?: s("task_error_completing")
+                        e.toUserMessage(settingsStore.getLanguage(), "task_error_completing")
                     )
                 }
                 buzz(HapticKind.ERROR)
@@ -842,13 +841,9 @@ class TaskScreenModel(
                 _myAssignment.value = assignments.find { it.memberId == myMemberId }
             } catch (e: CancellationException) {
                 throw e
-            } catch (e: FirestoreException) {
-                _detailState.value = TaskDetailUiState.Error(
-                    if (e.isGoneOrForbidden) FIRESTORE_GONE_MESSAGE else e.message
-                )
             } catch (e: Exception) {
                 _detailState.value = TaskDetailUiState.Error(
-                    e.message ?: s("task_error_loading_single")
+                    e.toUserMessage(settingsStore.getLanguage(), "task_error_loading_single")
                 )
             }
         }
@@ -884,7 +879,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
-                    e.message ?: s("task_error_assigning")
+                    e.toUserMessage(settingsStore.getLanguage(), "task_error_assigning")
                 )
             }
         }
@@ -986,7 +981,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
-                    e.message ?: s("task_error_updating")
+                    e.toUserMessage(settingsStore.getLanguage(), "task_error_updating")
                 )
             }
         }
@@ -1008,7 +1003,7 @@ class TaskScreenModel(
                 throw e
             } catch (e: Exception) {
                 _actionState.value = TaskActionState.Error(
-                    e.message ?: s("task_error_deleting")
+                    e.toUserMessage(settingsStore.getLanguage(), "task_error_deleting")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -1213,9 +1208,7 @@ class TaskScreenModel(
             // Antes retornaba en silencio, dejando el botón "Sincronizar ahora"
             // sin ningún feedback si el usuario lo pulsa antes de que se resuelva
             // su asignación (o si la tarea no está asignada a él).
-            _calendarActionState.value = CalendarActionState.Error(
-                "No se pudo determinar tu asignación para esta tarea"
-            )
+            _calendarActionState.value = CalendarActionState.Error(s("calendar_sync_no_assignment"))
             return
         }
         screenModelScope.launch {
@@ -1232,13 +1225,13 @@ class TaskScreenModel(
                 _calendarActionState.value = if (synced) {
                     CalendarActionState.Success
                 } else {
-                    CalendarActionState.Error("No se pudo sincronizar con Google Calendar")
+                    CalendarActionState.Error(s("calendar_sync_error"))
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _calendarActionState.value = CalendarActionState.Error(
-                    e.message ?: s("calendar_sync_error")
+                    e.toUserMessage(settingsStore.getLanguage(), "calendar_sync_error")
                 )
             }
             loadTaskDetail(householdId, task.id)

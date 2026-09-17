@@ -15,11 +15,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import org.taskhub.network.FIRESTORE_GONE_MESSAGE
-import org.taskhub.network.FirestoreException
+import org.taskhub.network.ErrorCategory
+import org.taskhub.network.errorCategory
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.HouseholdRepository
-import org.taskhub.network.isGoneOrForbidden
 import org.taskhub.network.models.HouseholdResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.MessageResponse
@@ -29,6 +28,7 @@ import org.taskhub.platform.HapticKind
 import org.taskhub.platform.logAnalyticsEvent
 import org.taskhub.platform.vibrate
 import org.taskhub.ui.i18n.AppStrings
+import org.taskhub.ui.i18n.toUserMessage
 
 /** Estados de carga/creación/unión a un hogar. */
 sealed class HouseholdUiState {
@@ -105,7 +105,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
-                    e.message ?: s("household_error_creating")
+                    e.toUserMessage(settingsStore.getLanguage(), "household_error_creating")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -144,8 +144,12 @@ class HouseholdScreenModel(
                 _uiState.value = HouseholdUiState.Error(s("household_error_invalid_invite_code"))
                 buzz(HapticKind.ERROR)
             } catch (e: Exception) {
+                // Fallback genérico: antes reutilizaba "código de invitación
+                // inválido" incluso para un fallo de RED (sin conexión/5xx),
+                // mostrando un mensaje de validación equivocado ante un
+                // problema que nada tiene que ver con el código en sí.
                 _uiState.value = HouseholdUiState.Error(
-                    e.message ?: s("household_error_invalid_invite_code")
+                    e.toUserMessage(settingsStore.getLanguage(), "household_error_joining")
                 )
                 buzz(HapticKind.ERROR)
             }
@@ -163,20 +167,12 @@ class HouseholdScreenModel(
             try {
                 val household = repo.getHousehold(id)
                 _uiState.value = HouseholdUiState.Success(household)
-            } catch (e: FirestoreException) {
-                if (e.isGoneOrForbidden) {
-                    _uiState.value = HouseholdUiState.Error(
-                        message = FIRESTORE_GONE_MESSAGE,
-                        removable = true
-                    )
-                } else {
-                    _uiState.value = HouseholdUiState.Error(e.message)
-                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.value = HouseholdUiState.Error(
-                    e.message ?: s("household_error_loading")
+                    message = e.toUserMessage(settingsStore.getLanguage(), "household_error_loading"),
+                    removable = e.errorCategory() == ErrorCategory.GONE_OR_FORBIDDEN
                 )
             }
         }
@@ -207,9 +203,15 @@ class HouseholdScreenModel(
                 onSuccess()
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: org.taskhub.network.HouseholdCascadeIncompleteException) {
+                // Por tipo, no por e.message (fijo en español desde el repo e
+                // incluye el ID interno del hogar) — mismo motivo que
+                // AccountDeletionCascadeException en DeleteAccountSection.kt.
+                buzz(HapticKind.ERROR)
+                onError(s("household_error_deleting_cascade"))
             } catch (e: Exception) {
                 buzz(HapticKind.ERROR)
-                onError(e.message ?: s("household_error_deleting"))
+                onError(e.toUserMessage(settingsStore.getLanguage(), "household_error_deleting"))
             }
         }
     }
@@ -231,7 +233,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 buzz(HapticKind.ERROR)
-                onError(e.message ?: s("household_error_leaving"))
+                onError(e.toUserMessage(settingsStore.getLanguage(), "household_error_leaving"))
             }
         }
     }
@@ -298,7 +300,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 _messagesUiState.value = MessagesUiState.Error(
-                    e.message ?: s("messages_error_loading")
+                    e.toUserMessage(settingsStore.getLanguage(), "messages_error_loading")
                 )
             }
         }
@@ -332,7 +334,7 @@ class HouseholdScreenModel(
                 throw e
             } catch (e: Exception) {
                 _newMessageText.value = text
-                _sendMessageError.value = e.message ?: s("messages_error_sending")
+                _sendMessageError.value = e.toUserMessage(settingsStore.getLanguage(), "messages_error_sending")
             }
         }
     }
