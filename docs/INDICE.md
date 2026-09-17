@@ -103,6 +103,12 @@ entender *por qué* el código quedó como quedó en ciertos puntos.
   eliminación completa de la auth anónima (decisión de producto): login con
   Google obligatorio, gate de login en `App.kt` (`AuthGateScreen`), y por qué
   el fix de vinculación del informe anterior quedó obsoleto/eliminado.
+- **[login-web-2026-09-17.md](login-web-2026-09-17.md)** — implementación de
+  Google Sign-In real en la web (target wasmJs) vía Google Identity Services
+  (GIS): el login era un no-op hasta este encargo, lo que dejaba la web
+  inutilizable tras la decisión Google-only de arriba. Puente JS↔Kotlin/Wasm
+  por polling (sin pasar lambdas Kotlin a JS) y dónde vive ahora el
+  `WEB_CLIENT_ID` compartido con Android.
 - **[correcciones-2026-09-05-propuestas-aprobadas.md](correcciones-2026-09-05-propuestas-aprobadas.md)**
   y **[correcciones-2026-09-05-notificaciones.md](correcciones-2026-09-05-notificaciones.md)**
   — ronda de correcciones aprobadas y el cierre del flujo de notificaciones

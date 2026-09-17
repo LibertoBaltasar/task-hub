@@ -16,8 +16,62 @@
             background-color: #007660;
         }
     </style>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+    <script>
+        // Puente Google Identity Services (GIS) <-> Kotlin/Wasm (ver
+        // `Platform.wasmJs.kt`, `launchGoogleSignIn`). Kotlin/Wasm no puede
+        // pasar un lambda propio como callback de una función JS externa de
+        // forma fiable, así que el puente vive enteramente en JS: guarda el
+        // resultado en `window.__taskhubGis` y Kotlin lo sondea por polling
+        // (ver `jsGoogleSignInDone`/`jsGoogleSignInValue`).
+        window.__taskhubGis = { state: "idle", value: "" };
+
+        function __taskhubGisCredentialCallback(response) {
+            window.__taskhubGis.value = (response && response.credential) ? response.credential : "";
+            window.__taskhubGis.state = "done";
+        }
+
+        // El callback de `initialize` SOLO se invoca si el usuario completa el
+        // login; sin este segundo callback de `prompt`, cerrar el selector de
+        // cuentas (o que GIS lo oculte por cookies de terceros bloqueadas,
+        // etc.) dejaba `state` en "pending" para siempre y `GoogleAuthManager`
+        // colgado en `SigningIn` (mismo contrato de cancelación que Android).
+        function __taskhubGisNotificationCallback(notification) {
+            try {
+                if (window.__taskhubGis.state === "pending" &&
+                    (notification.isNotDisplayed() || notification.isSkippedMoment() || notification.isDismissedMoment())) {
+                    window.__taskhubGis.value = "";
+                    window.__taskhubGis.state = "done";
+                }
+            } catch (e) {
+                // Si la API de notificación cambia de forma, no bloquear aquí:
+                // el timeout del lado Kotlin (ver Platform.wasmJs.kt) resuelve
+                // igualmente el estado "pending" colgado.
+            }
+        }
+
+        function __taskhubStartGoogleSignIn(clientId) {
+            window.__taskhubGis.state = "pending";
+            window.__taskhubGis.value = "";
+            function tryInit() {
+                if (window.google && window.google.accounts && window.google.accounts.id) {
+                    window.google.accounts.id.initialize({
+                        client_id: clientId,
+                        callback: __taskhubGisCredentialCallback,
+                        auto_select: false
+                    });
+                    window.google.accounts.id.prompt(__taskhubGisNotificationCallback);
+                } else {
+                    // El script de GIS es `async defer`: puede no haber cargado
+                    // todavía cuando el usuario pulsa "Iniciar sesión".
+                    setTimeout(tryInit, 100);
+                }
+            }
+            tryInit();
+        }
+    </script>
     <script src="composeApp.js"></script>
 </body>
 </html>

@@ -15,6 +15,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.taskhub.platform.GOOGLE_WEB_CLIENT_ID
 import org.taskhub.platform.GoogleSignInResultHolder
 import kotlin.coroutines.resume
 
@@ -36,10 +37,10 @@ import kotlin.coroutines.resume
 object GoogleSignInHelper {
 
     /**
-     * The Web SDK client ID from Firebase Console.
-     * De google-services.json (oauth_client con client_type 3 = Web).
+     * The Web SDK client ID from Firebase Console. Compartido con la
+     * implementación web (GIS) — ver [GOOGLE_WEB_CLIENT_ID].
      */
-    const val WEB_CLIENT_ID = "278503294422-g54vhkk502dju3fp8ra8hi0h7037b0m0.apps.googleusercontent.com"
+    const val WEB_CLIENT_ID = GOOGLE_WEB_CLIENT_ID
 
     private var signInLauncher: ActivityResultLauncher<Intent>? = null
 
