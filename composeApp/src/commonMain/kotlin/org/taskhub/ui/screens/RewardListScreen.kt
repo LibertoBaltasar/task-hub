@@ -126,6 +126,22 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
             }
         }
 
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Text(
+                text = s("reward_list_explainer_banner"),
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         when (val rState = rewardState) {
             is RewardUiState.Loading -> {
                 // ShimmerList en vez de CircularProgressIndicator genérico —

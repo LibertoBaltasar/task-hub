@@ -37,7 +37,8 @@ import org.taskhub.ui.models.HouseholdScreenModel
  */
 data class ExploreScreen(
     val householdId: String,
-    val memberId: String
+    val memberId: String,
+    val initialTab: Int = 0
 ) : Screen {
 
     @Composable
@@ -45,7 +46,7 @@ data class ExploreScreen(
         val navigator = LocalNavigator.currentOrThrow
         val memberModel = koinScreenModel<MemberScreenModel>()
         val statsModel = koinScreenModel<StatsScreenModel>()
-        var selectedTab by remember { mutableStateOf(0) }
+        var selectedTab by remember { mutableStateOf(initialTab) }
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 

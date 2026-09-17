@@ -451,6 +451,7 @@ object AppStrings {
             "public_profile_stat_record" to "Récord",
 
             // Recompensas (RewardListScreen.kt)
+            "reward_list_explainer_banner" to "💡 Ganas puntos completando tareas. Cámbialos aquí por recompensas.",
             "reward_list_empty_title" to "No hay recompensas aún",
             "reward_list_empty_admin" to "Crea la primera recompensa con +",
             "reward_list_empty_member" to "El admin aún no ha creado recompensas",
@@ -650,6 +651,13 @@ object AppStrings {
             "task_detail_mandatory_badge" to "🔒 Obligatoria",
             "task_detail_on_time_pts" to "✅ A tiempo — +%d pts",
             "task_detail_late_pts" to "⚠️ Tarde — +%d pts",
+            "task_detail_points_section" to "⭐ Puntuación",
+            "task_detail_points_how_it_works" to "Cómo funciona",
+            "task_detail_points_earn_desc" to "Al marcarla como hecha, quien la complete gana ⭐ %d puntos.",
+            "task_detail_points_your_balance" to "Tu saldo",
+            "task_detail_points_rewards_header" to "Recompensas disponibles",
+            "task_detail_points_rewards_empty" to "Tu hogar aún no tiene recompensas creadas.",
+            "task_detail_points_view_all_rewards" to "Ver todas las recompensas →",
 
             // Lista de tareas (TaskListScreen.kt)
             "task_list_undo_snackbar_msg" to "✅ Tarea completada",
@@ -1088,6 +1096,7 @@ object AppStrings {
             "public_profile_stat_record" to "Best",
 
             // Rewards (RewardListScreen.kt)
+            "reward_list_explainer_banner" to "💡 Earn points by completing tasks. Redeem them here for rewards.",
             "reward_list_empty_title" to "No rewards yet",
             "reward_list_empty_admin" to "Create the first reward with +",
             "reward_list_empty_member" to "The admin hasn't created any rewards yet",
@@ -1287,6 +1296,13 @@ object AppStrings {
             "task_detail_mandatory_badge" to "🔒 Mandatory",
             "task_detail_on_time_pts" to "✅ On time — +%d pts",
             "task_detail_late_pts" to "⚠️ Late — +%d pts",
+            "task_detail_points_section" to "⭐ Points",
+            "task_detail_points_how_it_works" to "How it works",
+            "task_detail_points_earn_desc" to "Whoever marks it done earns ⭐ %d points.",
+            "task_detail_points_your_balance" to "Your balance",
+            "task_detail_points_rewards_header" to "Available rewards",
+            "task_detail_points_rewards_empty" to "Your household hasn't created any rewards yet.",
+            "task_detail_points_view_all_rewards" to "See all rewards →",
 
             // Task list (TaskListScreen.kt)
             "task_list_undo_snackbar_msg" to "✅ Task completed",
