@@ -289,5 +289,5 @@ tema/idioma.
 ## Commit
 
 ```
-(pendiente — ver commit siguiente de este mismo encargo)
+4d3b1bd feat: iOS — Google Sign-In, share nativo y build Xcode fiable (instalación local)
 ```
