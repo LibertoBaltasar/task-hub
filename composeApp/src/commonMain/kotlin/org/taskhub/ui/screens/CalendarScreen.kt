@@ -27,8 +27,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -58,11 +61,11 @@ import org.taskhub.ui.theme.*
 
 // ── Calendar mode ──────────────────────────────────────────
 
-private enum class CalendarMode { WEEK, MONTH }
+internal enum class CalendarMode { WEEK, MONTH }
 
 // ── Calendar entry (task + status for a specific day) ─────
 
-private data class DayTaskEntry(
+internal data class DayTaskEntry(
     val task: TaskResponse,
     val isOverdue: Boolean,
     val isDueToday: Boolean,
@@ -125,6 +128,7 @@ data class CalendarScreen(
         val navigator = LocalNavigator.currentOrThrow
         val model = koinScreenModel<TaskScreenModel>()
         val listState by model.listState.collectAsState()
+        val actionState by model.actionState.collectAsState()
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
         val lang = appSettings.currentLanguage
@@ -135,6 +139,18 @@ data class CalendarScreen(
         LaunchedEffect(householdId) {
             model.setCurrentMemberId(memberId)
             model.loadTasks(householdId)
+        }
+
+        // Completar una tarea de la sección "Pendientes" (sin fecha límite, ver
+        // más abajo) reutiliza el mismo TaskActionState que el resto de la app
+        // (TaskListScreen/TaskDetailScreen) — mismo patrón: al llegar a Success
+        // se recarga la lista y se resetea el estado para no dejar el spinner
+        // colgado en un segundo intento.
+        LaunchedEffect(actionState) {
+            if (actionState is TaskActionState.Success) {
+                model.loadTasks(householdId)
+                model.resetActionState()
+            }
         }
 
         var mode by remember { mutableStateOf(CalendarMode.WEEK) }
@@ -168,6 +184,15 @@ data class CalendarScreen(
         val tasksByDate = remember(listState, anchorDate, mode) {
             val tasks = (listState as? TaskListUiState.Success)?.tasks ?: emptyList()
             groupTasksByDate(tasks, tz, mode, weekRange, monthRange)
+        }
+
+        // ── Tareas pendientes SIN fecha límite Y SIN recurrencia ────────────
+        // Antes se mostraban (incorrectamente) en TODAS las celdas del
+        // calendario, ver KDoc de [isTaskDueOnDay]. Ahora quedan fuera de la
+        // cuadrícula y se listan aparte, debajo (revisión final 2026-09-17).
+        val pendingWithoutDueDate = remember(listState) {
+            val tasks = (listState as? TaskListUiState.Success)?.tasks ?: emptyList()
+            tasks.filter { isTaskPendingWithoutDueDate(it) }
         }
 
         // ── Selected day popup ──────────────────────────────
@@ -311,32 +336,69 @@ data class CalendarScreen(
                     }
 
                     else -> {
-                        if (tasksByDate.values.all { it.isEmpty() }) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = s("calendar_no_tasks_range"),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                        // Una sola Column desplazable para la cuadrícula (semana/mes)
+                        // + la sección "Pendientes" de abajo: WeekView/MonthView ya no
+                        // hacen scroll cada una por su cuenta (antes MonthView ocupaba
+                        // fillMaxSize() y dejaba sin espacio a cualquier contenido
+                        // posterior en la misma Column).
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            if (tasksByDate.values.all { it.isEmpty() }) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = s("calendar_no_tasks_range"),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            when (mode) {
+                                CalendarMode.WEEK -> WeekView(
+                                    weekRange = weekRange,
+                                    tasksByDate = tasksByDate,
+                                    today = today,
+                                    onDayClick = { selectedDay = it }
+                                )
+                                CalendarMode.MONTH -> MonthView(
+                                    monthGrid = monthRange,
+                                    tasksByDate = tasksByDate,
+                                    today = today,
+                                    onDayClick = { selectedDay = it }
                                 )
                             }
-                        }
-                        when (mode) {
-                            CalendarMode.WEEK -> WeekView(
-                                weekRange = weekRange,
-                                tasksByDate = tasksByDate,
-                                today = today,
-                                onDayClick = { selectedDay = it }
-                            )
-                            CalendarMode.MONTH -> MonthView(
-                                monthGrid = monthRange,
-                                tasksByDate = tasksByDate,
-                                today = today,
-                                onDayClick = { selectedDay = it }
+
+                            if (actionState is TaskActionState.Error) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    )
+                                ) {
+                                    Text(
+                                        text = "⚠️ ${(actionState as TaskActionState.Error).message}",
+                                        modifier = Modifier.padding(12.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                            }
+
+                            PendingWithoutDueDateSection(
+                                tasks = pendingWithoutDueDate,
+                                isCompleting = actionState is TaskActionState.Loading,
+                                s = s,
+                                onComplete = { taskId -> model.completeTask(householdId, taskId) },
+                                onTaskClick = { taskId -> navigator.push(TaskDetailScreen(householdId, taskId)) }
                             )
                         }
                     }
@@ -382,17 +444,17 @@ private fun WeekView(
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
         // 7 day columns.
-        // Modifier.height(IntrinsicSize.Min) es necesario para que
-        // DayColumn.fillMaxHeight() (dentro) funcione: bajo un
-        // verticalScroll() sin acotar (maxHeight = Infinity), fillMaxHeight()
-        // se vuelve un no-op y cada columna se ajusta solo a su propio
-        // contenido — las 7 columnas no comparten altura y el resaltado de
-        // "hoy" queda recortado al contenido en vez de cubrir toda la fila.
+        // Modifier.height(IntrinsicSize.Min): sin esto, DayColumn.fillMaxHeight()
+        // (dentro) sería un no-op y las 7 columnas no compartirían altura — el
+        // resaltado de "hoy" quedaría recortado al contenido en vez de cubrir
+        // toda la fila. El scroll ahora lo aporta la Column exterior que envuelve
+        // WeekView + la sección "Pendientes" (revisión final 2026-09-17): un
+        // verticalScroll propio aquí ya no es necesario y, anidado dentro de otro
+        // vertical scroll, es redundante.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(IntrinsicSize.Min)
-                .verticalScroll(rememberScrollState())
         ) {
             weekRange.forEach { date ->
                 val entries = tasksByDate[date] ?: emptyList()
@@ -444,12 +506,12 @@ private fun MonthView(
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-        // Week rows
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-        ) {
+        // Week rows. Altura ya acotada (cada fila mide 100.dp fijo, máx. 6 filas):
+        // no necesita fillMaxSize()/scroll propio — la Column exterior que
+        // envuelve MonthView + la sección "Pendientes" ya aporta el scroll de
+        // toda la pantalla (revisión final 2026-09-17); fillMaxSize() aquí, bajo
+        // un padre con altura no acotada, rompería el layout.
+        Column(modifier = Modifier.fillMaxWidth()) {
             monthGrid.forEach { week ->
                 Row(
                     modifier = Modifier
@@ -805,6 +867,149 @@ private fun TaskPopupItem(
 }
 
 // ────────────────────────────────────────────────────────────
+//  "Pendientes" — tareas sin fecha límite y sin recurrencia
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Lista, debajo de la cuadrícula semana/mes, las tareas pendientes que
+ * [isTaskDueOnDay] excluye de TODAS las celdas del calendario por no tener
+ * `dueDate` ni recurrencia (ver su KDoc) — para que sigan siendo accesibles
+ * en vez de desaparecer.
+ */
+@Composable
+private fun PendingWithoutDueDateSection(
+    tasks: List<TaskResponse>,
+    isCompleting: Boolean,
+    s: (String) -> String,
+    onComplete: (String) -> Unit,
+    onTaskClick: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp)) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "${s("calendar_pending_section")} (${tasks.size})",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Text(
+            text = s("calendar_pending_section_subtitle"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Spacer(Modifier.height(8.dp))
+
+        if (tasks.isEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Text(
+                    text = s("calendar_pending_empty"),
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tasks.forEach { task ->
+                    PendingTaskRow(
+                        task = task,
+                        isLoading = isCompleting,
+                        s = s,
+                        onComplete = { onComplete(task.id) },
+                        onClick = { onTaskClick(task.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Fila de una tarea sin fecha límite: título + puntos + botón "Hecho" (mismo
+ * patrón de accesibilidad que `TaskCard` en `TaskListScreen` — customAction
+ * "Hecho" en la Card + botón interno oculto con `clearAndSetSemantics`, para
+ * que TalkBack/VoiceOver no exponga dos controles interactivos superpuestos
+ * en la misma fila clicable). Tocar la fila navega al detalle de la tarea.
+ */
+@Composable
+private fun PendingTaskRow(
+    task: TaskResponse,
+    isLoading: Boolean,
+    s: (String) -> String,
+    onComplete: () -> Unit,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                customActions = listOf(
+                    CustomAccessibilityAction(s("task_detail_mark_done")) {
+                        onComplete()
+                        true
+                    }
+                )
+            }
+            .clickable(role = Role.Button, onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                PointsBadge(text = "⭐ ${task.points}", tone = BadgeTone.Teal)
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onComplete,
+                enabled = !isLoading,
+                // Oculto para TalkBack/VoiceOver: la acción ya está expuesta como
+                // customAction de la Card (evita botón anidado dentro del área
+                // clicable). Sigue funcionando al tacto.
+                modifier = Modifier.clearAndSetSemantics {}
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(s("task_detail_mark_done"))
+                }
+            }
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────
 //  Date calculations
 // ────────────────────────────────────────────────────────────
 
@@ -882,8 +1087,17 @@ private fun computeMonthGrid(anchorDate: LocalDate): List<List<LocalDate?>> {
  * `dueDate`), el calendario necesita saber en qué celda de día concreto cae
  * la tarea, así que sí usa `dueDate` — un propósito distinto, no una
  * duplicación de la misma regla.
+ *
+ * Una tarea "once" pendiente SIN `dueDate` no tiene ningún día concreto que
+ * mostrar: antes se marcaba como "due" en TODAS las celdas (bug reportado
+ * 2026-09-17), inundando el calendario. Ahora se excluye de la cuadrícula por
+ * completo — [isTaskPendingWithoutDueDate] la recoge para listarla aparte, en
+ * la sección "Pendientes" bajo el calendario (ver `PendingWithoutDueDateSection`
+ * en `CalendarScreen.Content`). Las tareas recurrentes (daily/weekly/monthly)
+ * tampoco tienen `dueDate`, pero esas NO pasan por esta rama — siguen su regla
+ * de recurrencia normal vía [RecurrenceRules.isDueOn], sin cambios.
  */
-private fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): Boolean {
+internal fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): Boolean {
     if (task.frequency == "once") {
         // Due if not completed yet
         if (task.lastCompletedDate != null) return false
@@ -891,8 +1105,8 @@ private fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): B
             val dueDate = Instant.fromEpochMilliseconds(task.dueDate).toLocalDateTime(tz).date
             return date >= dueDate
         }
-        // No dueDate and not completed: show as due
-        return true
+        // Sin dueDate y sin completar: fuera del calendario, ver KDoc de arriba.
+        return false
     }
     return RecurrenceRules.isDueOn(
         date = date,
@@ -904,6 +1118,15 @@ private fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): B
         createdAt = task.createdAt
 )
 }
+
+/**
+ * Tareas pendientes sin ningún día propio en el calendario: "once", sin
+ * `dueDate` y aún no completadas — el mismo conjunto que [isTaskDueOnDay]
+ * excluye de todas las celdas. Se listan en la sección "Pendientes" debajo
+ * del calendario en vez de perderse.
+ */
+internal fun isTaskPendingWithoutDueDate(task: TaskResponse): Boolean =
+    task.frequency == "once" && task.dueDate <= 0 && task.lastCompletedDate == null
 
 /**
  * Check if a task was completed on a specific date.
@@ -940,7 +1163,7 @@ private fun isTaskOverdueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone
 //  Group tasks by date for the calendar
 // ────────────────────────────────────────────────────────────
 
-private fun groupTasksByDate(
+internal fun groupTasksByDate(
     tasks: List<TaskResponse>,
     tz: TimeZone,
     mode: CalendarMode,

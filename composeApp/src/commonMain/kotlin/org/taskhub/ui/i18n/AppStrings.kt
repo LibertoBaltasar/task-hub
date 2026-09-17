@@ -523,6 +523,9 @@ object AppStrings {
             "calendar_task_status_completed" to "✅ Completada",
             "calendar_task_status_overdue" to "⚠️ Vencida",
             "calendar_task_status_pending" to "📌 Pendiente",
+            "calendar_pending_section" to "📋 Pendientes",
+            "calendar_pending_section_subtitle" to "Tareas sin fecha límite — no aparecen en el calendario",
+            "calendar_pending_empty" to "No hay tareas sin fecha límite",
 
             "day_abbr_monday" to "Lun",
             "day_abbr_tuesday" to "Mar",
@@ -1168,6 +1171,9 @@ object AppStrings {
             "calendar_task_status_completed" to "✅ Completed",
             "calendar_task_status_overdue" to "⚠️ Overdue",
             "calendar_task_status_pending" to "📌 Pending",
+            "calendar_pending_section" to "📋 Pending",
+            "calendar_pending_section_subtitle" to "Tasks without a due date — not shown on the calendar",
+            "calendar_pending_empty" to "No tasks without a due date",
 
             "day_abbr_monday" to "Mon",
             "day_abbr_tuesday" to "Tue",
