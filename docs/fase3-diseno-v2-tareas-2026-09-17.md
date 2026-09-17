@@ -155,5 +155,5 @@ actualizar tests existentes.
 
 ```
 $ git log --oneline -1
-<se completa tras el commit>
+dbdfcdd feat: diseño v2 tareas — fase 3 (aviso de error en Otros, verificación final)
 ```
