@@ -8,6 +8,8 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,6 +57,7 @@ import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.StatusDot
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.rememberHouseholdName
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.*
 import org.taskhub.ui.theme.*
@@ -159,6 +162,7 @@ data class CalendarScreen(
         }
 
         var mode by remember { mutableStateOf(CalendarMode.WEEK) }
+        val reduceMotion = shouldReduceMotion()
 
         val tz = remember { TimeZone.currentSystemDefault() }
         // "Hoy", recalculado cada minuto: si la pantalla se deja abierta cruzando
@@ -366,19 +370,42 @@ data class CalendarScreen(
                                 }
                             }
                             val onDayClick = remember { { day: LocalDate -> selectedDay = day } }
-                            when (mode) {
-                                CalendarMode.WEEK -> WeekView(
-                                    weekRange = weekRange,
-                                    tasksByDate = tasksByDate,
-                                    today = today,
-                                    onDayClick = onDayClick
-                                )
-                                CalendarMode.MONTH -> MonthView(
-                                    monthGrid = monthRange,
-                                    tasksByDate = tasksByDate,
-                                    today = today,
-                                    onDayClick = onDayClick
-                                )
+                            // Crossfade en vez del `when` directo (informe delight §2.11):
+                            // la cuadrícula cambiaba de golpe al navegar de mes/semana. El
+                            // rango de fechas y el agrupado de tareas se recalculan DENTRO
+                            // del contenido a partir del `targetState` recibido (en vez de
+                            // leer `weekRange`/`monthRange`/`tasksByDate` del scope exterior)
+                            // para que el slot saliente conserve su propio mes/semana
+                            // durante el fundido — si leyera las variables exteriores, ambos
+                            // slots (saliente y entrante) mostrarían el mismo mes nuevo y el
+                            // cruce no se vería (gotcha de Crossfade con estado mutable
+                            // externo). Misma lógica de fechas ya existente
+                            // (computeWeekRange/computeMonthGrid/groupTasksByDate), sin
+                            // cambios de comportamiento.
+                            Crossfade(
+                                targetState = mode to anchorDate,
+                                animationSpec = tween(durationMillis = if (reduceMotion) 0 else 200)
+                            ) { (crossfadeMode, crossfadeAnchor) ->
+                                val crossfadeWeekRange = remember(crossfadeAnchor) { computeWeekRange(crossfadeAnchor) }
+                                val crossfadeMonthRange = remember(crossfadeAnchor) { computeMonthGrid(crossfadeAnchor) }
+                                val crossfadeTasksByDate = remember(listState, crossfadeAnchor, crossfadeMode) {
+                                    val tasks = (listState as? TaskListUiState.Success)?.tasks ?: emptyList()
+                                    groupTasksByDate(tasks, tz, crossfadeMode, crossfadeWeekRange, crossfadeMonthRange)
+                                }
+                                when (crossfadeMode) {
+                                    CalendarMode.WEEK -> WeekView(
+                                        weekRange = crossfadeWeekRange,
+                                        tasksByDate = crossfadeTasksByDate,
+                                        today = today,
+                                        onDayClick = onDayClick
+                                    )
+                                    CalendarMode.MONTH -> MonthView(
+                                        monthGrid = crossfadeMonthRange,
+                                        tasksByDate = crossfadeTasksByDate,
+                                        today = today,
+                                        onDayClick = onDayClick
+                                    )
+                                }
                             }
 
                             if (actionState is TaskActionState.Error) {
