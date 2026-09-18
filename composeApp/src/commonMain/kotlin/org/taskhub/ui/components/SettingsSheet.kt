@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -385,37 +386,41 @@ fun SettingsSheet(
 
         // ── Theme ────────────────────────────────────────
         SettingsSection(title = s("settings_theme")) {
-            RadioOptionRow(
-                label = s("theme_default"),
-                selected = appSettings.currentTheme == TaskHubThemeType.DEFAULT,
-                onClick = { appSettings.onThemeChanged(TaskHubThemeType.DEFAULT) }
-            )
-            RadioOptionRow(
-                label = s("theme_naturaleza"),
-                selected = appSettings.currentTheme == TaskHubThemeType.NATURALEZA,
-                onClick = { appSettings.onThemeChanged(TaskHubThemeType.NATURALEZA) }
-            )
-            RadioOptionRow(
-                label = s("theme_minimal"),
-                selected = appSettings.currentTheme == TaskHubThemeType.MINIMAL,
-                onClick = { appSettings.onThemeChanged(TaskHubThemeType.MINIMAL) }
-            )
+            Column(modifier = Modifier.selectableGroup()) {
+                RadioOptionRow(
+                    label = s("theme_default"),
+                    selected = appSettings.currentTheme == TaskHubThemeType.DEFAULT,
+                    onClick = { appSettings.onThemeChanged(TaskHubThemeType.DEFAULT) }
+                )
+                RadioOptionRow(
+                    label = s("theme_naturaleza"),
+                    selected = appSettings.currentTheme == TaskHubThemeType.NATURALEZA,
+                    onClick = { appSettings.onThemeChanged(TaskHubThemeType.NATURALEZA) }
+                )
+                RadioOptionRow(
+                    label = s("theme_minimal"),
+                    selected = appSettings.currentTheme == TaskHubThemeType.MINIMAL,
+                    onClick = { appSettings.onThemeChanged(TaskHubThemeType.MINIMAL) }
+                )
+            }
         }
 
         Spacer(Modifier.height(24.dp))
 
         // ── Language ─────────────────────────────────────
         SettingsSection(title = s("settings_language")) {
-            RadioOptionRow(
-                label = s("lang_spanish"),
-                selected = appSettings.currentLanguage == "es",
-                onClick = { appSettings.onLanguageChanged("es") }
-            )
-            RadioOptionRow(
-                label = s("lang_english"),
-                selected = appSettings.currentLanguage == "en",
-                onClick = { appSettings.onLanguageChanged("en") }
-            )
+            Column(modifier = Modifier.selectableGroup()) {
+                RadioOptionRow(
+                    label = s("lang_spanish"),
+                    selected = appSettings.currentLanguage == "es",
+                    onClick = { appSettings.onLanguageChanged("es") }
+                )
+                RadioOptionRow(
+                    label = s("lang_english"),
+                    selected = appSettings.currentLanguage == "en",
+                    onClick = { appSettings.onLanguageChanged("en") }
+                )
+            }
         }
 
         // Solo Android tiene widget de pantalla de inicio real — en el resto
@@ -426,33 +431,35 @@ fun SettingsSheet(
 
             // ── Widget Theme ────────────────────────────────
             SettingsSection(title = s("settings_widget_theme_title")) {
-                RadioOptionRow(
-                    label = s("widget_theme_light"),
-                    selected = widgetTheme == "light",
-                    onClick = {
-                        widgetTheme = "light"
-                        settingsStore.setWidgetTheme("light")
-                        saveWidgetThemeToCache("light")
-                    }
-                )
-                RadioOptionRow(
-                    label = s("widget_theme_dark"),
-                    selected = widgetTheme == "dark",
-                    onClick = {
-                        widgetTheme = "dark"
-                        settingsStore.setWidgetTheme("dark")
-                        saveWidgetThemeToCache("dark")
-                    }
-                )
-                RadioOptionRow(
-                    label = s("widget_theme_system"),
-                    selected = widgetTheme == "system",
-                    onClick = {
-                        widgetTheme = "system"
-                        settingsStore.setWidgetTheme("system")
-                        saveWidgetThemeToCache("system")
-                    }
-                )
+                Column(modifier = Modifier.selectableGroup()) {
+                    RadioOptionRow(
+                        label = s("widget_theme_light"),
+                        selected = widgetTheme == "light",
+                        onClick = {
+                            widgetTheme = "light"
+                            settingsStore.setWidgetTheme("light")
+                            saveWidgetThemeToCache("light")
+                        }
+                    )
+                    RadioOptionRow(
+                        label = s("widget_theme_dark"),
+                        selected = widgetTheme == "dark",
+                        onClick = {
+                            widgetTheme = "dark"
+                            settingsStore.setWidgetTheme("dark")
+                            saveWidgetThemeToCache("dark")
+                        }
+                    )
+                    RadioOptionRow(
+                        label = s("widget_theme_system"),
+                        selected = widgetTheme == "system",
+                        onClick = {
+                            widgetTheme = "system"
+                            settingsStore.setWidgetTheme("system")
+                            saveWidgetThemeToCache("system")
+                        }
+                    )
+                }
             }
         }
 

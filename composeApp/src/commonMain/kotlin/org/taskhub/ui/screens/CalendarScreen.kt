@@ -130,7 +130,12 @@ data class CalendarScreen(
         val listState by model.listState.collectAsState()
         val actionState by model.actionState.collectAsState()
         val appSettings = LocalAppSettings.current
-        val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+        // remember(currentLanguage): sin esto se recreaba en cada recomposición
+        // (p.ej. cualquier cambio de actionState/diálogo), impidiendo que
+        // WeekView/MonthView/PendingWithoutDueDateSection aplicaran skip de
+        // recomposición pese a que sus datos no hubieran cambiado (mismo
+        // patrón ya corregido en HouseholdScreen).
+        val s = remember(appSettings.currentLanguage) { { key: String -> AppStrings.get(key, appSettings.currentLanguage) } }
         val lang = appSettings.currentLanguage
 
         val householdModel = koinScreenModel<HouseholdScreenModel>()
@@ -360,18 +365,19 @@ data class CalendarScreen(
                                     )
                                 }
                             }
+                            val onDayClick = remember { { day: LocalDate -> selectedDay = day } }
                             when (mode) {
                                 CalendarMode.WEEK -> WeekView(
                                     weekRange = weekRange,
                                     tasksByDate = tasksByDate,
                                     today = today,
-                                    onDayClick = { selectedDay = it }
+                                    onDayClick = onDayClick
                                 )
                                 CalendarMode.MONTH -> MonthView(
                                     monthGrid = monthRange,
                                     tasksByDate = tasksByDate,
                                     today = today,
-                                    onDayClick = { selectedDay = it }
+                                    onDayClick = onDayClick
                                 )
                             }
 
@@ -397,8 +403,8 @@ data class CalendarScreen(
                                 tasks = pendingWithoutDueDate,
                                 isCompleting = actionState is TaskActionState.Loading,
                                 s = s,
-                                onComplete = { taskId -> model.completeTask(householdId, taskId) },
-                                onTaskClick = { taskId -> navigator.push(TaskDetailScreen(householdId, taskId)) }
+                                onComplete = remember { { taskId: String -> model.completeTask(householdId, taskId) } },
+                                onTaskClick = remember { { taskId: String -> navigator.push(TaskDetailScreen(householdId, taskId)) } }
                             )
                         }
                     }

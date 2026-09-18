@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -184,6 +185,13 @@ private fun RankingRow(
             ) {
                 Text(
                     text = medalEmoji,
+                    // El ordinal "1º"/"2º"/"3º" de al lado ya transmite la misma
+                    // información en texto plano — se oculta el emoji de la
+                    // medalla al lector de pantalla para evitar leer dos veces
+                    // la misma posición (y depender de que el TTS conozca el
+                    // nombre Unicode del emoji). Para position > 3 este Text SÍ
+                    // es la única fuente del número, así que se deja accesible.
+                    modifier = if (position in 1..3) Modifier.clearAndSetSemantics {} else Modifier,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center

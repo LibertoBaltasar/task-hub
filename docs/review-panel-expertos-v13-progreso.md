@@ -17,10 +17,10 @@ información esencial sin alternativa estática.
 - [x] Oleada 1 (5): Estética(#1), Funcionalidad(#2), Accesibilidad(#3), UI/componentes(#4), UX(#5)
 - [x] Oleada 2 (4): Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9) — falló por session limit (reset 16:00 CEST), reintento único exitoso
 - [x] Oleada 3 (4): Privacidad(#10), Rendimiento(#11 — falló por session limit, reintento tras reset 21:00 CEST), Red/offline/sync(#12), Cobertura pruebas(#13)
-- [ ] Consolidación informe final `docs/review-panel-expertos-v13-2026-09-18.md`
-- [ ] Aplicación de fixes seguros
-- [ ] Verificación build + jvmTest (XML real)
-- [ ] Commit final
+- [x] Consolidación informe final `docs/review-panel-expertos-v13-2026-09-18.md`
+- [x] Aplicación de fixes seguros (11 fixes)
+- [x] Verificación build + jvmTest (XML real): BUILD SUCCESSFUL, 269/269 tests, 0 fallos; wasmJsMainClasses también verificado
+- [x] Commit final
 
 ## Hallazgos SOLO PROPUESTA de v12 a verificar contra código real (asignados por experto)
 
@@ -71,7 +71,11 @@ Pendiente de aplicar hasta cerrar todas las oleadas y consolidar.
 - `isPeerPointsTransfer` sin rate-limit (requiere Cloud Function transaccional).
 - Auto-edición `members/{mid}` sin tope en `totalPoints` (requiere decisión de producto sobre revalidar la premisa "cero usuarios reales" antes de tocar `firestore.rules`, cambio de regla propuesto por el experto de seguridad).
 
-### Oleada 3 (3/4 completados; Rendimiento falló por session limit, reintento en curso)
+### Oleada 3 (completa, 4/4 tras reintento de Rendimiento)
+
+**#11 Rendimiento** — v12: uiToolingPreview sigue eliminado sin regresión (YA RESUELTO). SplashScreen delay(1500) sigue igual (propuesta de marca, sin acción). Bundle web sin cambios de conclusión. Nuevo MENOR APLICABLE: `CalendarScreen.kt:133` recrea lambda `s` de traducción y callbacks inline en cada recomposición (mismo antipatrón que `HouseholdScreen` ya corrigió con `remember`). Confirmación positiva extensa: keys en todos los LazyColumn/LazyRow, memoización correcta en TaskListScreen, sin lecturas Firestore duplicadas, NotificationPollWorker sin regresión.
+
+
 
 **#10 Privacidad** — v12: UMP/CMP sigue ausente (CRÍTICO, sin cambios); texto privacy.html sobre purga sigue correcto sin regresión; checklist guia-publicacion.md §4 sigue sin mención UMP; gating de edad sin cambios de posicionamiento; iOS/desktop/web siguen sin AdMob/Analytics. Nuevo IMPORTANTE APLICABLE (parcial): borrado de cuenta anonimiza mensajes/comentarios pero NO `taskHistory.memberId`/`rewardRedemptions.memberId` en hogares compartidos (`FirestoreRepository.kt:906-937`) — UID de Google queda incrustado tras borrado "completo", inconsistente con promesa de privacy.html; mitigado porque UI actual no resuelve nombres de miembros no existentes. MENOR APLICABLE: comentario obsoleto en `TaskScreenModel.kt:815` sobre TFCD que no refleja el comportamiento real (siempre child-directed, más conservador de lo que dice, sin riesgo real). Confirmación positiva: borrado de cuenta con cascade real, Analytics sin PII.
 

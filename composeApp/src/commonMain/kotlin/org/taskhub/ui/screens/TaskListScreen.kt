@@ -1000,7 +1000,7 @@ private fun TaskCard(
                     text = metaLabel,
                     modifier = Modifier.weight(1f, fill = false),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1017,7 +1017,7 @@ private fun TaskCard(
                 // Due date or completion info
                 if (isDone && task.lastCompletedDate != null) {
                     Text(
-                        text = "✅ ${formatDeadline(task.lastCompletedDate!!)}",
+                        text = "✅ ${formatDeadline(task.lastCompletedDate)}",
                         style = MaterialTheme.typography.bodySmall,
                         // onSuccessContainer (no success): este texto va sobre la card
                         // surfaceVariant de una tarea completada — en Naturaleza claro,

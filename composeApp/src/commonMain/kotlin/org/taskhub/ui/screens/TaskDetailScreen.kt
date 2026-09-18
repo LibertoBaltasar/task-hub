@@ -11,6 +11,7 @@ package org.taskhub.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -1146,28 +1147,30 @@ private fun TaskDetailContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(Modifier.height(8.dp))
-                    members.forEach { member ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(role = Role.RadioButton) { selectedCompleterId = member.id }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selectedCompleterId == member.id,
-                                // La Row exterior ya es clicable con role=RadioButton
-                                // (línea 915): con onClick no-nulo aquí, TalkBack expone
-                                // dos nodos interactivos superpuestos sobre el mismo
-                                // control (panel de expertos 2026-09-11 v9 reintento,
-                                // accesibilidad).
-                                onClick = null
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = member.displayName,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                    Column(modifier = Modifier.selectableGroup()) {
+                        members.forEach { member ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(role = Role.RadioButton) { selectedCompleterId = member.id }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selectedCompleterId == member.id,
+                                    // La Row exterior ya es clicable con role=RadioButton
+                                    // (línea 915): con onClick no-nulo aquí, TalkBack expone
+                                    // dos nodos interactivos superpuestos sobre el mismo
+                                    // control (panel de expertos 2026-09-11 v9 reintento,
+                                    // accesibilidad).
+                                    onClick = null
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = member.displayName,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                         }
                     }
                 }

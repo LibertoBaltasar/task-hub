@@ -325,13 +325,19 @@ private val MinimalDarkColorScheme = darkColorScheme(
 
 // ── Tipografía ────────────────────────────────────────────
 
-private val TaskHubTypography = Typography(
-    headlineLarge = TextStyle(fontWeight = FontWeight.Bold),
-    headlineMedium = TextStyle(fontWeight = FontWeight.Bold),
-    headlineSmall = TextStyle(fontWeight = FontWeight.Bold),
-    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, letterSpacing = 0.15.sp),
-    labelSmall = TextStyle(fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp),
+private val DefaultTypography = Typography()
+
+// Typography(...) con TextStyle(...) sueltos NO hereda fontSize/lineHeight del
+// type-scale M3 base — cada rol que solo especifica peso/tracking queda con
+// esos campos en Unspecified y Compose los resuelve a 14sp por defecto en
+// layout. Por eso cada rol parte de DefaultTypography.copy(...).
+private val TaskHubTypography = DefaultTypography.copy(
+    headlineLarge = DefaultTypography.headlineLarge.copy(fontWeight = FontWeight.Bold),
+    headlineMedium = DefaultTypography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+    headlineSmall = DefaultTypography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+    titleLarge = DefaultTypography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+    titleMedium = DefaultTypography.titleMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.15.sp),
+    labelSmall = DefaultTypography.labelSmall.copy(fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp),
 )
 
 // ── Theme composable ──────────────────────────────────────

@@ -811,8 +811,7 @@ class TaskScreenModel(
      * Carga la tarea, sus asignaciones y los miembros del hogar para
      * `TaskDetailScreen`. También resuelve [currentMemberId]/[myAssignment]
      * (la asignación del usuario en sesión, si la hay) — base para el
-     * indicador de sincronización con Google Calendar — y refresca la
-     * señalización TFCD de AdMob según el rol del perfil activo.
+     * indicador de sincronización con Google Calendar.
      */
     fun loadTaskDetail(householdId: String, taskId: String) {
         screenModelScope.launch {

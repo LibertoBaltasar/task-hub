@@ -1209,14 +1209,20 @@ open class FirestoreRepository(
         taskPoints: Int,
         newMemberId: String
     ) {
-        cloudFunctionsClient.call<ReassignTaskCompletionRequest, ReassignTaskCompletionResult>(
-            "reassignTaskCompletion",
-            ReassignTaskCompletionRequest(householdId = householdId, taskId = taskId, newMemberId = newMemberId)
-        )
-        taskCache.clearTasks(householdId)
-        taskCache.clearTaskHistory(householdId)
-        taskCache.clearMembers(householdId)
-        taskCache.clearAssignments(householdId, taskId)
+        // Invalidación en `finally`: mismo motivo que [completeTask] — un
+        // timeout no distingue "nunca llegó" de "se aplicó pero se perdió la
+        // respuesta".
+        try {
+            cloudFunctionsClient.call<ReassignTaskCompletionRequest, ReassignTaskCompletionResult>(
+                "reassignTaskCompletion",
+                ReassignTaskCompletionRequest(householdId = householdId, taskId = taskId, newMemberId = newMemberId)
+            )
+        } finally {
+            taskCache.clearTasks(householdId)
+            taskCache.clearTaskHistory(householdId)
+            taskCache.clearMembers(householdId)
+            taskCache.clearAssignments(householdId, taskId)
+        }
     }
 
     /** Assign a task to one or more members with a due date. */
@@ -1297,24 +1303,30 @@ open class FirestoreRepository(
         assignmentId: String,
         assignment: TaskAssignmentResponse
     ): TaskAssignmentResponse {
-        val result = try {
-            cloudFunctionsClient.call<CompleteAssignmentRequest, TaskCompletionFunctionResult>(
-                "completeAssignment",
-                CompleteAssignmentRequest(householdId = householdId, taskId = taskId, assignmentId = assignmentId)
+        // Invalidación en `finally`: mismo motivo que [completeTask] — un
+        // timeout no distingue "nunca llegó" de "se aplicó pero se perdió la
+        // respuesta".
+        try {
+            val result = try {
+                cloudFunctionsClient.call<CompleteAssignmentRequest, TaskCompletionFunctionResult>(
+                    "completeAssignment",
+                    CompleteAssignmentRequest(householdId = householdId, taskId = taskId, assignmentId = assignmentId)
+                )
+            } catch (e: CloudFunctionException) {
+                throw mapToAssignmentCompletionConflict(e)
+            }
+            return assignment.copy(
+                status = "completed",
+                completedAt = result.completedAt,
+                pointsAwarded = result.pointsAwarded,
+                onTime = result.onTime
             )
-        } catch (e: CloudFunctionException) {
-            throw mapToAssignmentCompletionConflict(e)
+        } finally {
+            taskCache.clearTasks(householdId)
+            taskCache.clearTaskHistory(householdId)
+            taskCache.clearMembers(householdId)
+            taskCache.clearAssignments(householdId, taskId)
         }
-        taskCache.clearTasks(householdId)
-        taskCache.clearTaskHistory(householdId)
-        taskCache.clearMembers(householdId)
-        taskCache.clearAssignments(householdId, taskId)
-        return assignment.copy(
-            status = "completed",
-            completedAt = result.completedAt,
-            pointsAwarded = result.pointsAwarded,
-            onTime = result.onTime
-        )
     }
 
     /**

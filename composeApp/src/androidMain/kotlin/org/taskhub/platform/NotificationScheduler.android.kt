@@ -54,6 +54,7 @@ class AndroidNotificationScheduler(private val context: Context) : NotificationS
  * que no está disponible al cargar la clase estáticamente).
  */
 object AndroidSchedulerHolder {
+    @Volatile
     var scheduler: AndroidNotificationScheduler? = null
 }
 

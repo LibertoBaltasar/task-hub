@@ -8,11 +8,9 @@
 package org.taskhub.ui.screens
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
@@ -38,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.datetime.*
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.StatusDot
 import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.Achievement
@@ -448,11 +447,7 @@ private fun PieChartCard(title: String, data: List<TagCount>) {
             ) {
                 data.forEachIndexed { index, tagCount ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .background(colors[index % colors.size], CircleShape)
-                        )
+                        StatusDot(color = colors[index % colors.size], size = 12.dp)
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "${tagCount.tag} (${tagCount.count})",
