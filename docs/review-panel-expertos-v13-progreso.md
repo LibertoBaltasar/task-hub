@@ -15,7 +15,7 @@ información esencial sin alternativa estática.
 ## Estado de oleadas
 
 - [x] Oleada 1 (5): Estética(#1), Funcionalidad(#2), Accesibilidad(#3), UI/componentes(#4), UX(#5)
-- [ ] Oleada 2 (4): Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9)
+- [x] Oleada 2 (4): Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9) — falló por session limit (reset 16:00 CEST), reintento único exitoso
 - [ ] Oleada 3 (4): Privacidad(#10), Rendimiento(#11), Red/offline/sync(#12), Cobertura pruebas(#13)
 - [ ] Consolidación informe final `docs/review-panel-expertos-v13-2026-09-18.md`
 - [ ] Aplicación de fixes seguros
@@ -51,6 +51,22 @@ consolidan aquí tras cada oleada.
 
 Pendiente de aplicar hasta cerrar todas las oleadas y consolidar.
 
-### Oleada 2 (en curso)
+### Oleada 2 (completada, tras 1 reintento por session limit)
 
-Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9).
+**#6 Programador senior** — v12: tests de funciones OAuth puras sigue abierto (sin cambios); material-icons-core 1.7.3 confirmado sin regresión. Nuevo IMPORTANTE APLICABLE: `AndroidSchedulerHolder.scheduler` sin `@Volatile` (`NotificationScheduler.android.kt:56-58`), inconsistente con otros holders del mismo paquete que sí lo usan (`AndroidContextHolder`, `AdControllerImpl`) — se escribe en `onCreate` y se lee desde `TaskHubFirebaseMessagingService.onNewToken()` sin sincronización. MENOR APLICABLE: `!!` innecesario en `TaskListScreen.kt:1020` (smart-cast ya cubre el caso). PROPUESTA: `TaskDetailContent` ~888 líneas, candidato a descomponer. Confirmación positiva: auditoría sistemática de ~150 catch(Exception) sin CancellationException tragada sin relanzar.
+
+**#7 Arquitectura** — v12 CRÍTICO: SecureStore wasmJs sin cifrado real sigue abierto sin cambios. Capacidad Google Sign-In duplicada: matizado (las 4 plataformas ya funcionan, pero el contrato sentinela `""`/`null` de `GoogleSignInResultHolder` sigue duplicado 5 veces). Nuevo IMPORTANTE (propuesta, refactor grande): `TaskScreenModel` (1283 líneas) compartido sin key entre 5 pantallas no relacionadas (listado/detalle/alta/edición/calendario) — god object, documentado como decisión consciente pero con coste creciente. MENOR: contrato sentinela sin tipo sellado. Veredicto por subsistema: red/Firestore sólido, auth funcional pero con deuda de tipado, UI/navegación con límites de capas respetados salvo TaskScreenModel, persistencia local consistente salvo wasmJs sin cifrado.
+
+**#8 QA/bugs** — Los 4 fixes críticos de v12 (floor revalidado, finally en completeTask/undoTaskCompletion, hasCalendarSupport, CSPRNG wasmJs) SIGUEN APLICADOS sin regresión. Nuevo CRÍTICO: `donatePoints` (`MemberRepository.kt:757-788`) puede DUPLICAR puntos de la nada — timeout de red tras crédito real al receptor se interpreta como fallo (IOException no es FirestoreException, no lo captura el catch específico) y dispara rollback del débito al donante, dejando ambos con los puntos. Mismo patrón (IMPORTANTE) en `appreciateMember` sin rollback pero con riesgo de duplicar crédito en reintento manual. IMPORTANTE APLICABLE: `completeAssignment`/`reassignTaskCompletion` NO invalidan caché en `finally` (a diferencia de completeTask/undoTaskCompletion que v12 sí arregló) — `FirestoreRepository.kt:1206-1220` y `1293-1318`. MENOR: carrera en `addMemberAchievement` primera creación de `achievements/_meta` (dos logros simultáneos, el segundo PATCH sobrescribe al primero sin merge) — `MemberRepository.kt:832-865`. Confirma que el hallazgo ya visto en #2 Funcionalidad (redeemReward borra redemption cobrado) comparte la misma causa raíz (IOException no clasificado como ambiguo) — fix compartido en los 3 call-sites.
+
+**#9 Seguridad** — v12: asimetría `firestore.rules` en auto-edición de `members/{mid}` SIGUE ABIERTO y es MÁS AMPLIO de lo descrito: permite subir `totalPoints` propio directamente (no solo appreciation), ya documentado como riesgo aceptado en la cabecera del propio archivo (v9, "cero usuarios reales") — premisa a revalidar. Nuevo CRÍTICO: `isPeerPointsTransfer` sin límite de FRECUENCIA (solo de magnitud +1000/escritura) — nada impide repetir la escritura de crédito muchas veces por segundo, la operación no es atómica; requiere Cloud Function transaccional (PROPUESTA, backend nuevo). IMPORTANTE: presupuesto semanal de agradecer (50pts) bypasseable vía REST directo por la misma vía de auto-edición sin restricción de campos (PROPUESTA de regla concreta incluida en el informe del experto). Confirmaciones positivas: tokens/secretos bien gestionados en las 3 plataformas nativas, CSV injection sigue cubierto, Cloud Functions calculan puntos server-side sin confiar en cliente. Sin cambio: SecureStore wasmJs, `achievements` sin restricción de propietario, `isValidOwnerSuccession`.
+
+**Fixes APLICABLES nuevos identificados en oleada 2:**
+6. `NotificationScheduler.android.kt:56-58` — añadir `@Volatile` a `AndroidSchedulerHolder.scheduler`.
+7. `TaskListScreen.kt:1020` — quitar `!!` innecesario (smart-cast ya cubre).
+8. `FirestoreRepository.kt` `reassignTaskCompletion`/`completeAssignment` — mover invalidación de caché a `finally` (mismo patrón que completeTask/undoTaskCompletion de v12).
+
+**Hallazgos CRÍTICOS que requieren decisión/backend (NO aplicables mecánicamente, documentar como PROPUESTA fuerte):**
+- `donatePoints` puede duplicar puntos ante timeout ambiguo (requiere reclasificar IOException vs fallo definitivo en 3 call-sites: donatePoints, appreciateMember, redeemReward).
+- `isPeerPointsTransfer` sin rate-limit (requiere Cloud Function transaccional).
+- Auto-edición `members/{mid}` sin tope en `totalPoints` (requiere decisión de producto sobre revalidar la premisa "cero usuarios reales" antes de tocar `firestore.rules`, cambio de regla propuesto por el experto de seguridad).
