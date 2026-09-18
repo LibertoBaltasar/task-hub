@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.models.UserProfile
 import org.taskhub.platform.HapticKind
+import org.taskhub.ui.components.hapticsEnabled
 import org.taskhub.platform.vibrate
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
@@ -45,7 +46,7 @@ class ProfileScreenModel(
 ) : ScreenModel {
 
     private fun buzz(kind: HapticKind) {
-        if (settingsStore.isVibrationEnabled()) vibrate(kind)
+        if (hapticsEnabled(settingsStore)) vibrate(kind)
     }
 
     private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())

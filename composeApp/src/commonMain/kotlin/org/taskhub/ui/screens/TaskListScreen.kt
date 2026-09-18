@@ -9,13 +9,8 @@
  */
 package org.taskhub.ui.screens
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -31,9 +26,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -53,12 +45,15 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.coroutines.delay
 import kotlinx.datetime.*
-import kotlin.random.Random
 import org.taskhub.network.RecurrenceRules
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
+import org.taskhub.ui.components.AnimatedCheckmark
+import org.taskhub.ui.components.ConfettiOverlay
+import org.taskhub.ui.components.EffectCategory
+import org.taskhub.ui.components.effectsEnabled
 import org.taskhub.ui.components.EmptyTasksIllustration
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.ExpandableSectionHeader
@@ -815,6 +810,11 @@ private fun TaskCard(
     // (tachado, sin botón "Hecho") que las completadas hoy.
     val isDone = item.isCompleted
     val reduceMotion = shouldReduceMotion()
+    // El bounce del check y el confeti son "efectos visuales" (categoría
+    // fx_effects) a efectos del modo simple — la salida de la card
+    // (scaleX/Y + alpha, más abajo) es una transición básica de lista y no
+    // se gatea aquí (fuera del alcance de "gating mínimo" de la fase 0).
+    val effectsOn = effectsEnabled(EffectCategory.EFFECTS)
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
@@ -907,7 +907,7 @@ private fun TaskCard(
 
                 if (!isDone && onComplete != null) {
                     if (isCompleting) {
-                        AnimatedCheckmark(reduceMotion = reduceMotion)
+                        AnimatedCheckmark(reduceMotion = reduceMotion || !effectsOn)
                     } else {
                         Button(
                             onClick = { isCompleting = true },
@@ -1080,92 +1080,8 @@ private fun TaskCard(
     }
 
         // Confeti mínimo mientras la card se anima de salida al completar.
-        if (isCompleting && !reduceMotion) {
+        if (isCompleting && !reduceMotion && effectsOn) {
             ConfettiOverlay(modifier = Modifier.matchParentSize())
-        }
-    }
-}
-
-// ────────────────────────────────────────────────────────────
-//  AnimatedCheckmark – ✅ con bounce al completar una tarea
-// ────────────────────────────────────────────────────────────
-
-@Composable
-private fun AnimatedCheckmark(reduceMotion: Boolean, modifier: Modifier = Modifier) {
-    var animateIn by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { animateIn = true }
-    val scale by animateFloatAsState(
-        targetValue = if (animateIn) 1f else 0f,
-        animationSpec = if (reduceMotion) tween(0) else spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "checkBounce"
-    )
-    Surface(
-        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.primaryContainer
-    ) {
-        Text(
-            text = "✅",
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelMedium
-        )
-    }
-}
-
-// ────────────────────────────────────────────────────────────
-//  ConfettiOverlay – partículas mínimas al completar (sin librerías)
-// ────────────────────────────────────────────────────────────
-
-private data class ConfettiParticle(
-    val startX: Float,
-    val colorIndex: Int,
-    val fallDelay: Float,
-    val horizontalDrift: Float,
-    val rotationSpeed: Float
-)
-
-@Composable
-private fun ConfettiOverlay(modifier: Modifier = Modifier) {
-    val particles = remember {
-        List(12) {
-            ConfettiParticle(
-                startX = Random.nextFloat(),
-                colorIndex = Random.nextInt(4),
-                fallDelay = Random.nextFloat() * 0.2f,
-                horizontalDrift = (Random.nextFloat() - 0.5f) * 0.5f,
-                rotationSpeed = (Random.nextFloat() - 0.5f) * 540f
-            )
-        }
-    }
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        progress.animateTo(1f, animationSpec = tween(durationMillis = 1000, easing = LinearEasing))
-    }
-    val colors = listOf(
-        MaterialTheme.colorScheme.primary,
-        MaterialTheme.colorScheme.tertiary,
-        MaterialTheme.colorScheme.primaryContainer,
-        MaterialTheme.colorScheme.tertiaryContainer
-    )
-
-    Canvas(modifier = modifier) {
-        val particleSize = 6.dp.toPx()
-        particles.forEach { particle ->
-            val t = ((progress.value - particle.fallDelay) / (1f - particle.fallDelay)).coerceIn(0f, 1f)
-            if (t <= 0f) return@forEach
-            val x = (particle.startX + particle.horizontalDrift * t) * size.width
-            val y = t * size.height
-            val alpha = 1f - t
-            rotate(degrees = particle.rotationSpeed * t, pivot = Offset(x, y)) {
-                drawRect(
-                    color = colors[particle.colorIndex].copy(alpha = alpha),
-                    topLeft = Offset(x - particleSize / 2f, y - particleSize / 2f),
-                    size = Size(particleSize, particleSize)
-                )
-            }
         }
     }
 }

@@ -25,6 +25,7 @@ import org.taskhub.network.models.MessageResponse
 import org.taskhub.storage.HouseholdStore
 import org.taskhub.storage.SettingsStore
 import org.taskhub.platform.HapticKind
+import org.taskhub.ui.components.hapticsEnabled
 import org.taskhub.platform.logAnalyticsEvent
 import org.taskhub.platform.vibrate
 import org.taskhub.ui.i18n.AppStrings
@@ -76,7 +77,7 @@ class HouseholdScreenModel(
 ) : ScreenModel {
 
     private fun buzz(kind: HapticKind) {
-        if (settingsStore.isVibrationEnabled()) vibrate(kind)
+        if (hapticsEnabled(settingsStore)) vibrate(kind)
     }
 
     private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())

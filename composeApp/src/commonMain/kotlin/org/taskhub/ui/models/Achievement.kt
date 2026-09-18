@@ -12,26 +12,33 @@ import kotlinx.datetime.toLocalDateTime
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.TaskHistoryResponse
+import org.taskhub.ui.i18n.AppStrings
 
 /**
  * Representa un logro desbloqueable por un miembro del hogar.
  *
  * @param id identificador estable del logro (se persiste en Firestore dentro
  *   del set de logros desbloqueados del miembro; no debe cambiarse una vez
- *   publicado o los usuarios "perderían" logros ya obtenidos).
- * @param title título corto mostrado en la UI.
- * @param description explicación de qué hay que hacer para desbloquearlo.
+ *   publicado o los usuarios "perderían" logros ya obtenidos). También
+ *   determina las claves i18n de título/descripción — ver [titleKey]/[descKey].
  * @param emoji icono textual del logro.
  * @param isUnlocked estado calculado en tiempo de presentación (no se guarda
  *   en este modelo; ver [AchievementChecker.getAchievementsWithStatus]).
  */
 data class Achievement(
     val id: String,
-    val title: String,
-    val description: String,
     val emoji: String,
     val isUnlocked: Boolean = false
-)
+) {
+    /** Clave `AppStrings` del título — p.ej. `"achievement_first_task_title"` para `id = "first_task"`. */
+    val titleKey: String get() = "achievement_${id}_title"
+
+    /** Clave `AppStrings` de la descripción — p.ej. `"achievement_first_task_desc"`. */
+    val descKey: String get() = "achievement_${id}_desc"
+
+    fun title(lang: String): String = AppStrings.get(titleKey, lang)
+    fun description(lang: String): String = AppStrings.get(descKey, lang)
+}
 
 /**
  * Lógica pura (sin I/O ni dependencias de Firestore) para decidir qué logros
@@ -44,11 +51,11 @@ object AchievementChecker {
     // ── Catálogo fijo de logros disponibles en la app. ──
     // El orden aquí es el orden en el que se muestran en la UI.
     val ALL_ACHIEVEMENTS = listOf(
-        Achievement("first_task", "Primera tarea", "Completaste tu primera tarea", "🎯"),
-        Achievement("streak_5", "5 días seguidos", "Mantuviste una racha de 5 días", "🔥"),
-        Achievement("100_points", "100 puntos", "Alcanzaste 100 puntos totales", "⭐"),
-        Achievement("10_tasks", "10 tareas", "Completaste 10 tareas", "📋"),
-        Achievement("early_bird", "Madrugador", "Completaste una tarea antes de las 8am", "🌅")
+        Achievement("first_task", "🎯"),
+        Achievement("streak_5", "🔥"),
+        Achievement("100_points", "⭐"),
+        Achievement("10_tasks", "📋"),
+        Achievement("early_bird", "🌅")
     )
 
     /**

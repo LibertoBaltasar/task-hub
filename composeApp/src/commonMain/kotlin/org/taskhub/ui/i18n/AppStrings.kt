@@ -46,6 +46,25 @@ object AppStrings {
             "settings_vibration" to "Vibración",
             "settings_vibration_desc" to "Vibrar al completar una tarea",
 
+            // Modo simple (delight, panel 2026-09-18)
+            "simple_mode" to "🧘 Modo simple",
+            "simple_mode_desc" to "Desactiva animaciones, efectos visuales y vibración para una experiencia más sobria y con menor consumo.",
+            "fx_animations" to "Animaciones y transiciones",
+            "fx_effects" to "Efectos visuales",
+            "fx_haptics" to "Vibración y háptica",
+
+            // Logros (Achievement.ALL_ACHIEVEMENTS, StatsScreen.AchievementCard)
+            "achievement_first_task_title" to "Primera tarea",
+            "achievement_first_task_desc" to "Completaste tu primera tarea",
+            "achievement_streak_5_title" to "5 días seguidos",
+            "achievement_streak_5_desc" to "Mantuviste una racha de 5 días",
+            "achievement_100_points_title" to "100 puntos",
+            "achievement_100_points_desc" to "Alcanzaste 100 puntos totales",
+            "achievement_10_tasks_title" to "10 tareas",
+            "achievement_10_tasks_desc" to "Completaste 10 tareas",
+            "achievement_early_bird_title" to "Madrugador",
+            "achievement_early_bird_desc" to "Completaste una tarea antes de las 8am",
+
             // Cuenta
             "settings_account_title" to "Cuenta",
             "settings_account_connected_prefix" to "✅ Conectado como %s",
@@ -722,6 +741,25 @@ object AppStrings {
             "settings_sound_desc" to "Play sound when completing a task",
             "settings_vibration" to "Vibration",
             "settings_vibration_desc" to "Vibrate when completing a task",
+
+            // Simple mode (delight, panel 2026-09-18)
+            "simple_mode" to "🧘 Simple mode",
+            "simple_mode_desc" to "Turns off animations, visual effects, and vibration for a calmer, lower-power experience.",
+            "fx_animations" to "Animations and transitions",
+            "fx_effects" to "Visual effects",
+            "fx_haptics" to "Vibration and haptics",
+
+            // Achievements (Achievement.ALL_ACHIEVEMENTS, StatsScreen.AchievementCard)
+            "achievement_first_task_title" to "First task",
+            "achievement_first_task_desc" to "You completed your first task",
+            "achievement_streak_5_title" to "5-day streak",
+            "achievement_streak_5_desc" to "You kept a 5-day streak going",
+            "achievement_100_points_title" to "100 points",
+            "achievement_100_points_desc" to "You reached 100 total points",
+            "achievement_10_tasks_title" to "10 tasks",
+            "achievement_10_tasks_desc" to "You completed 10 tasks",
+            "achievement_early_bird_title" to "Early bird",
+            "achievement_early_bird_desc" to "You completed a task before 8am",
 
             // Account
             "settings_account_title" to "Account",

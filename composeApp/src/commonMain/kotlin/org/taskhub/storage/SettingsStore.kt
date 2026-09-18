@@ -100,6 +100,43 @@ class SettingsStore(
     fun setVibrationEnabled(enabled: Boolean) =
         settings.putBoolean(KEY_VIBRATION_ENABLED, enabled)
 
+    // ── Modo simple (delight, panel 2026-09-18) ──────────
+    //
+    // Interruptor maestro + 3 de categoría para desactivar el "delight"
+    // (animaciones/efectos/háptica) añadido a partir de esta fase, sin tocar
+    // el ajuste de vibración ya existente ([isVibrationEnabled]) ni la señal
+    // de accesibilidad [org.taskhub.ui.components.shouldReduceMotion]. Ver
+    // [org.taskhub.ui.components.effectsEnabled] para la fórmula de gating
+    // que combina estas 4 claves.
+
+    /** Interruptor maestro del modo simple (desactivado por defecto): anula las 3 categorías siguientes. */
+    fun isSimpleModeEnabled(): Boolean =
+        settings.getBoolean(KEY_SIMPLE_MODE, false)
+
+    fun setSimpleModeEnabled(enabled: Boolean) =
+        settings.putBoolean(KEY_SIMPLE_MODE, enabled)
+
+    /** Animaciones y transiciones decorativas (activado por defecto salvo modo simple). */
+    fun isFxAnimationsEnabled(): Boolean =
+        settings.getBoolean(KEY_FX_ANIMATIONS, true)
+
+    fun setFxAnimationsEnabled(enabled: Boolean) =
+        settings.putBoolean(KEY_FX_ANIMATIONS, enabled)
+
+    /** Efectos visuales de celebración (confeti, check con rebote, etc.), activado por defecto salvo modo simple. */
+    fun isFxEffectsEnabled(): Boolean =
+        settings.getBoolean(KEY_FX_EFFECTS, true)
+
+    fun setFxEffectsEnabled(enabled: Boolean) =
+        settings.putBoolean(KEY_FX_EFFECTS, enabled)
+
+    /** Vibración/háptica ligada al "delight" (activado por defecto salvo modo simple); se combina con [isVibrationEnabled]. */
+    fun isFxHapticsEnabled(): Boolean =
+        settings.getBoolean(KEY_FX_HAPTICS, true)
+
+    fun setFxHapticsEnabled(enabled: Boolean) =
+        settings.putBoolean(KEY_FX_HAPTICS, enabled)
+
     // ── Google Calendar ──────────────────────────────────
 
     /** True si hay un token de acceso de Google Calendar guardado (cuenta vinculada). */
@@ -294,6 +331,10 @@ class SettingsStore(
         private const val KEY_WIDGET_THEME = "taskhub_widget_theme"
         private const val KEY_SOUND_ENABLED = "taskhub_sound_enabled"
         private const val KEY_VIBRATION_ENABLED = "taskhub_vibration_enabled"
+        private const val KEY_SIMPLE_MODE = "simple_mode"
+        private const val KEY_FX_ANIMATIONS = "fx_animations"
+        private const val KEY_FX_EFFECTS = "fx_effects"
+        private const val KEY_FX_HAPTICS = "fx_haptics"
         private const val KEY_GOOGLE_ACCESS_TOKEN = "taskhub_google_token"
         private const val KEY_CALENDAR_SYNC_ENABLED = "taskhub_calendar_sync_enabled"
         private const val KEY_GOOGLE_UID = "taskhub_google_uid"

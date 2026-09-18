@@ -500,6 +500,7 @@ private fun SummaryStatsCard(
 /** Tarjeta de un logro; atenuada y con candado si aún no está desbloqueado. */
 @Composable
 private fun AchievementCard(achievement: Achievement) {
+    val lang = LocalAppSettings.current.currentLanguage
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -520,14 +521,14 @@ private fun AchievementCard(achievement: Achievement) {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = achievement.title,
+                    text = achievement.title(lang),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = if (achievement.isUnlocked) MaterialTheme.colorScheme.onSurface
                     else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = achievement.description,
+                    text = achievement.description(lang),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -4,6 +4,9 @@
 // el mismo patrón de Row + Icon + semántica de expandido/colapsado.
 package org.taskhub.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,14 +14,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -76,11 +80,18 @@ fun ExpandableSectionHeader(
         verticalAlignment = Alignment.CenterVertically
     ) {
         content()
+        val angle by animateFloatAsState(
+            targetValue = if (expanded) 180f else 0f,
+            animationSpec = if (shouldReduceMotion()) tween(0) else tween(200, easing = FastOutSlowInEasing),
+            label = "chevronRotation"
+        )
         Icon(
-            imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+            imageVector = Icons.Default.KeyboardArrowDown,
             contentDescription = AppStrings.get(if (expanded) "common_collapse" else "common_expand", lang),
             tint = chevronTint,
-            modifier = Modifier.size(chevronSize)
+            modifier = Modifier
+                .size(chevronSize)
+                .graphicsLayer { rotationZ = angle }
         )
     }
 }

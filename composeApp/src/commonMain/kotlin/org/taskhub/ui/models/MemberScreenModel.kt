@@ -23,6 +23,7 @@ import org.taskhub.network.models.RewardResponse
 import org.taskhub.network.models.RewardRedemption
 import org.taskhub.network.toUserMessageKey
 import org.taskhub.platform.HapticKind
+import org.taskhub.ui.components.hapticsEnabled
 import org.taskhub.platform.vibrate
 import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.i18n.AppStrings
@@ -98,7 +99,7 @@ class MemberScreenModel(
 ) : ScreenModel {
 
     private fun buzz(kind: HapticKind) {
-        if (settingsStore.isVibrationEnabled()) vibrate(kind)
+        if (hapticsEnabled(settingsStore)) vibrate(kind)
     }
 
     private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())

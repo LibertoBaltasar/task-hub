@@ -28,6 +28,7 @@ import org.taskhub.platform.NotificationScheduler
 import org.taskhub.platform.DebugFlags
 import org.taskhub.platform.AdController
 import org.taskhub.platform.HapticKind
+import org.taskhub.ui.components.hapticsEnabled
 import org.taskhub.platform.logAnalyticsEvent
 import org.taskhub.platform.vibrate
 import org.taskhub.storage.SettingsStore
@@ -159,7 +160,7 @@ class TaskScreenModel(
 ) : ScreenModel {
 
     private fun buzz(kind: HapticKind) {
-        if (settingsStore.isVibrationEnabled()) vibrate(kind)
+        if (hapticsEnabled(settingsStore)) vibrate(kind)
     }
 
     private fun s(key: String) = AppStrings.get(key, settingsStore.getLanguage())

@@ -534,6 +534,124 @@ fun SettingsSheet(
             }
         }
 
+        Spacer(Modifier.height(24.dp))
+
+        // ── Modo simple (delight, panel 2026-09-18) ───────
+        SettingsSection(title = s("simple_mode")) {
+            var simpleModeEnabled by remember { mutableStateOf(settingsStore.isSimpleModeEnabled()) }
+            var fxAnimationsEnabled by remember { mutableStateOf(settingsStore.isFxAnimationsEnabled()) }
+            var fxEffectsEnabled by remember { mutableStateOf(settingsStore.isFxEffectsEnabled()) }
+            var fxHapticsEnabled by remember { mutableStateOf(settingsStore.isFxHapticsEnabled()) }
+
+            Text(
+                text = s("simple_mode_desc"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+
+            // Interruptor maestro: anula los 3 de categoría siguientes sin
+            // borrar su valor guardado (se restauran tal cual al desactivarlo).
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = s("simple_mode"),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = simpleModeEnabled,
+                    onCheckedChange = {
+                        simpleModeEnabled = it
+                        settingsStore.setSimpleModeEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = s("fx_animations"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = fxAnimationsEnabled,
+                    enabled = !simpleModeEnabled,
+                    onCheckedChange = {
+                        fxAnimationsEnabled = it
+                        settingsStore.setFxAnimationsEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = s("fx_effects"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = fxEffectsEnabled,
+                    enabled = !simpleModeEnabled,
+                    onCheckedChange = {
+                        fxEffectsEnabled = it
+                        settingsStore.setFxEffectsEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = s("fx_haptics"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = fxHapticsEnabled,
+                    enabled = !simpleModeEnabled,
+                    onCheckedChange = {
+                        fxHapticsEnabled = it
+                        settingsStore.setFxHapticsEnabled(it)
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                )
+            }
+        }
+
         // ── Export CSV ───────────────────────────────────
         if (callbacks.showExportCsv) {
             Spacer(Modifier.height(24.dp))
