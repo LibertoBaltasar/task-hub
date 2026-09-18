@@ -7,6 +7,8 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +24,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -35,9 +38,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.datetime.*
+import org.taskhub.ui.components.EffectCategory
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.StatusDot
 import org.taskhub.ui.components.StatChip
+import org.taskhub.ui.components.effectsEnabled
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.Achievement
 import org.taskhub.ui.models.DayCount
@@ -497,12 +502,38 @@ private fun SummaryStatsCard(
     }
 }
 
-/** Tarjeta de un logro; atenuada y con candado si aún no está desbloqueado. */
+/**
+ * Tarjeta de un logro; atenuada y con candado si aún no está desbloqueado.
+ * Entrada única (fade+scale) la primera vez que [achievement] se observa
+ * desbloqueado en esta composición (§2.8 del informe de delight) — no se
+ * repite en recomposiciones posteriores mientras siga desbloqueado.
+ */
 @Composable
 private fun AchievementCard(achievement: Achievement) {
     val lang = LocalAppSettings.current.currentLanguage
+    val animationsOn = effectsEnabled(EffectCategory.ANIMATIONS)
+    val entrance = remember(achievement.id, achievement.isUnlocked) {
+        Animatable(if (achievement.isUnlocked) 0f else 1f)
+    }
+    LaunchedEffect(achievement.id, achievement.isUnlocked) {
+        if (achievement.isUnlocked) {
+            if (animationsOn) {
+                entrance.snapTo(0f)
+                entrance.animateTo(1f, tween(300))
+            } else {
+                entrance.snapTo(1f)
+            }
+        }
+    }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                val scale = 0.92f + 0.08f * entrance.value
+                scaleX = scale
+                scaleY = scale
+                alpha = entrance.value
+            },
         colors = CardDefaults.cardColors(
             containerColor = if (achievement.isUnlocked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
         ),

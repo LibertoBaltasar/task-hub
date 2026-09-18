@@ -279,11 +279,29 @@ private fun MemberCard(
                     )
                 }
 
-                // Points badge
-                PointsBadge(
-                    text = "${member.totalPoints} ${s("transfer_points_suffix")}",
-                    modifier = Modifier
-                )
+                // Points badge — mismo aspecto visual que PointsBadge(BadgeTone.Coral),
+                // pero con AnimatedCounter para el número (§2.10 del informe de
+                // delight): PointsBadge solo acepta texto plano, y no se anima
+                // dentro del componente genérico (también usado para costes/urgencia).
+                Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.tertiary) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AnimatedCounter(
+                            value = member.totalPoints,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = " ${s("transfer_points_suffix")}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
 
             // Acciones: editar rol (solo admins) + crear tarea

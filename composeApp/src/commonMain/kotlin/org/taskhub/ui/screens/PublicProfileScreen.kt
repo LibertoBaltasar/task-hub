@@ -24,6 +24,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.UserProfile
+import org.taskhub.ui.components.AnimatedCounter
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
@@ -247,14 +248,14 @@ private fun PublicProfileContent(
             StatCard(
                 modifier = Modifier.weight(1f),
                 emoji = "⭐",
-                value = "$totalPoints",
+                animatedValue = totalPoints,
                 label = s("public_profile_stat_points")
             )
             // Racha actual
             StatCard(
                 modifier = Modifier.weight(1f),
                 emoji = "🔥",
-                value = "$currentStreak",
+                animatedValue = currentStreak,
                 label = s("public_profile_stat_streak")
             )
             // Mejor racha
@@ -271,14 +272,17 @@ private fun PublicProfileContent(
 }
 
 /**
- * Tarjeta de estadística pequeña (puntos, racha, récord...).
+ * Tarjeta de estadística pequeña (puntos, racha, récord...). [animatedValue]
+ * (puntos/racha, §2.10 del informe de delight) anima su cambio con
+ * [AnimatedCounter]; [value] (récord, sin animación) se usa cuando no aplica.
  */
 @Composable
 private fun StatCard(
     modifier: Modifier = Modifier,
     emoji: String,
-    value: String,
-    label: String
+    label: String,
+    value: String? = null,
+    animatedValue: Int? = null
 ) {
     Card(
         modifier = modifier,
@@ -295,11 +299,20 @@ private fun StatCard(
         ) {
             Text(emoji, style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            if (animatedValue != null) {
+                AnimatedCounter(
+                    value = animatedValue,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                Text(
+                    text = value.orEmpty(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodySmall,

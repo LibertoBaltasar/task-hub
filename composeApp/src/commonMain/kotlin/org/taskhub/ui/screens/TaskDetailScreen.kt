@@ -48,6 +48,7 @@ import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.AchievementToast
 import org.taskhub.ui.components.AnimatedCheckmark
+import org.taskhub.ui.components.AnimatedCounter
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.ConfettiOverlay
 import org.taskhub.ui.components.DestructiveConfirmDialog
@@ -696,12 +697,26 @@ private fun TaskDetailContent(
                     color = MaterialTheme.colorScheme.primary
                 )
                 val memberPoints = memberMap[currentMemberId]?.totalPoints ?: 0
-                Text(
-                    text = "⭐ $memberPoints ${s("transfer_points_suffix")}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "⭐ ",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    AnimatedCounter(
+                        value = memberPoints,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = " ${s("transfer_points_suffix")}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
 
             // ── Recompensas disponibles (carga perezosa vía onExpandPoints) ──

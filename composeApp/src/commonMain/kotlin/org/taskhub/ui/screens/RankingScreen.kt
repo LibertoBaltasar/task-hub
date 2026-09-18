@@ -6,6 +6,9 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -15,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
@@ -24,9 +28,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.taskhub.network.models.MemberResponse
+import org.taskhub.ui.components.AnimatedCounter
+import org.taskhub.ui.components.EffectCategory
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.components.effectsEnabled
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
@@ -146,6 +153,23 @@ private fun RankingRow(
 ) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    val animationsOn = effectsEnabled(EffectCategory.ANIMATIONS)
+
+    // Rebote de entrada solo para la medalla de oro (posición #1, §2.9 del
+    // informe de delight) — remember(member.id) evita repetirlo si el mismo
+    // miembro sigue en 1er puesto en la siguiente carga.
+    val medalScale = if (position == 1) {
+        val scale = remember(member.id) { Animatable(if (animationsOn) 0.7f else 1f) }
+        LaunchedEffect(member.id) {
+            if (animationsOn) {
+                scale.animateTo(
+                    1f,
+                    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow)
+                )
+            }
+        }
+        scale.value
+    } else 1f
 
     // Medal colours for top 3
     val medalEmoji = when (position) {
@@ -195,7 +219,11 @@ private fun RankingRow(
                     // la misma posición (y depender de que el TTS conozca el
                     // nombre Unicode del emoji). Para position > 3 este Text SÍ
                     // es la única fuente del número, así que se deja accesible.
-                    modifier = if (position in 1..3) Modifier.clearAndSetSemantics {} else Modifier,
+                    modifier = (if (position in 1..3) Modifier.clearAndSetSemantics {} else Modifier)
+                        .graphicsLayer {
+                            scaleX = medalScale
+                            scaleY = medalScale
+                        },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
@@ -245,12 +273,20 @@ private fun RankingRow(
 
             // Points
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "⭐ ${member.totalPoints}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.tertiary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "⭐ ",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    AnimatedCounter(
+                        value = member.totalPoints,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Text(
                     text = "🔥 ${member.currentStreak}",
                     style = MaterialTheme.typography.bodySmall,
