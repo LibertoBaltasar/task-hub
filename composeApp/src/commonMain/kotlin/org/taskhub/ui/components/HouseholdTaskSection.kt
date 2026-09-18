@@ -49,7 +49,8 @@ import org.taskhub.ui.screens.TaskDetailScreen
 fun HouseholdTaskSection(
     household: SavedHousehold,
     previewState: HouseholdPreviewState?,
-    onViewAll: (String) -> Unit = {}
+    onViewAll: (String) -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     val navigator = LocalNavigator.currentOrThrow
     val lang = LocalAppSettings.current.currentLanguage
@@ -59,7 +60,7 @@ fun HouseholdTaskSection(
     var expanded by remember { mutableStateOf(true) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (household.isPersonal)
                 MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)

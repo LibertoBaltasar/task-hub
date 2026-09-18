@@ -9,6 +9,8 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
@@ -16,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
@@ -26,6 +29,7 @@ import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.components.HouseholdSettingsDialog
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HomeScreenModel
 
@@ -45,6 +49,16 @@ class WelcomeScreen : Screen {
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var showSettings by remember { mutableStateOf(false) }
+
+        // Fade-in del bloque de contenido (informe delight §2.1): un solo fade de
+        // conjunto, sin stagger por botón (evita sobrecargar la pantalla).
+        val reduceMotion = shouldReduceMotion()
+        var contentVisible by remember { mutableStateOf(false) }
+        val contentAlpha by animateFloatAsState(
+            targetValue = if (contentVisible) 1f else 0f,
+            animationSpec = tween(durationMillis = if (reduceMotion) 0 else 300)
+        )
+        LaunchedEffect(Unit) { contentVisible = true }
 
         // Reconcilia contra Firestore para podar hogares "fantasma" (borrados o sin acceso).
         LaunchedEffect(Unit) {
@@ -81,7 +95,8 @@ class WelcomeScreen : Screen {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(32.dp),
+                        .padding(32.dp)
+                        .alpha(contentAlpha),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {

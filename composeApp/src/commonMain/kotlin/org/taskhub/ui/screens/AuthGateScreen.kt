@@ -7,6 +7,8 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,8 +30,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -37,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import org.taskhub.ui.components.AppLogo
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.GoogleAuthManager
 import org.taskhub.ui.models.GoogleAuthState
@@ -55,6 +64,16 @@ fun AuthGateScreen(
 ) {
     val s = { key: String -> AppStrings.get(key, lang) }
 
+    // Fade-in del bloque completo (informe delight §2.1): pantalla de espera
+    // funcional, sin stagger por elemento — se anima como una sola unidad.
+    val reduceMotion = shouldReduceMotion()
+    var visible by remember { mutableStateOf(false) }
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = if (reduceMotion) 0 else 400)
+    )
+    LaunchedEffect(Unit) { visible = true }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -64,7 +83,8 @@ fun AuthGateScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(32.dp),
+                .padding(32.dp)
+                .alpha(contentAlpha),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {

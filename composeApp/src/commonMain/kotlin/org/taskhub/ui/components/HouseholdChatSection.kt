@@ -130,6 +130,7 @@ fun HouseholdChatSection(
                         )
                     } else {
                         val listState = rememberLazyListState()
+                        val reduceMotion = shouldReduceMotion()
                         LaunchedEffect(messages.size) {
                             listState.animateScrollToItem(messages.size - 1)
                         }
@@ -138,7 +139,12 @@ fun HouseholdChatSection(
                             modifier = Modifier.fillMaxWidth().height(260.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            items(messages, key = { it.id }) { message -> MessageBubble(message) }
+                            items(messages, key = { it.id }) { message ->
+                                MessageBubble(
+                                    message = message,
+                                    modifier = if (reduceMotion) Modifier else Modifier.animateItem()
+                                )
+                            }
                         }
                     }
                 }
@@ -200,8 +206,8 @@ fun HouseholdChatSection(
 
 /** Una entrada de la lista de chat: autor + hora, y el texto del mensaje. */
 @Composable
-private fun MessageBubble(message: MessageResponse) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+private fun MessageBubble(message: MessageResponse, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween

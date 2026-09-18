@@ -6,6 +6,13 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
@@ -38,6 +45,7 @@ import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.i18n.AppStrings
@@ -75,6 +83,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
 
         // Emoji picker state
         var showEmojiPicker by remember { mutableStateOf(false) }
+        val reduceMotion = shouldReduceMotion()
 
         val commonEmojis = listOf(
             "🎁", "⭐", "🏆", "🎮", "🎬", "🎵", "🎨", "🎯",
@@ -152,7 +161,11 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                     }
 
                     // Emoji picker
-                    if (showEmojiPicker) {
+                    AnimatedVisibility(
+                        visible = showEmojiPicker,
+                        enter = if (reduceMotion) EnterTransition.None else fadeIn() + expandVertically(),
+                        exit = if (reduceMotion) ExitTransition.None else fadeOut() + shrinkVertically()
+                    ) {
                         Card(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.surface

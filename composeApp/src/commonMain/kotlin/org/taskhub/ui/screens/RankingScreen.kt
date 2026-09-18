@@ -27,6 +27,7 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
@@ -117,6 +118,7 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
             }
         }
         else -> {
+            val reduceMotion = shouldReduceMotion()
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
@@ -125,7 +127,8 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
                 itemsIndexed(members, key = { _, member -> member.id }) { index, member ->
                     RankingRow(
                         position = index + 1,
-                        member = member
+                        member = member,
+                        modifier = if (reduceMotion) Modifier else Modifier.animateItem()
                     )
                 }
                 item { Spacer(Modifier.height(16.dp)) }
@@ -138,7 +141,8 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
 @Composable
 private fun RankingRow(
     position: Int,
-    member: MemberResponse
+    member: MemberResponse,
+    modifier: Modifier = Modifier
 ) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
@@ -168,7 +172,7 @@ private fun RankingRow(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = bgColor),
         elevation = CardDefaults.cardElevation(defaultElevation = if (position <= 3) 2.dp else 0.dp)
     ) {

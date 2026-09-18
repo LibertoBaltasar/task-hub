@@ -36,6 +36,7 @@ import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.ShimmerList
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.components.showErrorSnackbar
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.MemberScreenModel
@@ -59,6 +60,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val reduceMotion = shouldReduceMotion()
 
     // Sin esto, un fallo al borrar una recompensa (p.ej. red) no mostraba nada:
     // rewardActionState pasaba a Error pero ningún composable estaba suscrito,
@@ -193,6 +195,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                             RewardCard(
                                 reward = reward,
                                 isAdmin = isAdmin,
+                                modifier = if (reduceMotion) Modifier else Modifier.animateItem(),
                                 onDelete = {
                                     memberModel.deleteReward(householdId, reward.id)
                                 },
@@ -263,14 +266,15 @@ private fun RewardCard(
     reward: RewardResponse,
     isAdmin: Boolean,
     onDelete: () -> Unit,
-    onRedeem: () -> Unit
+    onRedeem: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),

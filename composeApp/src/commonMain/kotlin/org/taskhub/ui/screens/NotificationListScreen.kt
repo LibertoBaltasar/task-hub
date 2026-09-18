@@ -8,6 +8,8 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +38,7 @@ import org.taskhub.network.models.NotificationResponse
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.i18n.NotificationText
 import org.taskhub.ui.models.NotificationScreenModel
@@ -245,6 +248,17 @@ private fun NotificationCard(
     val displayMessage = remember(notification, appSettings.currentLanguage, resolveAuthorName) {
         NotificationText.message(notification, appSettings.currentLanguage, resolveAuthorName)
     }
+    // La card se "apaga" suavemente al marcar leída en vez de cambiar de golpe
+    // (informe delight §2.13); el punto indicador de 8dp NO se anima (decisión
+    // de diseño del informe: elemento demasiado pequeño para justificarlo).
+    val reduceMotion = shouldReduceMotion()
+    val animatedContainerColor by animateColorAsState(
+        targetValue = if (!notification.read)
+            MaterialTheme.colorScheme.primaryContainer
+        else
+            MaterialTheme.colorScheme.surface,
+        animationSpec = tween(durationMillis = if (reduceMotion) 0 else 200)
+    )
 
     Card(
         // role = Button: semántica estructurada para TalkBack/VoiceOver
@@ -269,10 +283,7 @@ private fun NotificationCard(
             )
             .clickable(role = Role.Button, onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = if (!notification.read)
-                MaterialTheme.colorScheme.primaryContainer
-            else
-                MaterialTheme.colorScheme.surface
+            containerColor = animatedContainerColor
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = if (!notification.read) 2.dp else 0.dp)
     ) {

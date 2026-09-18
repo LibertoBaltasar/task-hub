@@ -40,9 +40,18 @@ fun SplashScreen(lang: String, onFinished: () -> Unit) {
     // Animación de fade-in (instantánea si el sistema pide reducir movimiento)
     var visible by remember { mutableStateOf(false) }
     val reduceMotion = shouldReduceMotion()
-    val alpha by animateFloatAsState(
+    // Stagger de 100ms: el logo entra primero y el texto justo después, para dar
+    // sensación de secuencia en vez de bloque monolítico (informe delight §2.1).
+    val logoAlpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
         animationSpec = tween(durationMillis = if (reduceMotion) 0 else 800)
+    )
+    val textAlpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = if (reduceMotion) 0 else 800,
+            delayMillis = if (reduceMotion) 0 else 100
+        )
     )
 
     // Al montar: activa el fade-in y programa el callback a los 1.5s
@@ -63,7 +72,7 @@ fun SplashScreen(lang: String, onFinished: () -> Unit) {
             verticalArrangement = Arrangement.Center
         ) {
             AppLogo(
-                modifier = Modifier.alpha(alpha),
+                modifier = Modifier.alpha(logoAlpha),
                 size = 72.dp,
                 ringColor = Color.White,
                 checkColor = Coral100,
@@ -75,14 +84,14 @@ fun SplashScreen(lang: String, onFinished: () -> Unit) {
                 fontSize = 72.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.White,
-                modifier = Modifier.alpha(alpha)
+                modifier = Modifier.alpha(textAlpha)
             )
             Text(
                 text = "HUB",
                 fontSize = 72.sp,
                 fontWeight = FontWeight.Black,
                 color = Coral100,
-                modifier = Modifier.alpha(alpha)
+                modifier = Modifier.alpha(textAlpha)
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
@@ -92,7 +101,7 @@ fun SplashScreen(lang: String, onFinished: () -> Unit) {
                 // alpha=0.95 (no 0.8): blanco 80% sobre Teal800 da 4.15:1, por debajo
                 // de WCAG AA para texto normal de 14sp.
                 color = Color.White.copy(alpha = 0.95f),
-                modifier = Modifier.alpha(alpha)
+                modifier = Modifier.alpha(textAlpha)
             )
         }
     }

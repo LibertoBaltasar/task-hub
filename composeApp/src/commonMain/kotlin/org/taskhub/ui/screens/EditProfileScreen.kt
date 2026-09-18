@@ -7,6 +7,13 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -36,6 +43,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.ProfileScreenModel
 import org.taskhub.ui.models.ProfileUiState
@@ -179,6 +187,7 @@ class EditProfileScreen : Screen {
 
                         // Emoji grid
                         var showEmojiGrid by remember { mutableStateOf(false) }
+                        val reduceMotion = shouldReduceMotion()
                         OutlinedButton(
                             onClick = { showEmojiGrid = !showEmojiGrid },
                             modifier = Modifier.fillMaxWidth()
@@ -191,7 +200,11 @@ class EditProfileScreen : Screen {
                             )
                         }
 
-                        if (showEmojiGrid) {
+                        AnimatedVisibility(
+                            visible = showEmojiGrid,
+                            enter = if (reduceMotion) EnterTransition.None else fadeIn() + expandVertically(),
+                            exit = if (reduceMotion) ExitTransition.None else fadeOut() + shrinkVertically()
+                        ) {
                             // Grid de 6 columnas
                             val rows = emojiOptions.chunked(6)
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

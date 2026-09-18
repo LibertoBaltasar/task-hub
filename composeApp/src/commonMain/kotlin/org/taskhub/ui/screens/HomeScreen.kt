@@ -256,7 +256,8 @@ class HomeScreen : Screen {
                             HouseholdTaskSection(
                                 household = h,
                                 previewState = previewTasks[h.id],
-                                onViewAll = { hid -> navigator.push(HouseholdScreen(hid)) }
+                                onViewAll = { hid -> navigator.push(HouseholdScreen(hid)) },
+                                modifier = if (reduceMotion) Modifier else Modifier.animateItem()
                             )
                         }
                     }
