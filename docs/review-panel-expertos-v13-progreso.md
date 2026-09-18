@@ -16,7 +16,7 @@ información esencial sin alternativa estática.
 
 - [x] Oleada 1 (5): Estética(#1), Funcionalidad(#2), Accesibilidad(#3), UI/componentes(#4), UX(#5)
 - [x] Oleada 2 (4): Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9) — falló por session limit (reset 16:00 CEST), reintento único exitoso
-- [ ] Oleada 3 (4): Privacidad(#10), Rendimiento(#11), Red/offline/sync(#12), Cobertura pruebas(#13)
+- [x] Oleada 3 (4): Privacidad(#10), Rendimiento(#11 — falló por session limit, reintento tras reset 21:00 CEST), Red/offline/sync(#12), Cobertura pruebas(#13)
 - [ ] Consolidación informe final `docs/review-panel-expertos-v13-2026-09-18.md`
 - [ ] Aplicación de fixes seguros
 - [ ] Verificación build + jvmTest (XML real)
@@ -70,3 +70,16 @@ Pendiente de aplicar hasta cerrar todas las oleadas y consolidar.
 - `donatePoints` puede duplicar puntos ante timeout ambiguo (requiere reclasificar IOException vs fallo definitivo en 3 call-sites: donatePoints, appreciateMember, redeemReward).
 - `isPeerPointsTransfer` sin rate-limit (requiere Cloud Function transaccional).
 - Auto-edición `members/{mid}` sin tope en `totalPoints` (requiere decisión de producto sobre revalidar la premisa "cero usuarios reales" antes de tocar `firestore.rules`, cambio de regla propuesto por el experto de seguridad).
+
+### Oleada 3 (3/4 completados; Rendimiento falló por session limit, reintento en curso)
+
+**#10 Privacidad** — v12: UMP/CMP sigue ausente (CRÍTICO, sin cambios); texto privacy.html sobre purga sigue correcto sin regresión; checklist guia-publicacion.md §4 sigue sin mención UMP; gating de edad sin cambios de posicionamiento; iOS/desktop/web siguen sin AdMob/Analytics. Nuevo IMPORTANTE APLICABLE (parcial): borrado de cuenta anonimiza mensajes/comentarios pero NO `taskHistory.memberId`/`rewardRedemptions.memberId` en hogares compartidos (`FirestoreRepository.kt:906-937`) — UID de Google queda incrustado tras borrado "completo", inconsistente con promesa de privacy.html; mitigado porque UI actual no resuelve nombres de miembros no existentes. MENOR APLICABLE: comentario obsoleto en `TaskScreenModel.kt:815` sobre TFCD que no refleja el comportamiento real (siempre child-directed, más conservador de lo que dice, sin riesgo real). Confirmación positiva: borrado de cuenta con cascade real, Analytics sin PII.
+
+**#12 Red/offline** — v12: isOnline() solo en TaskScreenModel sigue abierto; desktop OAuth red caída = cancelación sigue abierto; wasmJs connectTimeoutMillis sigue sin verificar (no accionable sin navegador real). Nuevo CRÍTICO (PROPUESTA, ~20 call sites, alto volumen): el patrón "invalidar caché en `finally`" que v12 aplicó SOLO a completeTask/undoTaskCompletion falta en el resto: `completeAssignment`/`reassignTaskCompletion` (`FirestoreRepository.kt:1308-1311`,`1216-1219`, coincide con hallazgo QA#8), y de forma más amplia en `TaskRepository.kt` (createTask/updateTask/updateSubtasks/deleteTask/assignTask/etc.) y `MemberRepository.kt` (createMember/deleteMember/updateMemberRole/updateMemberStreak/**addMemberPoints mismo**) y `RewardsRepository.kt`. Nuevo IMPORTANTE (PROPUESTA, refactor): `updateTask`/`updateSubtasks`/`updateAssignmentRotation` sin precondition de concurrencia optimista (a diferencia de addMemberPoints/appreciateMember) — "last write wins" silencioso entre 2 dispositivos editando la misma tarea. MENOR: backoff sin jitter en retryTransientReadFailure (ráfaga sincronizada si varios dispositivos reconectan a la vez).
+
+**#13 Cobertura de pruebas** (informe, sin cambios de código) — 269 tests en 26 archivos (vs 257 de v12), incluye 2 archivos nuevos desde v12 (`CalendarScreenTest.kt`, `TaskFormSaveInvariantsTest.kt`) que SÍ cubren el trabajo reciente de calendario/formulario. Los 4 huecos priorizados de v12 (addMemberPoints con floor, funciones puras GoogleDesktopSignInHelper, orquestación appreciateMember/donatePoints, AchievementChecker.getAchievementsWithStatus) siguen TODOS abiertos, código intacto sin diffs desde v12. Hueco NUEVO CRÍTICO: `network/ErrorCategory.kt` (archivo nuevo, `errorCategory()`/`toUserMessageKey()`) sin ningún test pese a ser función pura consumida por 8 ScreenModels/managers — alto radio de impacto en clasificación de errores de toda la app. Sigue sin existir ningún MockEngine en el repo.
+
+**Fixes APLICABLES nuevos identificados en oleada 3:**
+9. `TaskScreenModel.kt:815` — corregir/borrar comentario obsoleto sobre TFCD (menor, cosmético).
+
+**Todo lo demás de oleada 3 son PROPUESTAS de alto volumen o requieren decisión de producto/legal — no aplicables mecánicamente en esta ronda** (UMP/CMP, anonimización completa de taskHistory/rewardRedemptions, finally en ~20 call sites de caché, concurrencia optimista en updateTask, tests nuevos para ErrorCategory — este último SÍ podría aplicarse como test nuevo si el análisis final decide priorizarlo).
