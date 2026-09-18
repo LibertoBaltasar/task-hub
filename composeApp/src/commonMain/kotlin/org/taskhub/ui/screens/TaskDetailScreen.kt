@@ -40,19 +40,26 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.models.*
+import org.taskhub.ui.components.AchievementToast
+import org.taskhub.ui.components.AnimatedCheckmark
 import org.taskhub.ui.components.BadgeTone
+import org.taskhub.ui.components.ConfettiOverlay
 import org.taskhub.ui.components.DestructiveConfirmDialog
+import org.taskhub.ui.components.EffectCategory
 import org.taskhub.ui.components.ExpandableSectionHeader
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.components.StatusDot
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.effectsEnabled
 import org.taskhub.ui.components.rememberHouseholdName
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.components.UserAvatar
 import org.taskhub.ui.i18n.AppStrings
@@ -97,6 +104,7 @@ data class TaskDetailScreen(
         val newCommentText by commentsModel.newCommentText.collectAsState()
         val sendCommentError by commentsModel.sendCommentError.collectAsState()
         val rewardState by memberModel.rewardState.collectAsState()
+        val newlyUnlockedAchievement by model.newlyUnlockedAchievement.collectAsState()
 
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
@@ -136,12 +144,18 @@ data class TaskDetailScreen(
             )
         }
 
-        // Watch for complete/delete success and navigate back
+        // Watch for complete/delete success and navigate back. El pop() se
+        // retrasa 260ms (0ms si reduce-motion) para dar tiempo a ver el check
+        // + confeti del botón "Hecho" antes de salir de la pantalla — sin
+        // este retraso la animación nunca llegaría a verse (delight fase 2,
+        // §2.5).
+        val reduceMotionNav = shouldReduceMotion()
         LaunchedEffect(actionState) {
             if (actionState is TaskActionState.Success && !showDeleteDialog) {
                 // Refresh list state before going back so the
                 // completed instance disappears from the pending list
                 model.loadTasks(householdId)
+                if (!reduceMotionNav) delay(260)
                 navigator.pop()
             }
         }
@@ -150,6 +164,7 @@ data class TaskDetailScreen(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
+            Box(modifier = Modifier.fillMaxSize()) {
             Column(modifier = Modifier.fillMaxSize()) {
                 // Top bar
                 TaskHubTopBar(
@@ -302,6 +317,13 @@ data class TaskDetailScreen(
                     is TaskDetailUiState.Idle -> {}
                 }
             }
+
+            AchievementToast(
+                achievement = newlyUnlockedAchievement,
+                onDismissed = { model.clearNewlyUnlockedAchievement() },
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
+            }
         }
     }
 }
@@ -359,6 +381,24 @@ private fun TaskDetailContent(
     val isCompletedToday = task.lastCompletedDate != null && run {
         val lcdDate = kotlinx.datetime.Instant.fromEpochMilliseconds(task.lastCompletedDate!!).toLocalDateTime(tz).date
         lcdDate == today
+    }
+
+    // Celebración del botón "Hecho" a nivel de tarea (delight fase 2, §2.5):
+    // mismo patrón isCompleting que TaskListScreen.TaskCard — al pulsar se
+    // muestra AnimatedCheckmark + ConfettiOverlay y la llamada real a
+    // onCompleteTask() se retrasa 260ms (0ms si reduce-motion) para que la
+    // animación llegue a verse.
+    val reduceMotion = shouldReduceMotion()
+    val effectsOn = effectsEnabled(EffectCategory.EFFECTS)
+    var isCompletingTask by remember(task.id) { mutableStateOf(false) }
+    LaunchedEffect(actionState) {
+        if (actionState is TaskActionState.Error) isCompletingTask = false
+    }
+    LaunchedEffect(isCompletingTask) {
+        if (isCompletingTask) {
+            if (!reduceMotion) delay(260)
+            onCompleteTask()
+        }
     }
 
     // Estado para el diálogo "¿quién ha hecho la tarea?" (editar quién la completó).
@@ -768,18 +808,27 @@ private fun TaskDetailContent(
                 // "Hecho" de nivel-tarea desaparece de aquí para no ofrecer dos
                 // caminos de completar sin conexión visual entre sí.
                 if (!isCompletedToday && assignments.isEmpty()) {
-                    Button(
-                        onClick = onCompleteTask,
-                        enabled = actionState !is TaskActionState.Loading,
-                    ) {
-                        if (actionState is TaskActionState.Loading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
+                    Box {
+                        if (isCompletingTask) {
+                            AnimatedCheckmark(reduceMotion = reduceMotion || !effectsOn)
                         } else {
-                            Text(s("task_detail_mark_done"))
+                            Button(
+                                onClick = { isCompletingTask = true },
+                                enabled = actionState !is TaskActionState.Loading,
+                            ) {
+                                if (actionState is TaskActionState.Loading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(s("task_detail_mark_done"))
+                                }
+                            }
+                        }
+                        if (isCompletingTask && !reduceMotion && effectsOn) {
+                            ConfettiOverlay(modifier = Modifier.matchParentSize())
                         }
                     }
                 }
@@ -875,6 +924,7 @@ private fun TaskDetailContent(
                     now = now,
                     showComplete = true,
                     isLoading = actionState is TaskActionState.Loading,
+                    isError = actionState is TaskActionState.Error,
                     onComplete = { onComplete(assignment.id, assignment) }
                 )
             }
@@ -1325,10 +1375,28 @@ private fun AssignmentCard(
     now: Long,
     showComplete: Boolean,
     isLoading: Boolean = false,
+    isError: Boolean = false,
     onComplete: (() -> Unit)? = null
 ) {
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+
+    // Celebración del botón "Hecho" de la asignación (delight fase 2, §2.5):
+    // mismo patrón que el botón de nivel-tarea. AssignmentCard no navega
+    // atrás, así que aquí sí se ve completo el ciclo check+confeti sin
+    // retraso adicional de navegación.
+    val reduceMotion = shouldReduceMotion()
+    val effectsOn = effectsEnabled(EffectCategory.EFFECTS)
+    var isCompleting by remember(assignment.id) { mutableStateOf(false) }
+    LaunchedEffect(isError) {
+        if (isError) isCompleting = false
+    }
+    LaunchedEffect(isCompleting) {
+        if (isCompleting) {
+            if (!reduceMotion) delay(260)
+            onComplete?.invoke()
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1413,18 +1481,27 @@ private fun AssignmentCard(
 
             // Complete button
             if (showComplete && onComplete != null) {
-                Button(
-                    onClick = onComplete,
-                    enabled = !isLoading
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
+                Box {
+                    if (isCompleting) {
+                        AnimatedCheckmark(reduceMotion = reduceMotion || !effectsOn)
                     } else {
-                        Text(s("task_detail_mark_done"))
+                        Button(
+                            onClick = { isCompleting = true },
+                            enabled = !isLoading
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(s("task_detail_mark_done"))
+                            }
+                        }
+                    }
+                    if (isCompleting && !reduceMotion && effectsOn) {
+                        ConfettiOverlay(modifier = Modifier.matchParentSize())
                     }
                 }
             } else if (assignment.status == "completed") {

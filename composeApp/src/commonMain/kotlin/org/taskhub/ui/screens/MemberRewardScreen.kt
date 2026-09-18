@@ -6,11 +6,15 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -21,16 +25,22 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
 import org.taskhub.ui.models.RewardActionState
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.theme.*
+import org.taskhub.ui.components.ConfettiOverlay
 import org.taskhub.ui.components.DestructiveConfirmDialog
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.effectsEnabled
+import org.taskhub.ui.components.EffectCategory
 import org.taskhub.ui.components.rememberHouseholdName
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 
 /**
@@ -57,9 +67,32 @@ data class MemberRewardScreen(
 
         var showConfirmDialog by remember { mutableStateOf(false) }
         val snackbarHostState = remember { SnackbarHostState() }
+        val coroutineScope = rememberCoroutineScope()
 
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
+
+        // Celebración del canje (delight fase 2, §2.6): pulso de escala del
+        // icono + confeti reducido (8 partículas) sobre su área, gateados con
+        // effectsEnabled(fx_effects) igual que el resto de celebraciones.
+        val reduceMotion = shouldReduceMotion()
+        val effectsOn = effectsEnabled(EffectCategory.EFFECTS)
+        var isCelebrating by remember { mutableStateOf(false) }
+        val iconScale = remember { Animatable(1f) }
+        LaunchedEffect(isCelebrating) {
+            if (isCelebrating) {
+                if (reduceMotion) {
+                    iconScale.snapTo(1f)
+                } else {
+                    val bounce = spring<Float>(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                    iconScale.animateTo(1.15f, animationSpec = bounce)
+                    iconScale.animateTo(1f, animationSpec = bounce)
+                }
+            }
+        }
 
         // Sin esto, memberState se queda para siempre en MemberUiState.Idle
         // (Voyager crea una instancia nueva de MemberScreenModel por pantalla):
@@ -90,10 +123,19 @@ data class MemberRewardScreen(
         // canjear/donar/agradecer puntos", 2026-09-12).
         LaunchedEffect(actionState) {
             if (actionState is RewardActionState.Success) {
-                snackbarHostState.showSnackbar(
-                    message = s("member_reward_redeemed_success"),
-                    duration = SnackbarDuration.Short
-                )
+                isCelebrating = true
+                // El snackbar se lanza en paralelo (no se espera su duración
+                // completa): el pop() se retrasa 550ms de forma explícita
+                // (0ms si reduce-motion) para que la animación del icono sea
+                // visible antes de volver a la lista, independientemente de
+                // cuánto tarde el snackbar en autodescartarse.
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = s("member_reward_redeemed_success"),
+                        duration = SnackbarDuration.Short
+                    )
+                }
+                if (!reduceMotion) delay(550)
                 memberModel.clearRewardAction()
                 navigator.pop()
             }
@@ -121,10 +163,22 @@ data class MemberRewardScreen(
                     Spacer(Modifier.height(24.dp))
 
                     // Reward icon
-                    Text(
-                        text = reward.icon,
-                        style = MaterialTheme.typography.displayLarge
-                    )
+                    Box(
+                        modifier = Modifier.size(160.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = reward.icon,
+                            style = MaterialTheme.typography.displayLarge,
+                            modifier = Modifier.graphicsLayer {
+                                scaleX = iconScale.value
+                                scaleY = iconScale.value
+                            }
+                        )
+                        if (isCelebrating && !reduceMotion && effectsOn) {
+                            ConfettiOverlay(modifier = Modifier.matchParentSize(), particleCount = 8)
+                        }
+                    }
 
                     Spacer(Modifier.height(16.dp))
 

@@ -202,6 +202,15 @@ class TaskScreenModel(
     private val _myAssignment = MutableStateFlow<TaskAssignmentResponse?>(null)
     val myAssignment: StateFlow<TaskAssignmentResponse?> = _myAssignment.asStateFlow()
 
+    // Logro desbloqueado más reciente, para que la UI (TaskListScreen,
+    // TaskDetailScreen) muestre el toast de celebración (delight fase 2,
+    // §2.8). Solo el PRIMERO si se desbloquean varios a la vez (moderación —
+    // evita apilar toasts). La propia UI lo limpia a null tras mostrarlo
+    // (ver [clearNewlyUnlockedAchievement]) para que no reaparezca en una
+    // recomposición posterior.
+    private val _newlyUnlockedAchievement = MutableStateFlow<Achievement?>(null)
+    val newlyUnlockedAchievement: StateFlow<Achievement?> = _newlyUnlockedAchievement.asStateFlow()
+
     // Filter & sort state
     private val _filter = MutableStateFlow(TaskFilter.PENDING)
     val filter: StateFlow<TaskFilter> = _filter.asStateFlow()
@@ -1107,6 +1116,19 @@ class TaskScreenModel(
                 // Non-critical failure
             }
         }
+
+        // Publicar solo el primero para el toast de celebración (moderación —
+        // apilar varios toasts violaría lo pedido en el informe de delight).
+        newlyUnlocked.firstOrNull()?.let { firstId ->
+            AchievementChecker.ALL_ACHIEVEMENTS.find { it.id == firstId }?.let { achievement ->
+                _newlyUnlockedAchievement.value = achievement
+            }
+        }
+    }
+
+    /** Limpia el logro mostrado en el toast — llamado por la UI tras el auto-descarte. */
+    fun clearNewlyUnlockedAchievement() {
+        _newlyUnlockedAchievement.value = null
     }
 
     /**

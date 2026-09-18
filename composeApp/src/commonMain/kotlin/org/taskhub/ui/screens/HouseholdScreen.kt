@@ -11,6 +11,10 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -50,6 +55,7 @@ import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.QrShareDialog
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.components.showErrorSnackbar
 import org.taskhub.ui.components.householdMemberList
 import org.taskhub.ui.i18n.AppStrings
@@ -70,7 +76,14 @@ import org.taskhub.ui.theme.*
  * borrar, salir, QR, ajustes) y la lista de miembros/chat en un único
  * [androidx.compose.foundation.lazy.LazyColumn].
  */
-data class HouseholdScreen(val householdId: String) : Screen {
+data class HouseholdScreen(
+    val householdId: String,
+    // true cuando se llega aquí justo tras crear el hogar o unirse por
+    // invitación (CreateProfileScreen/JoinHouseholdScreen, replaceAll) —
+    // dispara la entrada con rebote de la tarjeta de invitación (delight
+    // fase 2, §2.2). false en cualquier otra visita.
+    val justCreated: Boolean = false
+) : Screen {
 
     @Composable
     override fun Content() {
@@ -468,9 +481,36 @@ data class HouseholdScreen(val householdId: String) : Screen {
                             ) {
                                 // Household info card
                                 item {
+                                    // Entrada con rebote UNA vez si se llega tras crear/unirse
+                                    // a este hogar (delight fase 2, §2.2) — sin confeti aquí:
+                                    // el confeti es la firma visual de "completar tarea"
+                                    // (decisión de diseño del informe de delight, §6).
+                                    val reduceMotion = shouldReduceMotion()
+                                    var heroVisible by remember { mutableStateOf(!justCreated) }
+                                    LaunchedEffect(Unit) {
+                                        if (justCreated) heroVisible = true
+                                    }
+                                    val heroScale by animateFloatAsState(
+                                        targetValue = if (heroVisible) 1f else 0.9f,
+                                        animationSpec = if (reduceMotion) tween(0) else spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessLow
+                                        ),
+                                        label = "householdHeroScale"
+                                    )
+                                    val heroAlpha by animateFloatAsState(
+                                        targetValue = if (heroVisible) 1f else 0f,
+                                        animationSpec = tween(durationMillis = if (reduceMotion) 0 else 300),
+                                        label = "householdHeroAlpha"
+                                    )
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .graphicsLayer {
+                                                scaleX = heroScale
+                                                scaleY = heroScale
+                                                alpha = heroAlpha
+                                            }
                                             // role = Button + contentDescription: la tarjeta era muda
                                             // para TalkBack (solo se leía el texto suelto, sin indicar
                                             // que es pulsable ni qué hace) — panel 2026-09-11, IMPORTANTE.

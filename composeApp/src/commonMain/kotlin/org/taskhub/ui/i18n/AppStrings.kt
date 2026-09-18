@@ -54,6 +54,7 @@ object AppStrings {
             "fx_haptics" to "Vibración y háptica",
 
             // Logros (Achievement.ALL_ACHIEVEMENTS, StatsScreen.AchievementCard)
+            "achievement_unlocked_prefix" to "¡Logro desbloqueado!",
             "achievement_first_task_title" to "Primera tarea",
             "achievement_first_task_desc" to "Completaste tu primera tarea",
             "achievement_streak_5_title" to "5 días seguidos",
@@ -750,6 +751,7 @@ object AppStrings {
             "fx_haptics" to "Vibration and haptics",
 
             // Achievements (Achievement.ALL_ACHIEVEMENTS, StatsScreen.AchievementCard)
+            "achievement_unlocked_prefix" to "Achievement unlocked!",
             "achievement_first_task_title" to "First task",
             "achievement_first_task_desc" to "You completed your first task",
             "achievement_streak_5_title" to "5-day streak",

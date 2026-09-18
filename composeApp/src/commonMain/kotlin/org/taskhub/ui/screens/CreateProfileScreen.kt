@@ -75,7 +75,7 @@ data class CreateProfileScreen(val householdId: String) : Screen {
         // When member is created, navigate to household
         LaunchedEffect(memberState) {
             if (memberState is MemberUiState.Success) {
-                navigator.replaceAll(HouseholdScreen(householdId))
+                navigator.replaceAll(HouseholdScreen(householdId, justCreated = true))
             }
         }
 

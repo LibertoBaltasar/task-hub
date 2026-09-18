@@ -7,6 +7,13 @@
  */
 package org.taskhub.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -28,6 +35,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
+import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HouseholdScreenModel
 import org.taskhub.ui.models.HouseholdUiState
@@ -80,7 +88,7 @@ class JoinHouseholdScreen : Screen {
         // When member is created, navigate to household
         LaunchedEffect(memberState) {
             if (memberState is MemberUiState.Success && joinedHouseholdId != null) {
-                navigator.replaceAll(HouseholdScreen(joinedHouseholdId!!))
+                navigator.replaceAll(HouseholdScreen(joinedHouseholdId!!, justCreated = true))
             }
         }
 
@@ -192,32 +200,51 @@ class JoinHouseholdScreen : Screen {
                     }
                 }
 
-                // Step 2: Create profile (after joining)
-                if (joinedHouseholdId != null && householdState is HouseholdUiState.Success) {
-                    val household = (householdState as HouseholdUiState.Success).household
-
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                // "Te uniste a..." — entrada con rebote (delight fase 2, §2.2).
+                // Se mantiene siempre en composición (no gateada por el `if` de
+                // abajo) para que AnimatedVisibility pueda animar la transición
+                // null→no-null: si se gatease dentro del `if`, Compose la
+                // compondría ya en estado visible=true y se saltaría la
+                // animación de entrada (comportamiento documentado de
+                // AnimatedVisibility con parámetro booleano).
+                val reduceMotion = shouldReduceMotion()
+                val joinedHousehold = (householdState as? HouseholdUiState.Success)?.household
+                AnimatedVisibility(
+                    visible = joinedHouseholdId != null && joinedHousehold != null,
+                    enter = if (reduceMotion) EnterTransition.None else
+                        fadeIn(tween(250)) + scaleIn(
+                            initialScale = 0.92f,
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
                         )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = s("join_household_joined_prefix"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = household.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
+                ) {
+                    if (joinedHousehold != null) {
+                        Column {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Text(
+                                        text = s("join_household_joined_prefix"),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = joinedHousehold.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(24.dp))
-
+                // Step 2: Create profile (after joining)
+                if (joinedHouseholdId != null && householdState is HouseholdUiState.Success) {
                     OutlinedTextField(
                         value = displayName,
                         onValueChange = { displayName = it },

@@ -50,6 +50,7 @@ import org.taskhub.network.models.TaskResponse
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.models.*
+import org.taskhub.ui.components.AchievementToast
 import org.taskhub.ui.components.AnimatedCheckmark
 import org.taskhub.ui.components.ConfettiOverlay
 import org.taskhub.ui.components.EffectCategory
@@ -98,6 +99,7 @@ data class TaskListScreen(
         val undoState by model.undoState.collectAsState()
         val undoError by model.undoError.collectAsState()
         val isOffline by model.isOffline.collectAsState()
+        val newlyUnlockedAchievement by model.newlyUnlockedAchievement.collectAsState()
 
         val snackbarHostState = remember { SnackbarHostState() }
         val appSettings = LocalAppSettings.current
@@ -301,6 +303,12 @@ data class TaskListScreen(
                     hostState = snackbarHostState,
                     errorIconContentDescription = s("error_icon_content_desc"),
                     modifier = Modifier.align(Alignment.BottomCenter)
+                )
+
+                AchievementToast(
+                    achievement = newlyUnlockedAchievement,
+                    onDismissed = { model.clearNewlyUnlockedAchievement() },
+                    modifier = Modifier.align(Alignment.TopCenter)
                 )
             }
         }
