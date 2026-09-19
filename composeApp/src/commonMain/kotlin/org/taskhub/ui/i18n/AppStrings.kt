@@ -52,7 +52,6 @@ object AppStrings {
             "fx_animations" to "Animaciones y transiciones",
             "fx_effects" to "Efectos visuales",
             "fx_haptics" to "Vibración y háptica",
-            "home_greeting_toggle" to "Saludo en inicio",
 
             // Logros (Achievement.ALL_ACHIEVEMENTS, StatsScreen.AchievementCard)
             "achievement_unlocked_prefix" to "¡Logro desbloqueado!",
@@ -508,13 +507,13 @@ object AppStrings {
             "home_empty_subtitle" to "Organiza las tareas del hogar y suma puntos en equipo.",
             "home_pending_count_summary" to "%1 tareas pendientes en %2 espacios",
             "home_my_spaces" to "Mis espacios",
-            "home_greeting_hello" to "Hola, %s",
 
             // Detalle del espacio (HouseholdScreen.kt)
             "household_view_tasks_plain" to "Ver Tareas",
             "household_explore_button" to "Estadísticas, ranking y recompensas",
             "household_leave_button_full" to "🚪 Salir del espacio",
             "household_remove_ghost" to "Quitar de mis espacios",
+            "household_greeting_hello" to "Hola, %s",
 
             // Estadísticas (StatsScreen.kt)
             "stats_error_loading" to "No se pudieron cargar las estadísticas. Inténtalo de nuevo.",
@@ -752,7 +751,6 @@ object AppStrings {
             "fx_animations" to "Animations and transitions",
             "fx_effects" to "Visual effects",
             "fx_haptics" to "Vibration and haptics",
-            "home_greeting_toggle" to "Home greeting",
 
             // Achievements (Achievement.ALL_ACHIEVEMENTS, StatsScreen.AchievementCard)
             "achievement_unlocked_prefix" to "Achievement unlocked!",
@@ -1181,13 +1179,13 @@ object AppStrings {
             "home_empty_subtitle" to "Organize household tasks and earn points as a team.",
             "home_pending_count_summary" to "%1 pending tasks across %2 spaces",
             "home_my_spaces" to "My spaces",
-            "home_greeting_hello" to "Hi, %s",
 
             // Space detail (HouseholdScreen.kt)
             "household_view_tasks_plain" to "View Tasks",
             "household_explore_button" to "Stats, ranking and rewards",
             "household_leave_button_full" to "🚪 Leave space",
             "household_remove_ghost" to "Remove from my spaces",
+            "household_greeting_hello" to "Hi, %s",
 
             // Stats (StatsScreen.kt)
             "stats_error_loading" to "Couldn't load stats. Please try again.",

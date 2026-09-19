@@ -35,16 +35,13 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.koin.compose.koinInject
 import org.taskhub.storage.SavedHousehold
-import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.AppLogo
 import org.taskhub.ui.components.EmptyHouseholdsIllustration
 import org.taskhub.ui.components.HouseholdSettingsDialog
 import org.taskhub.ui.components.HouseholdTaskSection
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
-import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HomeScreenModel

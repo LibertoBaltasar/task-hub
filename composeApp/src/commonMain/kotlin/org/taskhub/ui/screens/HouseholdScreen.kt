@@ -57,6 +57,7 @@ import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.QrShareDialog
 import org.taskhub.ui.components.ShimmerList
+import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.components.showErrorSnackbar
@@ -599,6 +600,50 @@ data class HouseholdScreen(
                                                 textAlign = TextAlign.Center,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
+                                        }
+                                    }
+                                }
+
+                                // Saludo + puntos/racha del miembro actual EN ESTE hogar
+                                // (informe delight #9, redirigido aquí desde HomeScreen tras
+                                // el rollback: con varios hogares, "Hola, {nombre}" con
+                                // puntos/racha de UN solo hogar no tenía sentido en el
+                                // dashboard agregado — aquí sí, porque son los del hogar
+                                // que se está viendo). myMember ya resuelto arriba vía
+                                // resolveCurrentMember(householdId).
+                                myMember?.let { member ->
+                                    item(key = "greeting") {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                            )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = s("household_greeting_hello").replace("%s", member.displayName),
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    StatChip(
+                                                        value = "${member.totalPoints}",
+                                                        label = s("stats_summary_points"),
+                                                        emoji = "⭐"
+                                                    )
+                                                    StatChip(
+                                                        value = "${member.currentStreak}",
+                                                        label = s("stats_current_streak_label"),
+                                                        emoji = "🔥"
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
