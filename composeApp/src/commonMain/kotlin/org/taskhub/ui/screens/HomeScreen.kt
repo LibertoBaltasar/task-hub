@@ -67,13 +67,7 @@ class HomeScreen : Screen {
         val model = koinScreenModel<HomeScreenModel>()
         val uiState by model.uiState.collectAsState()
         val previewTasks by model.previewTasks.collectAsState()
-        val greetingState by model.greetingState.collectAsState()
         val reduceMotion = shouldReduceMotion()
-        val settingsStore = koinInject<SettingsStore>()
-        // remember(no key) + re-lectura al cerrar el diálogo de ajustes (abajo):
-        // el switch vive en SettingsSheet, una composición distinta, así que
-        // este valor no se recompone solo al cambiarlo ahí.
-        var homeGreetingEnabled by remember { mutableStateOf(settingsStore.isHomeGreetingEnabled()) }
 
         // Semilla con la lista guardada localmente (sync, sin red) en vez de
         // vacía: `households` es un `remember` LOCAL de este composable, así
@@ -96,7 +90,6 @@ class HomeScreen : Screen {
         LaunchedEffect(Unit) {
             households = model.reconcileHouseholds()
             model.loadAllTasks()
-            model.loadGreeting(households)
         }
 
         // Settings dialog
@@ -104,10 +97,6 @@ class HomeScreen : Screen {
             HouseholdSettingsDialog(
                 onDismiss = {
                     showSettings = false
-                    // El switch "Saludo en inicio" vive dentro de este diálogo
-                    // (SettingsSheet) — re-leer al cerrarlo es más simple que
-                    // levantar el estado hasta aquí solo para este toggle.
-                    homeGreetingEnabled = settingsStore.isHomeGreetingEnabled()
                 },
                 onEditProfile = {
                     showSettings = false
@@ -238,44 +227,14 @@ class HomeScreen : Screen {
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Saludo + resumen de puntos/racha (informe delight #9,
-                    // aprobado con toggle) si está activado y ya se resolvió
-                    // el miembro actual; si no, el texto de pendientes de
-                    // siempre (comportamiento sin cambios con el toggle off).
-                    val greeting = greetingState
-                    if (homeGreetingEnabled && greeting != null) {
-                        item(key = "greeting") {
-                            Column {
-                                Text(
-                                    "👋 " + s("home_greeting_hello").replace("%s", greeting.displayName),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    StatChip(
-                                        value = "${greeting.totalPoints}",
-                                        label = s("stats_summary_points"),
-                                        emoji = "⭐"
-                                    )
-                                    StatChip(
-                                        value = "${greeting.currentStreak}",
-                                        label = s("stats_current_streak_label"),
-                                        emoji = "🔥"
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        item {
-                            Text(
-                                s("home_pending_count_summary")
-                                    .replace("%1", uiState.pendingCount.toString())
-                                    .replace("%2", households.size.toString()),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    item {
+                        Text(
+                            s("home_pending_count_summary")
+                                .replace("%1", uiState.pendingCount.toString())
+                                .replace("%2", households.size.toString()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
                     val personal = households.find { it.isPersonal }

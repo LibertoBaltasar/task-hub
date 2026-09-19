@@ -47,40 +47,6 @@ class HomeScreenModel(
     private val _uiState = MutableStateFlow(HomeScreenUiState())
     val uiState: StateFlow<HomeScreenUiState> = _uiState.asStateFlow()
 
-    // ── Saludo + resumen de puntos/racha (delight, informe 2026-09-19 #9) ──
-
-    private val _greetingState = MutableStateFlow<HomeGreetingState?>(null)
-    val greetingState: StateFlow<HomeGreetingState?> = _greetingState.asStateFlow()
-
-    /**
-     * Carga nombre/puntos/racha del miembro actual en su "hogar principal"
-     * (el primer hogar COMPARTIDO, o el espacio Personal si no tiene
-     * ninguno) para la cabecera de saludo de [HomeScreen]. No existe un
-     * endpoint ligero "GET member" — reutiliza [FirestoreRepository.getMembers]
-     * (ya cacheado/usado por el resto de pantallas del hogar) y filtra por el
-     * id que resuelve [FirestoreRepository.resolveCurrentMember]. Falla en
-     * silencio (deja `null`): la cabecera es decorativa, HomeScreen cae de
-     * vuelta al texto de pendientes de siempre si esto no resuelve.
-     */
-    fun loadGreeting(households: List<SavedHousehold>) {
-        val primary = households.firstOrNull { !it.isPersonal } ?: households.firstOrNull() ?: return
-        screenModelScope.launch {
-            try {
-                val memberId = repo.resolveCurrentMember(primary.id)
-                val me = repo.getMembers(primary.id).find { it.id == memberId } ?: return@launch
-                _greetingState.value = HomeGreetingState(
-                    displayName = me.displayName,
-                    totalPoints = me.totalPoints,
-                    currentStreak = me.currentStreak
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Ver KDoc: decorativo, sin snackbar/estado de error propio.
-            }
-        }
-    }
-
     /**
      * Reconcilia los hogares guardados localmente contra Firestore antes de
      * mostrarlos — poda los que ya no existen o son inaccesibles (404/403),
@@ -271,13 +237,6 @@ class HomeScreenModel(
         val error: String? = null
     )
 }
-
-/** Ver [HomeScreenModel.loadGreeting]. */
-data class HomeGreetingState(
-    val displayName: String,
-    val totalPoints: Int,
-    val currentStreak: Int
-)
 
 /**
  * Determina si una tarea está pendiente (no completada hoy). Función pura de

@@ -652,36 +652,6 @@ fun SettingsSheet(
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-
-        // ── Saludo en inicio (delight, informe 2026-09-19 #9) ─
-        SettingsSection(title = s("home_greeting_toggle")) {
-            var homeGreetingEnabled by remember { mutableStateOf(settingsStore.isHomeGreetingEnabled()) }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = s("home_greeting_toggle"),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(
-                    checked = homeGreetingEnabled,
-                    onCheckedChange = {
-                        homeGreetingEnabled = it
-                        settingsStore.setHomeGreetingEnabled(it)
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                )
-            }
-        }
-
         // ── Export CSV ───────────────────────────────────
         if (callbacks.showExportCsv) {
             Spacer(Modifier.height(24.dp))
