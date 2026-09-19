@@ -8,6 +8,7 @@
 package org.taskhub.ui.screens
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
@@ -236,6 +237,27 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
     }
 }
 
+/**
+ * Progreso de entrada (0→1) compartido por las 3 gráficas `Canvas` de esta
+ * pantalla: una sola pasada (`Animatable(0f)` → `1f`, `tween(600)`) disparada
+ * en un `LaunchedEffect(Unit)` la primera vez que el composable que la llama
+ * entra en composición — no se repite en recomposiciones por refresco de
+ * datos (sin claves en `remember`/`LaunchedEffect`). Con animaciones
+ * desactivadas ([effectsEnabled] ya cubre modo simple, interruptor de
+ * categoría y `shouldReduceMotion`) devuelve `1f` directo.
+ */
+@Composable
+private fun rememberChartEntranceProgress(): Float {
+    val animationsOn = effectsEnabled(EffectCategory.ANIMATIONS)
+    val progress = remember { Animatable(if (animationsOn) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (animationsOn) {
+            progress.animateTo(1f, tween(600, easing = FastOutSlowInEasing))
+        }
+    }
+    return progress.value
+}
+
 /** Wrapper común de las tarjetas de gráfica: `Card` + título en negrita + separador. */
 @Composable
 private fun ChartCard(title: String, content: @Composable ColumnScope.() -> Unit) {
@@ -255,6 +277,7 @@ private fun ChartCard(title: String, content: @Composable ColumnScope.() -> Unit
 @Composable
 private fun BarChartCard(title: String, data: List<DayCount>) {
     ChartCard(title) {
+        val entranceProgress = rememberChartEntranceProgress()
         val maxCount = (data.maxOfOrNull { it.count } ?: 1).coerceAtLeast(1)
         val barColor = MaterialTheme.colorScheme.primary
         val textMeasurer = rememberTextMeasurer()
@@ -281,7 +304,7 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
             val gap = (chartWidth / barCount) * 0.4f
 
             data.forEachIndexed { index, dayCount ->
-                val barHeight = if (maxCount > 0) (dayCount.count.toFloat() / maxCount) * chartHeight else 0f
+                val barHeight = (if (maxCount > 0) (dayCount.count.toFloat() / maxCount) * chartHeight else 0f) * entranceProgress
                 val x = index * (barWidth + gap) + gap / 2
 
                 // Bar
@@ -327,6 +350,7 @@ private fun BarChartCard(title: String, data: List<DayCount>) {
 @Composable
 private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
     ChartCard(title) {
+        val entranceProgress = rememberChartEntranceProgress()
         val maxPoints = (dailyPoints.maxOfOrNull { it.points } ?: 10).coerceAtLeast(1)
         val textMeasurer = rememberTextMeasurer()
         val lineColor = MaterialTheme.colorScheme.tertiary
@@ -360,8 +384,17 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
                 Offset(x, y)
             }
 
-            // Draw line
-            for (i in 0 until points.size - 1) {
+            // Entrada: revela la polyline de izquierda a derecha en una sola
+            // pasada. `fullyVisible` puntos ya están dibujados del todo;
+            // `partial` interpola el segmento hacia el siguiente punto aún
+            // oculto para que el trazo avance de forma continua en vez de a
+            // saltos discretos entre puntos.
+            val exactVisible = points.size * entranceProgress
+            val fullyVisible = exactVisible.toInt().coerceIn(0, points.size)
+            val partial = exactVisible - fullyVisible
+
+            // Draw line (segmentos completos)
+            for (i in 0 until (fullyVisible - 1).coerceAtLeast(0)) {
                 drawLine(
                     color = lineColor,
                     start = points[i],
@@ -370,9 +403,25 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
                     cap = StrokeCap.Round
                 )
             }
+            // Segmento parcial hacia el siguiente punto oculto
+            if (fullyVisible in 1 until points.size) {
+                val start = points[fullyVisible - 1]
+                val end = points[fullyVisible]
+                val interpolated = Offset(
+                    start.x + (end.x - start.x) * partial,
+                    start.y + (end.y - start.y) * partial
+                )
+                drawLine(
+                    color = lineColor,
+                    start = start,
+                    end = interpolated,
+                    strokeWidth = 3f,
+                    cap = StrokeCap.Round
+                )
+            }
 
-            // Draw points
-            points.forEach { point ->
+            // Draw points (solo los ya totalmente revelados)
+            points.take(fullyVisible).forEach { point ->
                 drawCircle(color = pointColor, radius = 5f, center = point)
                 drawCircle(color = surfaceColor, radius = 3f, center = point)
             }
@@ -400,6 +449,7 @@ private fun PointsChartCard(title: String, dailyPoints: List<DayPoints>) {
 @Composable
 private fun PieChartCard(title: String, data: List<TagCount>) {
     ChartCard(title) {
+        val entranceProgress = rememberChartEntranceProgress()
         // Paleta categórica de 6 tonos, uno por rol de MaterialTheme.colorScheme:
         // antes 6 hex fijos (Teal/Coral), iguales en los 3 temas — ahora sigue
         // el tema activo (Naturaleza/Minimal) manteniendo 6 tonos distinguibles.
@@ -432,7 +482,7 @@ private fun PieChartCard(title: String, data: List<TagCount>) {
                     drawArc(
                         color = colors[index % colors.size],
                         startAngle = startAngle,
-                        sweepAngle = sweep,
+                        sweepAngle = sweep * entranceProgress,
                         useCenter = true,
                         size = Size(size.width, size.height)
                     )
