@@ -47,6 +47,7 @@ import org.taskhub.ui.models.MemberUiState
  */
 data class CreateProfileScreen(val householdId: String) : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow

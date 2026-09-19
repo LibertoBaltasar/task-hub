@@ -34,6 +34,7 @@ import org.taskhub.ui.models.HouseholdUiState
 /** Formulario mínimo: un único campo (nombre del hogar) obligatorio. */
 class CreateHouseholdScreen : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow

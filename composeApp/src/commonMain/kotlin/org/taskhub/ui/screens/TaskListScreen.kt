@@ -83,6 +83,7 @@ data class TaskListScreen(
     val memberId: String? = null
 ) : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
@@ -981,8 +982,10 @@ private fun TaskCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Points badge
-                PointsBadge(text = "${task.points} ${s("transfer_points_suffix")}")
+                // Points badge — degradado sutil solo si la tarea ya está
+                // completada (puntos YA ganados, no solo el valor que vale
+                // la tarea): informe delight #10, aprobado.
+                PointsBadge(text = "${task.points} ${s("transfer_points_suffix")}", gradient = isDone)
 
                 // Progreso de subtareas — antes invisible fuera del detalle de la
                 // tarea (revisión UX 2026-09-17, L2/H1).

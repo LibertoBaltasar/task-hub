@@ -62,6 +62,7 @@ import org.taskhub.ui.theme.*
  */
 data class CreateRewardScreen(val householdId: String) : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow

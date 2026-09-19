@@ -2,6 +2,8 @@
 // según tema, usados en tareas, ranking, perfil y estadísticas.
 package org.taskhub.ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -10,7 +12,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.taskhub.ui.theme.semanticColors
@@ -46,14 +51,37 @@ private fun badgeToneColors(tone: BadgeTone): Pair<Color, Color> = when (tone) {
  *
  * @param text  Texto corto del badge (p. ej. "10 pts").
  * @param tone  Tono visual; [BadgeTone.Coral] por defecto (puntos/urgencia).
+ * @param gradient degradado sutil en vez de fondo plano — reservado a los
+ *   badges de "puntos ganados" (p. ej. el badge de puntos de una tarea ya
+ *   completada en TaskListScreen.kt) y NO al resto de badges genéricos
+ *   (costes, urgencia, contadores…), que se quedan planos (informe delight
+ *   #10, aprobado). Ver [gradientBrush] sobre por qué es una variación de
+ *   luminosidad del propio [container], no un segundo rol del colorScheme.
  */
 @Composable
 fun PointsBadge(
     text: String,
     modifier: Modifier = Modifier,
     tone: BadgeTone = BadgeTone.Coral,
+    gradient: Boolean = false,
 ) {
     val (container, content) = badgeToneColors(tone)
+    if (gradient) {
+        Box(
+            modifier = modifier
+                .clip(MaterialTheme.shapes.small)
+                .background(gradientBrush(container))
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = content,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        return
+    }
     Surface(shape = MaterialTheme.shapes.small, color = container, modifier = modifier) {
         Text(
             text = text,
@@ -64,6 +92,21 @@ fun PointsBadge(
         )
     }
 }
+
+/**
+ * Degradado sutil (top-left → bottom-right) para [PointsBadge] en modo
+ * [PointsBadge.gradient]: dos variaciones de luminosidad de [base], NO
+ * `base`→otro rol del colorScheme (p. ej. `tertiary`→`tertiaryContainer`) —
+ * ese segundo rol suele tener MENOS contraste con el `content` (texto) ya
+ * auditado en [badgeToneColors] para `base` en solitario (p. ej. blanco
+ * sobre `tertiaryContainer`, un tono claro, falla WCAG en los 3 temas). Al
+ * interpolar hacia blanco/negro se conserva el mismo matiz en todo el
+ * degradado, así que el contraste con `content` se mantiene en ambos
+ * extremos.
+ */
+private fun gradientBrush(base: Color): Brush = Brush.linearGradient(
+    colors = listOf(lerp(base, Color.Black, 0.12f), lerp(base, Color.White, 0.18f))
+)
 
 /**
  * Chip de estadística reutilizable: unifica los antiguos `InfoBadge`

@@ -126,6 +126,7 @@ data class CalendarScreen(
     val memberId: String? = null
 ) : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow

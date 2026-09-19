@@ -40,6 +40,7 @@ import org.taskhub.ui.models.HomeScreenModel
  */
 class WelcomeScreen : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow

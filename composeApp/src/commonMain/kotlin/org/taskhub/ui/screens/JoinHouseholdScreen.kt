@@ -48,6 +48,7 @@ import org.taskhub.ui.models.MemberUiState
  */
 class JoinHouseholdScreen : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow

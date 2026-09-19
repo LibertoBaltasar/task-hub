@@ -15,6 +15,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -85,6 +88,7 @@ data class HouseholdScreen(
     val justCreated: Boolean = false
 ) : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
@@ -520,13 +524,34 @@ data class HouseholdScreen(
                                                     .replace("%1\$s", household.name)
                                                     .replace("%2\$s", household.inviteCode)
                                             },
+                                        // containerColor transparente: el degradado real vive en el
+                                        // Modifier.background del Column de abajo (Card no acepta un
+                                        // Brush en `colors`) — clip de Card ya recorta ese fondo a las
+                                        // esquinas redondeadas de la tarjeta.
                                         colors = CardDefaults.cardColors(
-                                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                                            containerColor = Color.Transparent
                                         )
                                     ) {
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
+                                                // Degradado sutil entre dos tonos "container" del mismo
+                                                // colorScheme (informe delight #10, aprobado) — NO
+                                                // primary→primaryContainer: ambos extremos siguen siendo
+                                                // claros, así que el texto onPrimaryContainer de abajo
+                                                // mantiene el contraste auditado en TODO el degradado (con
+                                                // primary de por medio, un tono oscuro en los 3 temas, el
+                                                // extremo oscuro habría quedado casi ilegible). Única
+                                                // tarjeta "hero" que lo lleva — el resto de cards del hogar
+                                                // se queda plana.
+                                                .background(
+                                                    Brush.linearGradient(
+                                                        colors = listOf(
+                                                            MaterialTheme.colorScheme.primaryContainer,
+                                                            MaterialTheme.colorScheme.secondaryContainer
+                                                        )
+                                                    )
+                                                )
                                                 .padding(20.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
