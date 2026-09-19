@@ -13,6 +13,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
@@ -36,6 +37,10 @@ import org.taskhub.ui.i18n.AppStrings
  *                 ver panel de expertos v2, Estética #4).
  * @param onBack   Acción de volver; si es `null` no se muestra el botón de atrás.
  * @param actions  Contenido del área de acciones a la derecha.
+ * @param scrollBehavior conecta la barra con el scroll del contenido (p.ej.
+ *   `TopAppBarDefaults.enterAlwaysScrollBehavior()`) para que se oculte/tiña
+ *   al desplazar una lista larga; `null` (por defecto) = comportamiento
+ *   estático de siempre, sin tocar las pantallas que no lo pasan.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +49,7 @@ fun TaskHubTopBar(
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
+    scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
     val lang = LocalAppSettings.current.currentLanguage
     CenterAlignedTopAppBar(
@@ -92,9 +98,14 @@ fun TaskHubTopBar(
         actions = actions,
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface,
+            // Solo relevante cuando scrollBehavior != null (offset de scroll >
+            // 0): tiñe la barra con un tono ligeramente distinto de `surface`
+            // para separarla visualmente del contenido que se desliza debajo.
+            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
             actionIconContentColor = MaterialTheme.colorScheme.onSurface,
         ),
+        scrollBehavior = scrollBehavior,
     )
 }

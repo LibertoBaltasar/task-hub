@@ -11,13 +11,17 @@ package org.taskhub.ui.screens
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -41,6 +45,7 @@ data class ExploreScreen(
     val initialTab: Int = 0
 ) : Screen {
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
@@ -49,6 +54,7 @@ data class ExploreScreen(
         var selectedTab by remember { mutableStateOf(initialTab) }
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+        val topBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
         val householdModel = koinScreenModel<HouseholdScreenModel>()
         val householdName = rememberHouseholdName(householdId, householdModel)
@@ -57,11 +63,16 @@ data class ExploreScreen(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(topBarScrollBehavior.nestedScrollConnection)
+            ) {
                 TaskHubTopBar(
                     title = s("explore_title"),
                     subtitle = householdName,
-                    onBack = { navigator.pop() }
+                    onBack = { navigator.pop() },
+                    scrollBehavior = topBarScrollBehavior
                 )
 
                 TabRow(selectedTabIndex = selectedTab) {

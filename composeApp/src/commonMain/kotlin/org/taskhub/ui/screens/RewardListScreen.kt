@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -32,6 +33,7 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.DestructiveConfirmDialog
+import org.taskhub.ui.components.EmptyRewardsIllustration
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
@@ -90,6 +92,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
         isOwner = memberModel.isHouseholdOwner(householdId)
     }
 
+    var currentMemberPoints by remember { mutableStateOf(0) }
     LaunchedEffect(memberState) {
         if (memberState is MemberUiState.Success) {
             val members = (memberState as MemberUiState.Success).members
@@ -97,6 +100,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
             val myMember = members.find { it.userId == localId }
             isAdmin = myMember?.role == "admin" || isOwner
             currentMemberId = myMember?.id ?: ""
+            currentMemberPoints = myMember?.totalPoints ?: 0
         }
     }
     LaunchedEffect(isOwner) {
@@ -162,10 +166,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                         contentAlignment = Alignment.Center
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "🎁",
-                                style = MaterialTheme.typography.displayMedium
-                            )
+                            EmptyRewardsIllustration()
                             Spacer(Modifier.height(16.dp))
                             Text(
                                 text = s("reward_list_empty_title"),
@@ -195,6 +196,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
                             RewardCard(
                                 reward = reward,
                                 isAdmin = isAdmin,
+                                memberPoints = currentMemberPoints,
                                 modifier = if (reduceMotion) Modifier else Modifier.animateItem(),
                                 onDelete = {
                                     memberModel.deleteReward(householdId, reward.id)
@@ -265,6 +267,7 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
 private fun RewardCard(
     reward: RewardResponse,
     isAdmin: Boolean,
+    memberPoints: Int,
     onDelete: () -> Unit,
     onRedeem: () -> Unit,
     modifier: Modifier = Modifier
@@ -272,9 +275,15 @@ private fun RewardCard(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val appSettings = LocalAppSettings.current
     val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    // No bloquea el canje (eso lo decide el servidor en MemberRewardScreen):
+    // solo atenúa la tarjeta y avisa de cuántos puntos faltan, para que no
+    // parezca alcanzable sin serlo (informe delight #4, aprobado).
+    val canAfford = reward.cost <= memberPoints
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (!canAfford) Modifier.alpha(0.6f) else Modifier),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -331,17 +340,34 @@ private fun RewardCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Button(
-                    onClick = onRedeem,
-                    modifier = Modifier.weight(1f),
-                    shape = MaterialTheme.shapes.medium,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        s("member_reward_title"),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                if (canAfford) {
+                    Button(
+                        onClick = onRedeem,
+                        modifier = Modifier.weight(1f),
+                        shape = MaterialTheme.shapes.medium,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            s("member_reward_title"),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = onRedeem,
+                        modifier = Modifier.weight(1f),
+                        shape = MaterialTheme.shapes.medium,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            s("reward_missing_points").replace("%d", (reward.cost - memberPoints).toString()),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
                 if (isAdmin) {

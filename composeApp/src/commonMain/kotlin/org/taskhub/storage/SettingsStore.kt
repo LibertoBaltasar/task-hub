@@ -137,6 +137,17 @@ class SettingsStore(
     fun setFxHapticsEnabled(enabled: Boolean) =
         settings.putBoolean(KEY_FX_HAPTICS, enabled)
 
+    /**
+     * Saludo + resumen de puntos/racha en la cabecera de [org.taskhub.ui.screens.HomeScreen]
+     * (activado por defecto — informe delight #9, aprobado con toggle). Al
+     * desactivarlo, HomeScreen vuelve al texto de pendientes de siempre.
+     */
+    fun isHomeGreetingEnabled(): Boolean =
+        settings.getBoolean(KEY_HOME_GREETING_ENABLED, true)
+
+    fun setHomeGreetingEnabled(enabled: Boolean) =
+        settings.putBoolean(KEY_HOME_GREETING_ENABLED, enabled)
+
     // ── Google Calendar ──────────────────────────────────
 
     /** True si hay un token de acceso de Google Calendar guardado (cuenta vinculada). */
@@ -335,6 +346,7 @@ class SettingsStore(
         private const val KEY_FX_ANIMATIONS = "fx_animations"
         private const val KEY_FX_EFFECTS = "fx_effects"
         private const val KEY_FX_HAPTICS = "fx_haptics"
+        private const val KEY_HOME_GREETING_ENABLED = "home_greeting_enabled"
         private const val KEY_GOOGLE_ACCESS_TOKEN = "taskhub_google_token"
         private const val KEY_CALENDAR_SYNC_ENABLED = "taskhub_calendar_sync_enabled"
         private const val KEY_GOOGLE_UID = "taskhub_google_uid"

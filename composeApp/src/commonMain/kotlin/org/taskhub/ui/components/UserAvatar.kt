@@ -4,6 +4,7 @@
 package org.taskhub.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -45,7 +46,11 @@ fun UserAvatar(
     // Antes Teal100 fijo: el único caller que no pasa backgroundColor
     // explícito (EditProfileScreen) quedaba con un fondo fijo que ignora los
     // temas Naturaleza/Minimal. primaryContainer sigue el tema activo.
-    backgroundColor: Color = MaterialTheme.colorScheme.primaryContainer
+    backgroundColor: Color = MaterialTheme.colorScheme.primaryContainer,
+    // Anillo opcional (p.ej. admin vs. resto en Ranking/lista de miembros,
+    // ver HouseholdMemberList.kt/RankingScreen.kt) — `null` = sin anillo,
+    // idéntico al aspecto anterior para el resto de callers.
+    ringColor: Color? = null,
 ) {
     val avatarContentDescription = contentDescription
     Box(
@@ -53,6 +58,7 @@ fun UserAvatar(
             .size(size)
             .clip(CircleShape)
             .background(backgroundColor)
+            .then(if (ringColor != null) Modifier.border(2.dp, ringColor, CircleShape) else Modifier)
             // Fija la descripción accesible en el contenedor y anula la de los hijos:
             // sin esto, la rama de emoji (la más común, sin ningún Modifier.semantics
             // propio) dejaba que TalkBack/VoiceOver leyera el glifo unicode crudo del

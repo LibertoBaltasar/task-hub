@@ -26,6 +26,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -104,6 +105,7 @@ data class TaskListScreen(
         val snackbarHostState = remember { SnackbarHostState() }
         val appSettings = LocalAppSettings.current
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+        val topBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
         // ── Undo snackbar ────────────────────────────────────
         LaunchedEffect(undoState) {
@@ -186,12 +188,17 @@ data class TaskListScreen(
             color = MaterialTheme.colorScheme.background
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(topBarScrollBehavior.nestedScrollConnection)
+                ) {
                 // Top bar
                 TaskHubTopBar(
                     title = s("task_list_title"),
                     subtitle = householdName,
                     onBack = { navigator.pop() },
+                    scrollBehavior = topBarScrollBehavior,
                     actions = {
                         IconButton(onClick = { model.loadTasks(householdId) }) {
                             Icon(Icons.Default.Refresh, contentDescription = s("task_list_refresh_content_desc"))

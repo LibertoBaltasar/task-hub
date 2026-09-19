@@ -35,6 +35,7 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.network.models.NotificationResponse
+import org.taskhub.ui.components.EmptyNotificationsIllustration
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.TaskHubTopBar
@@ -126,10 +127,7 @@ data class NotificationListScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "🔕",
-                                        style = MaterialTheme.typography.displayMedium
-                                    )
+                                    EmptyNotificationsIllustration()
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text(
                                         text = s("notifications_empty"),

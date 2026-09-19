@@ -27,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,13 +35,16 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import org.koin.compose.koinInject
 import org.taskhub.storage.SavedHousehold
+import org.taskhub.storage.SettingsStore
 import org.taskhub.ui.components.AppLogo
 import org.taskhub.ui.components.EmptyHouseholdsIllustration
 import org.taskhub.ui.components.HouseholdSettingsDialog
 import org.taskhub.ui.components.HouseholdTaskSection
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
+import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.HomeScreenModel
@@ -63,7 +67,13 @@ class HomeScreen : Screen {
         val model = koinScreenModel<HomeScreenModel>()
         val uiState by model.uiState.collectAsState()
         val previewTasks by model.previewTasks.collectAsState()
+        val greetingState by model.greetingState.collectAsState()
         val reduceMotion = shouldReduceMotion()
+        val settingsStore = koinInject<SettingsStore>()
+        // remember(no key) + re-lectura al cerrar el diálogo de ajustes (abajo):
+        // el switch vive en SettingsSheet, una composición distinta, así que
+        // este valor no se recompone solo al cambiarlo ahí.
+        var homeGreetingEnabled by remember { mutableStateOf(settingsStore.isHomeGreetingEnabled()) }
 
         // Semilla con la lista guardada localmente (sync, sin red) en vez de
         // vacía: `households` es un `remember` LOCAL de este composable, así
@@ -79,18 +89,26 @@ class HomeScreen : Screen {
         var households by remember { mutableStateOf(model.getSavedHouseholds()) }
         var showFabMenu by remember { mutableStateOf(false) }
         var showSettings by remember { mutableStateOf(false) }
+        val topBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
         // Cargar hogares + tareas de todos al entrar. Reconcilia primero contra
         // Firestore para podar hogares "fantasma" (borrados o sin acceso).
         LaunchedEffect(Unit) {
             households = model.reconcileHouseholds()
             model.loadAllTasks()
+            model.loadGreeting(households)
         }
 
         // Settings dialog
         if (showSettings) {
             HouseholdSettingsDialog(
-                onDismiss = { showSettings = false },
+                onDismiss = {
+                    showSettings = false
+                    // El switch "Saludo en inicio" vive dentro de este diálogo
+                    // (SettingsSheet) — re-leer al cerrarlo es más simple que
+                    // levantar el estado hasta aquí solo para este toggle.
+                    homeGreetingEnabled = settingsStore.isHomeGreetingEnabled()
+                },
                 onEditProfile = {
                     showSettings = false
                     navigator.push(EditProfileScreen())
@@ -99,6 +117,7 @@ class HomeScreen : Screen {
         }
 
         Scaffold(
+            modifier = Modifier.nestedScroll(topBarScrollBehavior.nestedScrollConnection),
             topBar = {
                 TopAppBar(
                     title = {
@@ -119,8 +138,10 @@ class HomeScreen : Screen {
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    scrollBehavior = topBarScrollBehavior
                 )
             },
             floatingActionButton = {
@@ -217,15 +238,44 @@ class HomeScreen : Screen {
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Contador total
-                    item {
-                        Text(
-                            s("home_pending_count_summary")
-                                .replace("%1", uiState.pendingCount.toString())
-                                .replace("%2", households.size.toString()),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    // Saludo + resumen de puntos/racha (informe delight #9,
+                    // aprobado con toggle) si está activado y ya se resolvió
+                    // el miembro actual; si no, el texto de pendientes de
+                    // siempre (comportamiento sin cambios con el toggle off).
+                    val greeting = greetingState
+                    if (homeGreetingEnabled && greeting != null) {
+                        item(key = "greeting") {
+                            Column {
+                                Text(
+                                    "👋 " + s("home_greeting_hello").replace("%s", greeting.displayName),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    StatChip(
+                                        value = "${greeting.totalPoints}",
+                                        label = s("stats_summary_points"),
+                                        emoji = "⭐"
+                                    )
+                                    StatChip(
+                                        value = "${greeting.currentStreak}",
+                                        label = s("stats_current_streak_label"),
+                                        emoji = "🔥"
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        item {
+                            Text(
+                                s("home_pending_count_summary")
+                                    .replace("%1", uiState.pendingCount.toString())
+                                    .replace("%2", households.size.toString()),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     val personal = households.find { it.isPersonal }

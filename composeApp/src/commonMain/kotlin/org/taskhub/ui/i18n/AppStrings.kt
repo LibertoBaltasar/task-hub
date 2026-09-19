@@ -52,6 +52,7 @@ object AppStrings {
             "fx_animations" to "Animaciones y transiciones",
             "fx_effects" to "Efectos visuales",
             "fx_haptics" to "Vibración y háptica",
+            "home_greeting_toggle" to "Saludo en inicio",
 
             // Logros (Achievement.ALL_ACHIEVEMENTS, StatsScreen.AchievementCard)
             "achievement_unlocked_prefix" to "¡Logro desbloqueado!",
@@ -478,6 +479,7 @@ object AppStrings {
             "reward_delete_title" to "Eliminar recompensa",
             "reward_delete_action_named" to "Eliminar %s",
             "reward_delete_confirm" to "¿Eliminar '%s'?",
+            "reward_missing_points" to "Te faltan %d ⭐",
 
             // Nueva recompensa (CreateRewardScreen.kt)
             "create_reward_title" to "Nueva recompensa",
@@ -506,6 +508,7 @@ object AppStrings {
             "home_empty_subtitle" to "Organiza las tareas del hogar y suma puntos en equipo.",
             "home_pending_count_summary" to "%1 tareas pendientes en %2 espacios",
             "home_my_spaces" to "Mis espacios",
+            "home_greeting_hello" to "Hola, %s",
 
             // Detalle del espacio (HouseholdScreen.kt)
             "household_view_tasks_plain" to "Ver Tareas",
@@ -749,6 +752,7 @@ object AppStrings {
             "fx_animations" to "Animations and transitions",
             "fx_effects" to "Visual effects",
             "fx_haptics" to "Vibration and haptics",
+            "home_greeting_toggle" to "Home greeting",
 
             // Achievements (Achievement.ALL_ACHIEVEMENTS, StatsScreen.AchievementCard)
             "achievement_unlocked_prefix" to "Achievement unlocked!",
@@ -1148,6 +1152,7 @@ object AppStrings {
             "reward_delete_title" to "Delete reward",
             "reward_delete_action_named" to "Delete %s",
             "reward_delete_confirm" to "Delete '%s'?",
+            "reward_missing_points" to "%d ⭐ short",
 
             // New reward (CreateRewardScreen.kt)
             "create_reward_title" to "New reward",
@@ -1176,6 +1181,7 @@ object AppStrings {
             "home_empty_subtitle" to "Organize household tasks and earn points as a team.",
             "home_pending_count_summary" to "%1 pending tasks across %2 spaces",
             "home_my_spaces" to "My spaces",
+            "home_greeting_hello" to "Hi, %s",
 
             // Space detail (HouseholdScreen.kt)
             "household_view_tasks_plain" to "View Tasks",

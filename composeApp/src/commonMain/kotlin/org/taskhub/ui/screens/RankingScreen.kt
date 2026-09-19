@@ -27,9 +27,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.components.AnimatedCounter
 import org.taskhub.ui.components.EffectCategory
+import org.taskhub.ui.components.EmptyRankingIllustration
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.UserAvatar
@@ -106,7 +108,7 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("🏆", style = MaterialTheme.typography.displayMedium)
+                    EmptyRankingIllustration()
                     Spacer(Modifier.height(16.dp))
                     Text(
                         s("ranking_empty_title"),
@@ -142,6 +144,18 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
             }
         }
     }
+}
+
+/**
+ * Tamaño estático del emoji 🔥 de racha según tramo (informe delight #8):
+ * 1-6 días tamaño normal, 7-29 +15%, 30+ +30%. Sin animación (if/else puro).
+ * Misma fórmula duplicada en `StreakCard` de StatsScreen.kt (archivo
+ * distinto, sin un sitio compartido natural para una función de una línea).
+ */
+private fun streakFireFontSize(streak: Int) = when {
+    streak >= 30 -> 32.sp
+    streak >= 7 -> 28.sp
+    else -> 24.sp
 }
 
 /** Fila individual del ranking: medalla/posición, avatar, nombre/rol y puntos+racha. */
@@ -244,12 +258,17 @@ private fun RankingRow(
             Spacer(Modifier.width(12.dp))
 
             // Avatar
+            // Anillo admin/resto (decisión de diseño, informe delight #3):
+            // tertiary (dorado/distintivo) para admin, primaryContainer
+            // (sutil) para el resto — no compite visualmente con el propio
+            // fondo tertiaryContainer de la medalla de oro en 1er puesto.
             UserAvatar(
                 avatarUrl = member.avatarUrl,
                 fallbackEmoji = if (member.role == "admin") "👑" else "👤",
                 displayName = member.displayName,
                 contentDescription = member.displayName,
-                backgroundColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
+                backgroundColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer,
+                ringColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primaryContainer
             )
 
             Spacer(Modifier.width(12.dp))
@@ -287,11 +306,17 @@ private fun RankingRow(
                         fontWeight = FontWeight.Bold
                     )
                 }
-                Text(
-                    text = "🔥 ${member.currentStreak}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = secondaryTextColor
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Escalado estático por tramo de racha (informe delight
+                    // #8, aprobado con toggle — sin animación: solo if/else,
+                    // no cuenta como "efecto" a efectos de Modo simple).
+                    Text(text = "🔥", fontSize = streakFireFontSize(member.currentStreak))
+                    Text(
+                        text = " ${member.currentStreak}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryTextColor
+                    )
+                }
             }
         }
     }

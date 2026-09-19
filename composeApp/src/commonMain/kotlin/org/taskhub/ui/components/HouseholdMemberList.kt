@@ -244,14 +244,17 @@ private fun MemberCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar
+                // Avatar — mismo anillo admin/resto que RankingRow (ver
+                // RankingScreen.kt, informe delight #3): tertiary para admin,
+                // primaryContainer (sutil) para el resto.
                 UserAvatar(
                     avatarUrl = member.avatarUrl,
                     fallbackEmoji = if (member.role == "admin") "👑" else "👤",
                     displayName = member.displayName,
                     contentDescription = member.displayName,
                     size = 48.dp,
-                    backgroundColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
+                    backgroundColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer,
+                    ringColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primaryContainer
                 )
 
                 Spacer(modifier = Modifier.width(12.dp))

@@ -134,3 +134,142 @@ fun EmptyHouseholdsIllustration(modifier: Modifier = Modifier) {
         )
     }
 }
+
+/**
+ * Ilustración geométrica para el estado vacío "sin recompensas": una caja de
+ * regalo con lazo, en los colores de marca. Sustituye al emoji 🎁 suelto de
+ * [org.taskhub.ui.screens.RewardsBody] (informe delight #5).
+ */
+@Composable
+fun EmptyRewardsIllustration(modifier: Modifier = Modifier) {
+    val bgCircleColor = MaterialTheme.colorScheme.primaryContainer
+    val boxColor = MaterialTheme.colorScheme.tertiary
+    val ribbonColor = MaterialTheme.colorScheme.tertiaryContainer
+    val bowColor = MaterialTheme.colorScheme.secondary
+    Canvas(modifier = modifier.size(120.dp)) {
+        val w = size.width
+        val h = size.height
+
+        drawCircle(
+            color = bgCircleColor.copy(alpha = 0.4f),
+            radius = size.minDimension * 0.46f,
+            center = Offset(w / 2f, h / 2f)
+        )
+
+        // Cuerpo de la caja
+        drawRect(
+            color = boxColor,
+            topLeft = Offset(w * 0.26f, h * 0.44f),
+            size = androidx.compose.ui.geometry.Size(w * 0.48f, h * 0.32f)
+        )
+
+        // Tapa
+        drawRect(
+            color = boxColor,
+            topLeft = Offset(w * 0.22f, h * 0.38f),
+            size = androidx.compose.ui.geometry.Size(w * 0.56f, h * 0.08f)
+        )
+
+        // Cinta vertical
+        drawRect(
+            color = ribbonColor,
+            topLeft = Offset(w * 0.47f, h * 0.38f),
+            size = androidx.compose.ui.geometry.Size(w * 0.06f, h * 0.38f)
+        )
+
+        // Lazo (dos triángulos)
+        val bowLeft = Path().apply {
+            moveTo(w * 0.50f, h * 0.38f)
+            lineTo(w * 0.32f, h * 0.24f)
+            lineTo(w * 0.42f, h * 0.38f)
+            close()
+        }
+        val bowRight = Path().apply {
+            moveTo(w * 0.50f, h * 0.38f)
+            lineTo(w * 0.68f, h * 0.24f)
+            lineTo(w * 0.58f, h * 0.38f)
+            close()
+        }
+        drawPath(path = bowLeft, color = bowColor)
+        drawPath(path = bowRight, color = bowColor)
+    }
+}
+
+/**
+ * Ilustración geométrica para el estado vacío "sin notificaciones": una
+ * campana con líneas de "silencio" alrededor. Sustituye al emoji 🔕 suelto de
+ * [org.taskhub.ui.screens.NotificationListScreen] (informe delight #5).
+ */
+@Composable
+fun EmptyNotificationsIllustration(modifier: Modifier = Modifier) {
+    val bgCircleColor = MaterialTheme.colorScheme.primaryContainer
+    val bellColor = MaterialTheme.colorScheme.primary
+    val clapperColor = MaterialTheme.colorScheme.tertiary
+    Canvas(modifier = modifier.size(120.dp)) {
+        val w = size.width
+        val h = size.height
+
+        drawCircle(
+            color = bgCircleColor.copy(alpha = 0.4f),
+            radius = size.minDimension * 0.46f,
+            center = Offset(w / 2f, h / 2f)
+        )
+
+        // Cuerpo de la campana
+        val bell = Path().apply {
+            moveTo(w * 0.50f, h * 0.24f)
+            cubicTo(w * 0.32f, h * 0.24f, w * 0.30f, h * 0.42f, w * 0.30f, h * 0.56f)
+            lineTo(w * 0.24f, h * 0.68f)
+            lineTo(w * 0.76f, h * 0.68f)
+            lineTo(w * 0.70f, h * 0.56f)
+            cubicTo(w * 0.70f, h * 0.42f, w * 0.68f, h * 0.24f, w * 0.50f, h * 0.24f)
+            close()
+        }
+        drawPath(path = bell, color = bellColor)
+
+        // Badajo
+        drawCircle(color = clapperColor, radius = size.minDimension * 0.045f, center = Offset(w * 0.50f, h * 0.74f))
+    }
+}
+
+/**
+ * Ilustración geométrica para el estado vacío "sin ranking": un podio de 3
+ * escalones. Sustituye al emoji 🏆 suelto de [org.taskhub.ui.screens.RankingBody]
+ * (informe delight #5).
+ */
+@Composable
+fun EmptyRankingIllustration(modifier: Modifier = Modifier) {
+    val bgCircleColor = MaterialTheme.colorScheme.primaryContainer
+    val firstColor = MaterialTheme.colorScheme.tertiary
+    val secondColor = MaterialTheme.colorScheme.primaryContainer
+    val thirdColor = MaterialTheme.colorScheme.secondaryContainer
+    Canvas(modifier = modifier.size(120.dp)) {
+        val w = size.width
+        val h = size.height
+
+        drawCircle(
+            color = bgCircleColor.copy(alpha = 0.4f),
+            radius = size.minDimension * 0.46f,
+            center = Offset(w / 2f, h / 2f)
+        )
+
+        // Escalón 2º puesto (izquierda)
+        drawRect(
+            color = secondColor,
+            topLeft = Offset(w * 0.16f, h * 0.52f),
+            size = androidx.compose.ui.geometry.Size(w * 0.22f, h * 0.24f)
+        )
+        // Escalón 1er puesto (centro, más alto)
+        drawRect(
+            color = firstColor,
+            topLeft = Offset(w * 0.39f, h * 0.38f),
+            size = androidx.compose.ui.geometry.Size(w * 0.22f, h * 0.38f)
+        )
+        // Escalón 3er puesto (derecha)
+        drawRect(
+            color = thirdColor,
+            topLeft = Offset(w * 0.62f, h * 0.60f),
+            size = androidx.compose.ui.geometry.Size(w * 0.22f, h * 0.16f)
+        )
+    }
+}

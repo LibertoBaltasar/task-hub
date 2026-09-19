@@ -24,6 +24,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
@@ -53,6 +54,7 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var showSettings by remember { mutableStateOf(false) }
+        val topBarScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
 
         if (showSettings) {
             HouseholdSettingsDialog(
@@ -65,12 +67,14 @@ class ProfileScreen(private val households: List<SavedHousehold>) : Screen {
         }
 
         Scaffold(
+            modifier = Modifier.nestedScroll(topBarScrollBehavior.nestedScrollConnection),
             // TaskHubTopBar (no TopAppBar manual): consistencia con las otras
             // pantallas — la barra manual dejaba el título alineado a la izquierda.
             topBar = {
                 TaskHubTopBar(
                     title = s("profile_title"),
-                    onBack = { navigator.pop() }
+                    onBack = { navigator.pop() },
+                    scrollBehavior = topBarScrollBehavior
                 )
             }
         ) { padding ->

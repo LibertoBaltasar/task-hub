@@ -103,6 +103,12 @@ entender *por qué* el código quedó como quedó en ciertos puntos.
   eliminación completa de la auth anónima (decisión de producto): login con
   Google obligatorio, gate de login en `App.kt` (`AuthGateScreen`), y por qué
   el fix de vinculación del informe anterior quedó obsoleto/eliminado.
+- **[propuestas-delight-visual-satisfaccion-2026-09-19.md](propuestas-delight-visual-satisfaccion-2026-09-19.md)**
+  — informe de propuestas (sin implementar) de diseño visual estático y
+  gamificación para hacer la app más vistosa/satisfactoria, complementario a
+  `revision-delight-experiencia-2026-09-18.md` (aquel cubrió motion/háptica/
+  celebraciones; este cubre identidad visual, economía de puntos, logros,
+  ranking y Home).
 - **[login-web-2026-09-17.md](login-web-2026-09-17.md)** — implementación de
   Google Sign-In real en la web (target wasmJs) vía Google Identity Services
   (GIS): el login era un no-op hasta este encargo, lo que dejaba la web

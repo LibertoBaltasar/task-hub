@@ -182,6 +182,18 @@ internal fun StatsBody(householdId: String, memberId: String, statsModel: StatsS
 
 // ── UI Components ──────────────────────────────────────────
 
+/**
+ * Tamaño estático del emoji 🔥 de racha según tramo (informe delight #8):
+ * 1-6 días tamaño normal, 7-29 +15%, 30+ +30%. Sin animación (if/else puro).
+ * Misma fórmula duplicada en `RankingRow` de RankingScreen.kt (archivo
+ * distinto, sin un sitio compartido natural para una función de una línea).
+ */
+private fun streakFireFontSize(streak: Int) = when {
+    streak >= 30 -> 32.sp
+    streak >= 7 -> 28.sp
+    else -> 24.sp
+}
+
 /** Tarjeta con racha actual y mejor racha (en días consecutivos). */
 @Composable
 private fun StreakCard(currentStreak: Int, bestStreak: Int) {
@@ -201,7 +213,9 @@ private fun StreakCard(currentStreak: Int, bestStreak: Int) {
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("🔥", style = MaterialTheme.typography.displaySmall)
+                // Escalado estático por tramo de racha (informe delight #8,
+                // aprobado con toggle) — sin animación, solo if/else.
+                Text("🔥", fontSize = streakFireFontSize(currentStreak))
                 Text(
                     s("stats_current_streak_label"),
                     style = MaterialTheme.typography.bodySmall,

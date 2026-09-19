@@ -5,15 +5,13 @@ package org.taskhub.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
-import org.taskhub.ui.theme.Coral500
-import org.taskhub.ui.theme.Teal500
-import org.taskhub.ui.theme.Teal800
 
 /**
  * Isotipo de Task Hub: un checkmark (tarea completada) inscrito en un anillo
@@ -33,9 +31,15 @@ import org.taskhub.ui.theme.Teal800
 fun AppLogo(
     modifier: Modifier = Modifier,
     size: androidx.compose.ui.unit.Dp = 40.dp,
-    ringColor: Color = Teal500,
-    checkColor: Color = Teal800,
-    dotColor: Color = Coral500,
+    // Colores del tema (no literales Teal*/Coral*) para que el logo se adapte
+    // a los 3 temas (DEFAULT, NATURALEZA, MINIMAL) en vez de quedar siempre
+    // teal/coral — mismo criterio ya aplicado en EmptyStateIllustrations.kt.
+    // checkColor usa onPrimaryContainer (variante oscura), no primaryContainer
+    // directo: primaryContainer es un tono CLARO en los 3 temas (pensado para
+    // fondos, no para trazos finos sobre el propio canvas del logo).
+    ringColor: Color = MaterialTheme.colorScheme.primary,
+    checkColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    dotColor: Color = MaterialTheme.colorScheme.tertiary,
 ) {
     Canvas(modifier = modifier.size(size)) {
         val strokeWidth = this.size.minDimension * 0.09f
