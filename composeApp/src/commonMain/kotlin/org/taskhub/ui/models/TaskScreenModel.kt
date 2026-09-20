@@ -212,7 +212,7 @@ class TaskScreenModel(
     val newlyUnlockedAchievement: StateFlow<Achievement?> = _newlyUnlockedAchievement.asStateFlow()
 
     // Filter & sort state
-    private val _filter = MutableStateFlow(TaskFilter.PENDING)
+    private val _filter = MutableStateFlow(TaskFilter.MINE)
     val filter: StateFlow<TaskFilter> = _filter.asStateFlow()
 
     private val _sort = MutableStateFlow(TaskSort.DEADLINE_ASC)
