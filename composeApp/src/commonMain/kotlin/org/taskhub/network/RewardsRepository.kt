@@ -181,4 +181,39 @@ class RewardsRepository(
         }
         taskCache.clearRewardRedemptions(householdId)
     }
+
+    /**
+     * Reescribe `memberId` a [anonymizedMemberId] en los canjes de
+     * recompensa de los miembros en [memberIds] — mismo motivo y patrón que
+     * [org.taskhub.network.TaskRepository.anonymizeMemberTaskHistory] (panel
+     * v14 2026-09-20, Experto 10, IMPORTANTE): `rewardRedemptions` solo
+     * guarda el `memberId` crudo, sin nombre desnormalizado, así que quedaba
+     * expuesto para siempre en hogares compartidos tras
+     * `leaveHousehold`/`deleteMember`. Best-effort por registro.
+     */
+    suspend fun anonymizeMemberRedemptions(householdId: String, memberIds: Set<String>, anonymizedMemberId: String) {
+        if (memberIds.isEmpty()) return
+        val redemptions = try {
+            getRewardRedemptions(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        redemptions.filter { it.memberId in memberIds }.forEach { redemption ->
+            try {
+                client.patch("$baseUrl/households/$householdId/rewardRedemptions/${redemption.id}") {
+                    withAuth()
+                    with(firestoreClient) { updateMaskFieldPaths("memberId") }
+                    contentType(ContentType.Application.Json)
+                    setBody(FirestoreDocument(mapOf("memberId" to FirestoreValue(stringValue = anonymizedMemberId))))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // No crítico: se prioriza anonimizar el resto de canjes.
+            }
+        }
+        taskCache.clearRewardRedemptions(householdId)
+    }
 }

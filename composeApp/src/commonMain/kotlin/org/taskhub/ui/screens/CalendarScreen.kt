@@ -206,7 +206,10 @@ data class CalendarScreen(
         }
 
         // ── Tareas caducadas: fecha ya pasada y sin completar ────────
-        val overdueTasks = remember(listState) {
+        // Clave `today` incluida a propósito: sin ella, una tarea que vence
+        // justo al cruzar la medianoche con la pantalla abierta no se
+        // reclasificaba como caducada hasta el siguiente `loadTasks`.
+        val overdueTasks = remember(listState, today) {
             val tasks = (listState as? TaskListUiState.Success)?.tasks ?: emptyList()
             tasks.filter { isTaskOverdueOverall(it, today, tz) }
         }
@@ -677,7 +680,11 @@ private fun MonthDayCell(
     onClick: () -> Unit
 ) {
     val appSettings = LocalAppSettings.current
-    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    // remember(currentLanguage): MonthDayCell se invoca ~35-42 veces por vista
+    // mes (una por celda del grid), mismo antipatrón que v13 corrigió en
+    // Content() — sin memoizar, cada recomposición del grid recrea la lambda
+    // en cada celda.
+    val s = remember(appSettings.currentLanguage) { { key: String -> AppStrings.get(key, appSettings.currentLanguage) } }
     val completedCount = entries.count { it.isCompleted }
     val overdueCount = entries.count { it.isOverdue }
     // Los indicadores de estado (puntos de color) son mudos para TalkBack y
@@ -775,7 +782,7 @@ private fun DayTasksPopup(
     onTaskClick: (String) -> Unit
 ) {
     val appSettings = LocalAppSettings.current
-    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    val s = remember(appSettings.currentLanguage) { { key: String -> AppStrings.get(key, appSettings.currentLanguage) } }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -843,7 +850,7 @@ private fun TaskPopupItem(
     onClick: () -> Unit
 ) {
     val appSettings = LocalAppSettings.current
-    val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
+    val s = remember(appSettings.currentLanguage) { { key: String -> AppStrings.get(key, appSettings.currentLanguage) } }
     val statusColor = entry.dotColor()
 
     Card(

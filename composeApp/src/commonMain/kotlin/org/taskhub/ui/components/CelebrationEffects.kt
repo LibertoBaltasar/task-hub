@@ -30,6 +30,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import kotlin.random.Random
 
@@ -50,7 +51,13 @@ fun AnimatedCheckmark(reduceMotion: Boolean, modifier: Modifier = Modifier) {
         label = "checkBounce"
     )
     Surface(
-        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        // Decorativo: el estado "completado" ya lo anuncia la Card/checkbox que
+        // dispara esta animación, así que se oculta del árbol de semántica para
+        // evitar doble lectura por TalkBack/VoiceOver (mismo patrón que las
+        // medallas de RankingScreen).
+        modifier = modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clearAndSetSemantics {},
         shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.primaryContainer
     ) {

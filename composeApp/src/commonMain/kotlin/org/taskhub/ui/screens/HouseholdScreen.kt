@@ -540,9 +540,13 @@ data class HouseholdScreen(
                                                 // colorScheme (informe delight #10, aprobado) — NO
                                                 // primary→primaryContainer: ambos extremos siguen siendo
                                                 // claros, así que el texto onPrimaryContainer de abajo
-                                                // mantiene el contraste auditado en TODO el degradado (con
+                                                // mantiene el contraste en la mayoría de combinaciones (con
                                                 // primary de por medio, un tono oscuro en los 3 temas, el
-                                                // extremo oscuro habría quedado casi ilegible). Única
+                                                // extremo oscuro habría quedado casi ilegible). ATENCIÓN:
+                                                // panel v14 2026-09-20 midió DEFAULT oscuro en ~3.9:1 (bajo
+                                                // el mínimo AA de 4.5:1 para texto normal) — pendiente de
+                                                // ajustar el extremo secondaryContainer o el color de texto
+                                                // (SOLO PROPUESTA, no aplicado sin validación visual). Única
                                                 // tarjeta "hero" que lo lleva — el resto de cards del hogar
                                                 // se queda plana.
                                                 .background(

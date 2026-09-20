@@ -1194,7 +1194,7 @@ class TaskScreenModel(
         _reassignState.value = TaskActionState.Idle
         _undoState.value = null
         _myAssignment.value = null
-        _filter.value = TaskFilter.PENDING
+        _filter.value = TaskFilter.MINE
         _sort.value = TaskSort.DEADLINE_ASC
         _selectedTagFilter.value = null
         _searchQuery.value = ""

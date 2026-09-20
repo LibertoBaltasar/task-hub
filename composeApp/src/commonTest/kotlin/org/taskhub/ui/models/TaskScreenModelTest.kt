@@ -278,7 +278,7 @@ class TaskScreenModelTest {
         model.reset()
 
         assertEquals(TaskListUiState.Idle, model.listState.value)
-        assertEquals(TaskFilter.PENDING, model.filter.value)
+        assertEquals(TaskFilter.MINE, model.filter.value)
         assertEquals(TaskSort.DEADLINE_ASC, model.sort.value)
         assertNull(model.selectedTagFilter.value)
         assertEquals("", model.searchQuery.value)

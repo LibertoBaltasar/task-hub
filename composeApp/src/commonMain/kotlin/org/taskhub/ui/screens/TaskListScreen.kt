@@ -44,6 +44,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.datetime.*
 import org.taskhub.network.RecurrenceRules
@@ -136,7 +137,21 @@ data class TaskListScreen(
         }
 
         LaunchedEffect(householdId) {
-            model.setCurrentMemberId(memberId)
+            // `memberId` puede llegar null si el caller (p. ej. HouseholdScreen)
+            // navega aquí antes de que su propio `currentMemberId` termine de
+            // resolverse de forma asíncrona. Con TaskFilter.MINE como pestaña
+            // por defecto, un `currentMemberId` null deja la lista "Mías"
+            // vacía sin ninguna vía de recuperación — se resuelve aquí como
+            // fallback, mismo patrón que CreateTaskScreen.resolveCreator().
+            model.setCurrentMemberId(
+                memberId ?: try {
+                    model.resolveCurrentMemberId(householdId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            )
             model.loadTasks(householdId)
         }
 

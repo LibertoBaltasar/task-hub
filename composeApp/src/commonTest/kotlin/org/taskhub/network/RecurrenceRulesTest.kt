@@ -546,6 +546,62 @@ class RecurrenceRulesTest {
         )
     }
 
+    /** Tarea "once" con `dueDate` futuro: no está pendiente todavía (antes de la fecha límite). */
+    @Test
+    fun isDueToday_once_withFutureDueDate_isNotDueYet() {
+        assertFalse(
+            RecurrenceRules.isDueToday(
+                "once", emptyList(), null,
+                lastCompletedDate = null,
+                nowEpochMs = epochOf(2024, 3, 15),
+                tz = tz,
+                dueDate = epochOf(2024, 3, 20)
+            )
+        )
+    }
+
+    /** Tarea "once" con `dueDate` en el pasado: sigue pendiente (vencida, no autocompletada). */
+    @Test
+    fun isDueToday_once_withPastDueDate_isDue() {
+        assertTrue(
+            RecurrenceRules.isDueToday(
+                "once", emptyList(), null,
+                lastCompletedDate = null,
+                nowEpochMs = epochOf(2024, 3, 15),
+                tz = tz,
+                dueDate = epochOf(2024, 3, 10)
+            )
+        )
+    }
+
+    /** Tarea "once" con `dueDate` exactamente hoy: ya está pendiente (`>=`, no `>`). */
+    @Test
+    fun isDueToday_once_withDueDateToday_isDue() {
+        assertTrue(
+            RecurrenceRules.isDueToday(
+                "once", emptyList(), null,
+                lastCompletedDate = null,
+                nowEpochMs = epochOf(2024, 3, 15),
+                tz = tz,
+                dueDate = epochOf(2024, 3, 15)
+            )
+        )
+    }
+
+    /** `dueDate` futuro no anula la regla "completada = nunca más pendiente". */
+    @Test
+    fun isDueToday_once_completedWithFutureDueDate_isNotDue() {
+        assertFalse(
+            RecurrenceRules.isDueToday(
+                "once", emptyList(), null,
+                lastCompletedDate = epochOf(2024, 1, 1),
+                nowEpochMs = epochOf(2024, 3, 15),
+                tz = tz,
+                dueDate = epochOf(2024, 3, 20)
+            )
+        )
+    }
+
     // ── isDueOn: fecha arbitraria (usada por CalendarScreen) ──────
 
     /** `isDueToday` debe seguir siendo un caso particular de `isDueOn` con fecha = hoy. */

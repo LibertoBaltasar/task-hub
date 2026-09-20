@@ -749,6 +749,20 @@ open class FirestoreRepository(
                 toDelete.map { it.id }.toSet(),
                 AppStrings.get("member_deleted_name", settingsStore.getLanguage())
             )
+            // Igual que arriba, pero sobre el UID crudo de taskHistory/
+            // rewardRedemptions en vez de un nombre mostrado — ver KDoc de
+            // [TaskRepository.anonymizeMemberTaskHistory] (panel v14
+            // 2026-09-20, Experto 10, IMPORTANTE).
+            taskRepository.anonymizeMemberTaskHistory(
+                householdId,
+                toDelete.map { it.id }.toSet(),
+                ANONYMIZED_MEMBER_ID
+            )
+            rewardsRepository.anonymizeMemberRedemptions(
+                householdId,
+                toDelete.map { it.id }.toSet(),
+                ANONYMIZED_MEMBER_ID
+            )
             taskCache.clearMembers(householdId)
             memberRepository.invalidateCurrentMember(householdId)
         }
@@ -888,6 +902,24 @@ open class FirestoreRepository(
                 setOf(memberId),
                 AppStrings.get("member_deleted_name", settingsStore.getLanguage())
             )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No crítico: ver KDoc de deleteMember.
+        }
+        // Igual que arriba, pero sobre el UID crudo de taskHistory/
+        // rewardRedemptions — ver KDoc de
+        // [TaskRepository.anonymizeMemberTaskHistory] (panel v14
+        // 2026-09-20, Experto 10, IMPORTANTE).
+        try {
+            taskRepository.anonymizeMemberTaskHistory(householdId, setOf(memberId), ANONYMIZED_MEMBER_ID)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No crítico: ver KDoc de deleteMember.
+        }
+        try {
+            rewardsRepository.anonymizeMemberRedemptions(householdId, setOf(memberId), ANONYMIZED_MEMBER_ID)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -1553,5 +1585,17 @@ open class FirestoreRepository(
     companion object {
         /** Firebase Web API Key for task-hub-62f98 (Firebase Console → Project Settings → General). */
         const val DEFAULT_API_KEY = "AIzaSyD5Xo11SqvysWRgEFv_91rBjYuFIq93lV8"
+
+        /**
+         * Sentinel de `memberId` para registros de `taskHistory`/
+         * `rewardRedemptions` de un miembro que abandonó o fue expulsado de
+         * un hogar que sigue existiendo — ver
+         * [TaskRepository.anonymizeMemberTaskHistory]. No es un UID de
+         * Google real (formato distinto), así que no puede colisionar con
+         * ningún miembro futuro; la UI no intenta resolver el nombre de un
+         * `memberId` ausente de [getMembers], así que no rompe ninguna
+         * pantalla existente.
+         */
+        const val ANONYMIZED_MEMBER_ID = "deleted_member"
     }
 }

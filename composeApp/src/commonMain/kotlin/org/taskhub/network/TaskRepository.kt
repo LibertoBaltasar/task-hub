@@ -873,4 +873,46 @@ class TaskRepository(
             }.awaitAll()
         }
     }
+
+    /**
+     * Reescribe `memberId` a [anonymizedMemberId] en los registros de
+     * `taskHistory` de los miembros en [memberIds] — mismo patrón que
+     * [anonymizeMemberComments]/[org.taskhub.network.HouseholdRepository.anonymizeMemberMessages],
+     * pero sobre el UID en vez de un nombre mostrado: a diferencia de
+     * mensajes/comentarios, `taskHistory`/`rewardRedemptions` no
+     * desnormalizan un `authorName`, solo guardan el `memberId` (UID de
+     * Google) crudo, que quedaba incrustado para siempre en el historial de
+     * un hogar compartido tras abandonar/ser expulsado (panel v14
+     * 2026-09-20, Experto 10, IMPORTANTE — `deleteHousehold` ya lo borraba
+     * todo, pero `leaveHousehold`/`deleteMember` no tocaban estas dos
+     * colecciones cuando el hogar sigue existiendo para el resto). La UI no
+     * resuelve nombres de miembros que ya no están en [getMembers], así que
+     * el sentinel no rompe ninguna pantalla existente. Best-effort por
+     * registro, igual que el resto de anonimizaciones.
+     */
+    suspend fun anonymizeMemberTaskHistory(householdId: String, memberIds: Set<String>, anonymizedMemberId: String) {
+        if (memberIds.isEmpty()) return
+        val history = try {
+            getTaskHistory(householdId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            return
+        }
+        history.filter { it.memberId in memberIds }.forEach { record ->
+            try {
+                client.patch("$baseUrl/households/$householdId/taskHistory/${record.id}") {
+                    withAuth()
+                    updateMaskFieldPaths("memberId")
+                    contentType(ContentType.Application.Json)
+                    setBody(FirestoreDocument(mapOf("memberId" to FirestoreValue(stringValue = anonymizedMemberId))))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // No crítico: se prioriza anonimizar el resto del historial.
+            }
+        }
+        taskCache.clearTaskHistory(householdId)
+    }
 }

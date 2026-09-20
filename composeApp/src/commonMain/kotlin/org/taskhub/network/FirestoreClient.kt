@@ -25,6 +25,7 @@ import kotlinx.datetime.Clock
 import kotlinx.io.IOException
 import kotlinx.serialization.json.Json
 import kotlin.concurrent.Volatile
+import kotlin.random.Random
 
 /** Project ID por defecto de Firestore — ver [firestoreBaseUrl]. */
 const val DEFAULT_FIRESTORE_PROJECT_ID = "task-hub-62f98"
@@ -441,6 +442,11 @@ internal fun shouldFetchNextPage(pageToken: String?, documentsSoFar: Int, limit:
  * explícitamente limitado a lecturas). Un 4xx (permiso, documento
  * inexistente, argumento inválido) no es transitorio y se relanza sin
  * reintentar — reintentarlo no cambiaría el resultado.
+ *
+ * El backoff incluye jitter (±25% del delay base): sin él, varios
+ * dispositivos del mismo hogar reconectando a la vez tras un corte de red
+ * doméstico reintentarían todos en ráfaga sincronizada (panel v13/v14,
+ * Red/offline, MENOR).
  */
 internal suspend fun <T> retryTransientReadFailure(
     maxAttempts: Int = 3,
@@ -457,7 +463,8 @@ internal suspend fun <T> retryTransientReadFailure(
         } catch (e: Exception) {
             attempt++
             if (attempt >= maxAttempts || !e.isTransientReadFailure()) throw e
-            delay(delayMillis)
+            val jitterRange = (delayMillis / 4).coerceAtLeast(1)
+            delay(delayMillis + Random.nextLong(-jitterRange, jitterRange + 1))
             delayMillis *= 2
         }
     }
