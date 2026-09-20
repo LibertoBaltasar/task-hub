@@ -196,13 +196,19 @@ data class CalendarScreen(
             groupTasksByDate(tasks, tz, mode, weekRange, monthRange)
         }
 
-        // ── Tareas pendientes SIN fecha límite Y SIN recurrencia ────────────
+        // ── Tareas pendientes SIN fecha Y SIN recurrencia ────────────
         // Antes se mostraban (incorrectamente) en TODAS las celdas del
         // calendario, ver KDoc de [isTaskDueOnDay]. Ahora quedan fuera de la
         // cuadrícula y se listan aparte, debajo (revisión final 2026-09-17).
         val pendingWithoutDueDate = remember(listState) {
             val tasks = (listState as? TaskListUiState.Success)?.tasks ?: emptyList()
             tasks.filter { isTaskPendingWithoutDueDate(it) }
+        }
+
+        // ── Tareas caducadas: fecha ya pasada y sin completar ────────
+        val overdueTasks = remember(listState) {
+            val tasks = (listState as? TaskListUiState.Success)?.tasks ?: emptyList()
+            tasks.filter { isTaskOverdueOverall(it, today, tz) }
         }
 
         // ── Selected day popup ──────────────────────────────
@@ -429,6 +435,14 @@ data class CalendarScreen(
 
                             PendingWithoutDueDateSection(
                                 tasks = pendingWithoutDueDate,
+                                isCompleting = actionState is TaskActionState.Loading,
+                                s = s,
+                                onComplete = remember { { taskId: String -> model.completeTask(householdId, taskId) } },
+                                onTaskClick = remember { { taskId: String -> navigator.push(TaskDetailScreen(householdId, taskId)) } }
+                            )
+
+                            OverdueSection(
+                                tasks = overdueTasks,
                                 isCompleting = actionState is TaskActionState.Loading,
                                 s = s,
                                 onComplete = remember { { taskId: String -> model.completeTask(householdId, taskId) } },
@@ -1044,6 +1058,143 @@ private fun PendingTaskRow(
 }
 
 // ────────────────────────────────────────────────────────────
+//  "Caducadas" — tareas con fecha pasada sin completar
+// ────────────────────────────────────────────────────────────
+
+/**
+ * Lista, debajo de la sección "Pendientes", las tareas que ya pasaron
+ * su fecha (isTaskOverdueOverall) y aún no se han completado. Mismo
+ * patrón visual que [PendingWithoutDueDateSection] pero con colores
+ * de error (rojo).
+ */
+@Composable
+private fun OverdueSection(
+    tasks: List<TaskResponse>,
+    isCompleting: Boolean,
+    s: (String) -> String,
+    onComplete: (String) -> Unit,
+    onTaskClick: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 24.dp)) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "${s("calendar_overdue_section")} (${tasks.size})",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+        Spacer(Modifier.height(8.dp))
+
+        if (tasks.isEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Text(
+                    text = s("calendar_overdue_empty"),
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                tasks.forEach { task ->
+                    OverdueTaskRow(
+                        task = task,
+                        isLoading = isCompleting,
+                        s = s,
+                        onComplete = { onComplete(task.id) },
+                        onClick = { onTaskClick(task.id) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Fila de una tarea caducada: título + badge "⏰ Caducada" con
+ * BadgeTone.Error + puntos. Mismo patrón que [PendingTaskRow] pero
+ * con colores de error.
+ */
+@Composable
+private fun OverdueTaskRow(
+    task: TaskResponse,
+    isLoading: Boolean,
+    s: (String) -> String,
+    onComplete: () -> Unit,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics {
+                customActions = listOf(
+                    CustomAccessibilityAction(s("task_detail_mark_done")) {
+                        onComplete()
+                        true
+                    }
+                )
+            }
+            .clickable(role = Role.Button, onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Spacer(Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PointsBadge(text = "⭐ ${task.points}", tone = BadgeTone.Teal)
+                    Spacer(Modifier.width(6.dp))
+                    PointsBadge(text = s("calendar_task_status_overdue"), tone = BadgeTone.Error)
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = onComplete,
+                enabled = !isLoading,
+                modifier = Modifier.clearAndSetSemantics {}
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(s("task_detail_mark_done"))
+                }
+            }
+        }
+    }
+}
+
+// ────────────────────────────────────────────────────────────
 //  Date calculations
 // ────────────────────────────────────────────────────────────
 
@@ -1137,7 +1288,7 @@ internal fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): 
         if (task.lastCompletedDate != null) return false
         if (task.dueDate > 0) {
             val dueDate = Instant.fromEpochMilliseconds(task.dueDate).toLocalDateTime(tz).date
-            return date >= dueDate
+            return date == dueDate
         }
         // Sin dueDate y sin completar: fuera del calendario, ver KDoc de arriba.
         return false
@@ -1161,6 +1312,15 @@ internal fun isTaskDueOnDay(task: TaskResponse, date: LocalDate, tz: TimeZone): 
  */
 internal fun isTaskPendingWithoutDueDate(task: TaskResponse): Boolean =
     task.frequency == "once" && task.dueDate <= 0 && task.lastCompletedDate == null
+
+/**
+ * Tareas "once" con fecha ya pasada y aún no completadas: se listan en
+ * la sección "Caducadas" debajo del calendario.
+ */
+internal fun isTaskOverdueOverall(task: TaskResponse, today: LocalDate, tz: TimeZone): Boolean =
+    task.frequency == "once" && task.dueDate > 0 &&
+        Instant.fromEpochMilliseconds(task.dueDate).toLocalDateTime(tz).date < today &&
+        task.lastCompletedDate == null
 
 /**
  * Check if a task was completed on a specific date.

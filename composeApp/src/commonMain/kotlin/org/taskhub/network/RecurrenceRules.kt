@@ -78,10 +78,11 @@ object RecurrenceRules {
         lastCompletedDate: Long?,
         nowEpochMs: Long,
         tz: TimeZone = TimeZone.currentSystemDefault(),
-        createdAt: Long = 0
+        createdAt: Long = 0,
+        dueDate: Long = 0
     ): Boolean {
         val today = Instant.fromEpochMilliseconds(nowEpochMs).toLocalDateTime(tz).date
-        return isDueOn(today, frequency, recurrenceDays, recurrenceDay, lastCompletedDate, tz, createdAt)
+        return isDueOn(today, frequency, recurrenceDays, recurrenceDay, lastCompletedDate, tz, createdAt, dueDate)
     }
 
     /**
@@ -99,7 +100,8 @@ object RecurrenceRules {
         recurrenceDay: Int?,
         lastCompletedDate: Long?,
         tz: TimeZone = TimeZone.currentSystemDefault(),
-        createdAt: Long = 0
+        createdAt: Long = 0,
+        dueDate: Long = 0
     ): Boolean {
         val lastCompletedLocalDate = lastCompletedDate?.let {
             Instant.fromEpochMilliseconds(it).toLocalDateTime(tz).date
@@ -175,7 +177,12 @@ object RecurrenceRules {
                         (date.year == lastCompletedLocalDate.year && date.monthNumber > lastCompletedLocalDate.monthNumber)
                 }
             }
-            "once" -> lastCompletedDate == null
+            "once" -> {
+                if (lastCompletedDate != null) return false
+                if (dueDate <= 0) return true
+                val dueLocalDate = Instant.fromEpochMilliseconds(dueDate).toLocalDateTime(tz).date
+                date >= dueLocalDate
+            }
             else -> false
         }
     }

@@ -376,7 +376,8 @@ private fun isTaskDueToday(task: TaskResponse, todayStartEpoch: Long): Boolean =
         recurrenceDay = task.recurrenceDay,
         lastCompletedDate = task.lastCompletedDate,
         nowEpochMs = todayStartEpoch,
-        createdAt = task.createdAt
+        createdAt = task.createdAt,
+        dueDate = task.dueDate
     )
 
 /**

@@ -258,7 +258,8 @@ internal fun isPending(task: TaskResponse, now: Instant = Clock.System.now()): B
         lastCompletedDate = task.lastCompletedDate,
         nowEpochMs = now.toEpochMilliseconds(),
         tz = tz,
-        createdAt = task.createdAt
+        createdAt = task.createdAt,
+        dueDate = task.dueDate
     )
 
     val done = task.lastCompletedDate != null && task.lastCompletedDate >= todayStartEpoch
