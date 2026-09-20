@@ -1556,6 +1556,13 @@ open class FirestoreRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Si el error es ambiguo (timeout/IoException): el servidor pudo
+            // haber completado el descuento de puntos antes del timeout — no
+            // borrar el registro de canje, o al reintentar se crearía un
+            // segundo registro con un solo descuento real (panel v14, hallazgo 2).
+            if (e.errorCategory() == ErrorCategory.AMBIGUOUS) {
+                throw e
+            }
             try {
                 rewardsRepository.deleteRedemption(householdId, redemption.id)
             } catch (cleanupError: CancellationException) {

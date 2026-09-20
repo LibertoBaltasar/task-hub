@@ -99,13 +99,15 @@ fun PointsBadge(
  * `base`→otro rol del colorScheme (p. ej. `tertiary`→`tertiaryContainer`) —
  * ese segundo rol suele tener MENOS contraste con el `content` (texto) ya
  * auditado en [badgeToneColors] para `base` en solitario (p. ej. blanco
- * sobre `tertiaryContainer`, un tono claro, falla WCAG en los 3 temas). Al
- * interpolar hacia blanco/negro se conserva el mismo matiz en todo el
- * degradado, así que el contraste con `content` se mantiene en ambos
- * extremos.
+ * sobre `tertiaryContainer`, un tono claro, falla WCAG en los 3 temas).
+ *
+ * Antes interpolaba también hacia [Color.White] (0.18f), lo que lavaba el
+ * extremo claro y en temas claros dejaba el contraste con `content` por
+ * debajo de 4.5:1 (panel v14 2026-09-20, hallazgo 1). Ahora ambos extremos
+ * son más oscuros que [base], preservando el contraste auditado.
  */
 private fun gradientBrush(base: Color): Brush = Brush.linearGradient(
-    colors = listOf(lerp(base, Color.Black, 0.12f), lerp(base, Color.White, 0.18f))
+    colors = listOf(lerp(base, Color.Black, 0.14f), lerp(base, Color.Black, 0.04f))
 )
 
 /**

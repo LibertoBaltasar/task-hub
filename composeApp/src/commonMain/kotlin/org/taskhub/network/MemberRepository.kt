@@ -606,8 +606,12 @@ class MemberRepository(
      * a un donante SIN CAPACIDAD DE ADMIN atrapado en el 403 de la regla;
      * quien SÍ es owner/admin del hogar no llega a este `catch` (su propia
      * escritura pasa por `isTrusted(hid)`, sin tope).
+     * [UNCERTAIN]: la operación de acreditado al receptor falló con un error
+     * ambigüo (timeout de red, IOException) — el servidor pudo haber completado
+     * la escritura antes del timeout, así que NO se revierte el débito al
+     * donante para evitar duplicar puntos (panel v14, hallazgo 2).
      */
-    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND, TRANSFER_FAILED, ROLLBACK_FAILED, AMOUNT_EXCEEDS_LIMIT }
+    enum class DonateErrorReason { SELF, INVALID_AMOUNT, INSUFFICIENT_BALANCE, MEMBER_NOT_FOUND, TRANSFER_FAILED, ROLLBACK_FAILED, AMOUNT_EXCEEDS_LIMIT, UNCERTAIN }
 
     /** Traduce el error de dominio (sin dependencias de red) de [PointsRules] al tipo público de este repo. */
     private fun PointsRules.DonateError.toRepoReason(): DonateErrorReason = when (this) {
@@ -759,6 +763,13 @@ class MemberRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // Si error ambiguo (timeout/IoException): el servidor pudo haber
+            // completado la escritura al receptor antes de que el cliente
+            // detectara el fallo — NO revertir el débito al donante, o ambas
+            // partes ganarían puntos (panel v14, hallazgo 2).
+            if (e.errorCategory() == ErrorCategory.AMBIGUOUS) {
+                return DonateResult.Error(DonateErrorReason.UNCERTAIN)
+            }
             // Si `toMemberId` no es el propio donante y este no es
             // isTrusted(hid), firestore.rules rechaza el PATCH al documento
             // ajeno (403) — sin este catch, la excepción se propagaba sin

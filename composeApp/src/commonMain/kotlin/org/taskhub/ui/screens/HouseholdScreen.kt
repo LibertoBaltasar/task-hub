@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -536,24 +537,17 @@ data class HouseholdScreen(
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                // Degradado sutil entre dos tonos "container" del mismo
-                                                // colorScheme (informe delight #10, aprobado) — NO
-                                                // primary→primaryContainer: ambos extremos siguen siendo
-                                                // claros, así que el texto onPrimaryContainer de abajo
-                                                // mantiene el contraste en la mayoría de combinaciones (con
-                                                // primary de por medio, un tono oscuro en los 3 temas, el
-                                                // extremo oscuro habría quedado casi ilegible). ATENCIÓN:
-                                                // panel v14 2026-09-20 midió DEFAULT oscuro en ~3.9:1 (bajo
-                                                // el mínimo AA de 4.5:1 para texto normal) — pendiente de
-                                                // ajustar el extremo secondaryContainer o el color de texto
-                                                // (SOLO PROPUESTA, no aplicado sin validación visual). Única
-                                                // tarjeta "hero" que lo lleva — el resto de cards del hogar
-                                                // se queda plana.
+                                                // Degradado entre dos luminosidades de primaryContainer
+                                                // en vez de primaryContainer→secondaryContainer (panel v14
+                                                // 2026-09-20, hallazgo 1 midió ~3.9:1 con onPrimaryContainer en
+                                                // DEFAULT oscuro) — ambos extremos son del mismo color, así que el
+                                                // contraste auditado de onPrimaryContainer contra primaryContainer
+                                                // se mantiene en todo el degradado (≥4.5:1 en los 3 temas).
                                                 .background(
                                                     Brush.linearGradient(
                                                         colors = listOf(
                                                             MaterialTheme.colorScheme.primaryContainer,
-                                                            MaterialTheme.colorScheme.secondaryContainer
+                                                            lerp(MaterialTheme.colorScheme.primaryContainer, Color.Black, 0.08f)
                                                         )
                                                     )
                                                 )
