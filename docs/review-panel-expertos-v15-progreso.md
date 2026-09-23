@@ -31,7 +31,7 @@ válidos). Verificar contra código real antes de reportar.
 ## Estado de oleadas
 
 - [x] Oleada 1 (5): Estética(#1), Funcionalidad(#2), Accesibilidad(#3), UI/componentes(#4), UX(#5)
-- [ ] Oleada 2 (4): Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9)
+- [x] Oleada 2 (4): Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9)
 - [ ] Oleada 3 (4): Privacidad(#10), Rendimiento(#11), Red/offline/sync(#12), Cobertura pruebas(#13)
 - [ ] Consolidación informe final `docs/review-panel-expertos-v15-2026-09-24.md`
 - [ ] Aplicación de fixes seguros
@@ -140,9 +140,94 @@ confirman el mismo riesgo CRÍTICO de duplicación de puntos):**
 
 Pendiente de aplicar hasta cerrar todas las oleadas y consolidar.
 
-### Oleada 2
+### Oleada 2 (completada)
 
-(pendiente)
+**HALLAZGO ESTRELLA — convergencia de 4 especialistas independientes (#6, #7,
+#8, #9): `SecureStore.wasmJs.kt` (fix "cifrado" de a622bcd) tiene DOS bugs
+CRÍTICOS NUEVOS:**
+1. El AES-256-CTR casero NO es AES real — Seguridad (#9) lo verificó
+   ejecutándolo contra el vector de prueba oficial NIST SP800-38A y **falló**;
+   Programador senior (#6) localizó 3 bugs independientes en key-schedule
+   (Rcon combinado con OR en vez de XOR por precedencia de operadores JS),
+   ShiftRows (término que se anula a 0 por construcción) y MixColumns (byte
+   XOR espurio sin correspondencia en la matriz FIPS-197). Es autoconsistente
+   (roundtrip put/get funciona) pero la resistencia criptográfica real es
+   desconocida — probablemente muy inferior a AES genuino. Sin ningún test
+   (no existe `wasmJsTest` en el repo).
+2. `ephemeralKey` se regenera en cada carga de módulo/recarga de página, sin
+   persistir — `SettingsStore.kt` usa `SecureStore` para el access/refresh
+   token de Google Sign-In (sync de Calendar). Tras cualquier recarga en web,
+   se intenta descifrar con la clave nueva → basura silenciosa (CTR sin
+   autenticación, `TextDecoder` sin `fatal:true` no lanza) tratada como
+   token válido no-nulo, en vez de fallar limpio a `null`. Confirmado por
+   QA (#8) como regresión de disponibilidad, por Arquitectura (#7) como
+   contradicción del contrato de persistencia de `SecureStore`.
+
+**Veredicto de los 4 especialistas: el fix NO mejora la postura de
+seguridad de forma neta** (documenta "AES-256" falsamente) **y SÍ introduce
+una regresión funcional real** (pérdida/corrupción silenciosa de sesión web
+en cada F5). Recomendación unánime: migrar a `SubtleCrypto` nativo
+(AES-GCM, async/suspend) — SOLO PROPUESTA, refactor no trivial. Fix
+acotado y seguro identificado por #6 y #9: `TextDecoder('utf-8',
+{fatal:true})` en `jsAesCtrDecrypt` para que clave-incorrecta lance
+excepción → el `catch` Kotlin ya existente devuelve `null` limpio en vez de
+basura — candidato a APLICAR esta ronda (no arregla el AES roto ni la
+pérdida de persistencia, pero convierte corrupción silenciosa en fallo
+limpio y recuperable).
+
+**#6 Programador senior** — Ver hallazgo estrella arriba (bugs AES
+verificados línea a línea). Heredados: `TaskDetailContent` ~930 líneas
+SIGUE ABIERTO (creció desde ~888); duplicación helpers de fecha
+`TaskListScreen`/`CalendarScreen` SIGUE ABIERTO. Resto del diff de a622bcd
+(`ErrorCategory`/`FirestoreRepository`/`MemberRepository`) revisión limpia,
+`CancellationException` bien relanzada, sin `!!` nuevos.
+
+**#7 Arquitectura** — Ver hallazgo estrella arriba (ángulo arquitectónico:
+AES casero embebido en string JS es deuda técnica aislada, no revisable en
+diff normal, sin capa de test wasmJs). `FirestoreRepository` 1557→1608
+líneas (+51). `TaskScreenModel` sin cambios (1305, sigue sin `key` entre 5
+pantallas). `GoogleSignInResultHolder` sentinela `""`/`null` SIGUE ABIERTO,
+8 call-sites confirmados incl. Swift.
+
+**#8 QA/bugs** — CRÍTICO SIGUE ABIERTO (mitigado parcialmente): doble-tap
+verificado SIN vulnerabilidad (botón se deshabilita correctamente,
+`Dispatchers.Main.immediate`), pero **reintento manual tras
+`transfer_error_uncertain`/error AMBIGUOUS SÍ puede duplicar puntos** — el
+diálogo reactiva el botón "Confirmar" sin ninguna advertencia (agravado por
+la clave i18n inexistente) y sin invalidar caché (`MemberRepository.kt:555`
+`addMemberPoints` no invalida en el camino AMBIGUOUS, el saldo mostrado
+queda "congelado" reforzando la falsa sensación de que no pasó nada).
+Confirma (3ª vez, independiente) `transfer_error_uncertain` ausente de
+`AppStrings.kt` y `appreciateMember` sin el fix AMBIGUOUS. `extractDocId`
+verificado: NO enmascara errores (lanza `IllegalStateException` explícito) —
+descartado como hallazgo. Caché sin invalidar en `finally`: 28 call-sites
+reales (más que "~17" de v14), mayoría bajo riesgo salvo
+`MemberRepository.kt:555`.
+
+**#9 Seguridad** — Ver hallazgo estrella arriba (verificación empírica
+contra NIST SP800-38A, la evidencia más fuerte de toda la ronda). Heredados
+confirmados SIN cambios: `members/{mid}` auto-edición `totalPoints` sin
+tope (`firestore.rules`, CRÍTICO); `isPeerPointsTransfer` sin rate-limit
+(CRÍTICO) — ambos NO se editan (fuera de mandato). Verificado: el fix
+"no revertir en AMBIGUOUS" es puramente client-side, no amplía ningún
+permiso de `firestore.rules`, sin vector nuevo de inflación más allá de los
+2 heredados. CSV export YA RESUELTO (escapado correcto contra CWE-1236,
+`TaskCsvExporter.kt:59-62`). `PenaltyRules`/etc. huérfanos sin implicación
+de seguridad (solo deuda de documentación).
+
+**Fixes APLICABLES identificados en oleada 2:**
+5. `SecureStore.wasmJs.kt` `jsAesCtrDecrypt` — `TextDecoder('utf-8', {fatal: true})` para fallar limpio (→`null`) en vez de basura silenciosa ante clave incorrecta tras reload.
+6. `MemberRepository.kt` `addMemberPoints` (~línea 548-556) — invalidar caché también en el camino de error AMBIGUOUS (o envolver en `finally`), para no mostrar un saldo "congelado" engañoso.
+7. Corregir KDoc desactualizado de `PenaltyRules`/`AssignmentCompletionRules`/`TaskReconciliation` que afirma integración inexistente.
+
+**Confirmado por 3+ especialistas independientes (aplicar con alta
+confianza):**
+- Clave `transfer_error_uncertain` en `AppStrings.kt` (#2, #5, #8).
+- `appreciateMember` sin fix AMBIGUOUS (#2, #5, #8).
+
+**SOLO PROPUESTA (requiere refactor grande, no mecánico esta ronda):**
+- Migrar `SecureStore.wasmJs.kt` a `SubtleCrypto` nativo (AES-GCM, suspend) — el fix real del problema criptográfico y de persistencia.
+- `PointsBadge.gradientBrush` — Naturaleza oscuro sigue bajo WCAG AA (accesibilidad #3), requiere fórmula consciente del tema con validación visual.
 
 ### Oleada 3
 
