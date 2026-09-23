@@ -32,11 +32,102 @@ válidos). Verificar contra código real antes de reportar.
 
 - [x] Oleada 1 (5): Estética(#1), Funcionalidad(#2), Accesibilidad(#3), UI/componentes(#4), UX(#5)
 - [x] Oleada 2 (4): Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9)
-- [ ] Oleada 3 (4): Privacidad(#10), Rendimiento(#11), Red/offline/sync(#12), Cobertura pruebas(#13)
+- [x] Oleada 3 (4): Privacidad(#10), Rendimiento(#11), Red/offline/sync(#12), Cobertura pruebas(#13)
 - [ ] Consolidación informe final `docs/review-panel-expertos-v15-2026-09-24.md`
 - [ ] Aplicación de fixes seguros
 - [ ] Verificación build + jvmTest (XML real, --rerun-tasks, mínimo 273 tests, 0 fallos)
 - [ ] Commit final
+
+### Oleada 3 (completada)
+
+**#10 Privacidad/RGPD** — NUEVO (severidad real más alta de la ronda en esta
+área): cascada de "eliminar cuenta" (`GoogleAuthManager.deleteAccount()`,
+`ui/models/GoogleAuthManager.kt:223-239`) itera SOLO
+`householdStore.getSavedHouseholds()` (caché local), que depende de
+`syncHouseholdsToCloud()` — documentado como "aditivo, tolerante a fallos,
+nunca poda" — para reflejar la membresía real. Si esa sync nunca completó
+(carrera conocida en `reconcileHouseholds`), un hogar queda invisible para
+el borrado y el UID del usuario permanece indefinidamente en
+`taskHistory`/`rewardRedemptions`/chat de ese hogar — incumple RGPD art.
+17 pese a lo que promete `privacy.html` §6. SOLO PROPUESTA (requiere
+resolver membresía desde servidor, no caché local). Heredados sin cambios:
+UMP/CMP ausente (SIGUE ABIERTO, PROPUESTA), scope OAuth Calendar demasiado
+amplio (SIGUE ABIERTO, PROPUESTA, requiere re-consentimiento), gating de
+edad ausente (SIGUE ABIERTO, decisión de producto ya tomada). NUEVO menor:
+interstitial de AdMob se muestra a perfiles `role="child"` sin comprobación
+(`TaskScreenModel.kt:600`) — condicionado a que se confirme que el ítem del
+checklist sigue vigente (la "vista infantil" que lo justificaba no existe).
+Analytics sin PII, Crashlytics, purga 90 días y anonimización al
+salir/expulsar: verificados correctos, sin hallazgo.
+
+**#11 Rendimiento** — Confirma hallazgo MENOR heredado de v14 (gradientes
+sin `remember` en `PointsBadge.kt:109-111` y `HouseholdScreen.kt:546-553`,
+a622bcd solo cambió colores no memoización) y lo AGRAVA: `HouseholdScreen`
+lee `newMessageText` como `StateFlow` en el nivel superior de `Content()`
+(833 líneas), así que cada tecla escrita en el chat recompone toda la
+pantalla incluidos los `Brush.linearGradient` inline — APLICABLE el fix de
+memoización con `remember`, SOLO PROPUESTA mover `newMessageText` a estado
+local. NUEVO: poll de "no leídas" cada 30s trae hasta 300 documentos
+completos sin atajo de caché en camino feliz (`HouseholdScreen.kt:210-219`,
+`NotificationRepository.kt:25,134-151`) — SOLO PROPUESTA (subir intervalo,
+agregación server-side o contador denormalizado). NUEVO: splash de 1.5s
+fijo no se solapa con bootstrap real de Koin/auth/household (`App.kt:88-104`,
+`SplashScreen.kt:58-61`) — SOLO PROPUESTA (reordenar arranque). Verificado
+sin hallazgo: `AnimatedCounter`/`ConfettiOverlay` bien memoizados,
+`groupTasksByStatus`/`tasksByDate` con `remember` correcto,
+`NotificationPollWorker` ya optimizado, tamaño de build sano.
+
+**#12 Red/offline/sync** — Explica la CAUSA RAÍZ del hallazgo QA de oleada
+2: el fix AMBIGUOUS de a622bcd camufla el doble-gasto pero no lo resuelve
+— no existe ningún mecanismo de reconciliación posterior para
+donar/canjear/agradecer (`TaskReconciliation` existe pero está confirmado
+desconectado de este flujo, `TaskScreenModel.kt:282-291`); contrasta con
+`completeRecurringTask` que SÍ está resuelto de raíz vía Cloud Function
+transaccional con precondición server-side (`FirestoreRepository.kt:1082-1164`)
+— SOLO PROPUESTA migrar donar/canjear/agradecer al mismo patrón. NUEVO
+APLICABLE: `redeemReward` reproduce el mismo bug de caché "congelada" que
+#8 encontró en `addMemberPoints` pero en un call-site que ese fix no cubre
+— `FirestoreRepository.kt:1563-1564` no invalida `taskCache` antes de
+relanzar en AMBIGUOUS, y `MemberScreenModel.kt:327-331` (catch genérico de
+`redeemReward`) no llama `loadMembers` salvo en éxito. NUEVO: `isOnline()`
+casi sin usar (1 solo call-site en todo el repo), ninguna operación de
+puntos comprueba conectividad antes de intentar — SOLO PROPUESTA. SIGUE
+ABIERTO sin cambios: concurrencia optimista ausente en
+`updateTask`/`updateSubtasks` (`TaskRepository.kt:705-710,746-751`).
+
+**#13 Cobertura de pruebas** — 273 tests sin cambios desde v14, `a622bcd`
+no añadió ninguna línea de test pese a tocar `ErrorCategory.kt` y
+`SecureStore.wasmJs.kt` (ambos ya señalados como huecos CRÍTICOS en v14).
+NUEVO: `MemberScreenModelTest.kt` prueba los 7 valores previos de
+`DonateErrorReason` uno a uno pero NO el 8º (`UNCERTAIN`, añadido por
+a622bcd) — hueco de menor esfuerzo/mayor retorno del informe. Confirma
+`appreciateMember` sin ninguna rama AMBIGUOUS ni siquiera a nivel de tipo
+(`AppreciateErrorReason` no tiene caso `UNCERTAIN`, a diferencia de
+`DonateErrorReason`). SIGUE ABIERTO: `ErrorCategory.kt` sin test (lógica
+pura, trivial de testear, cero cobertura); `SecureStore.wasmJs.kt` sin
+ningún `wasmJsTest` en el repo; `*Repository.kt` con I/O real 0/8 con
+test (sin `MockEngine` de Ktor en el repo); `OverdueSection`/
+`isTaskOverdueOverall` sin test; helpers de fecha duplicados sin test;
+`PointsBadge.gradientBrush` sin test de contraste WCAG automatizado (la
+regresión de Naturaleza oscuro se detectó por cálculo manual, no test).
+Solo informa, sin cambios aplicados.
+
+**Fixes APLICABLES nuevos identificados en oleada 3:**
+8. `PointsBadge.kt:109-111` — memoizar `gradientBrush` con `remember(base)`.
+9. `HouseholdScreen.kt:546-553` — memoizar el `Brush.linearGradient` del hero card con `remember`.
+10. `FirestoreRepository.kt:1563-1564` — invalidar `taskCache` antes de relanzar en el catch AMBIGUOUS de `redeemReward`.
+11. `MemberScreenModel.kt:327-331` — llamar `loadMembers(householdId)` también en el catch genérico de `redeemReward`.
+
+**Confirmado CRÍTICO por 4+ especialistas independientes a través de las 3
+oleadas (#2, #5, #8, #12) — se decide APLICAR esta ronda pese a no ser
+"mecánico de una línea", por ser el mismo patrón ya validado en
+`donatePoints`:**
+- `appreciateMember` sin fix AMBIGUOUS→UNCERTAIN.
+
+**Confirmado como bug de accesibilidad WCAG AA (#3) que sigue abierto tras
+el propio fix de a622bcd — se decide APLICAR recalibración dirigida por
+luminancia relativa en vez de dirección fija hacia negro:**
+- `PointsBadge.gradientBrush` — Naturaleza oscuro.
 
 ## Hallazgos SOLO PROPUESTA de v14 a verificar contra código real (primer trabajo, distribuido por experto)
 
