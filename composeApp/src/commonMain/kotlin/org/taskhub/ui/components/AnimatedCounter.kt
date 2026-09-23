@@ -33,8 +33,8 @@ import androidx.compose.ui.text.font.FontWeight
  * forma progresiva (400ms, `FastOutSlowInEasing`) y, solo cuando [value]
  * **sube**, añade un pulso de escala 1→1.08→1 (spring
  * `DampingRatioMediumBouncy`) — bajar puntos (donar/canjear) no es un momento
- * a celebrar, así que no pulsa. Con `shouldReduceMotion()` activo, el valor
- * se muestra directo, sin count-up ni pulso.
+ * a celebrar, así que no pulsa. Con "Modo simple" o reduce-motion del
+ * sistema activos, el valor se muestra directo, sin count-up ni pulso.
  */
 @Composable
 fun AnimatedCounter(
@@ -44,7 +44,10 @@ fun AnimatedCounter(
     modifier: Modifier = Modifier,
     fontWeight: FontWeight? = null
 ) {
-    val reduceMotion = shouldReduceMotion()
+    // effectsEnabled ya incluye !shouldReduceMotion(); usarlo directo (en vez
+    // de shouldReduceMotion() suelto) hace que "Modo simple" también desactive
+    // esta animación, como prometen los ajustes (panel v15, oleada 1).
+    val reduceMotion = !effectsEnabled(EffectCategory.ANIMATIONS)
     val animatedValue by animateIntAsState(
         targetValue = value,
         animationSpec = if (reduceMotion) tween(0) else tween(400, easing = FastOutSlowInEasing),

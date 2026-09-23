@@ -329,6 +329,12 @@ class MemberScreenModel(
                     e.toUserMessage(settingsStore.getLanguage(), "reward_error_redeeming")
                 )
                 buzz(HapticKind.ERROR)
+                // Recargar el saldo tras CUALQUIER error (no solo éxito): un error
+                // ambiguo (timeout) puede haber descontado puntos igualmente en el
+                // servidor — sin esto, el saldo mostrado queda "congelado" al valor
+                // previo y refuerza la falsa sensación de que la operación no tuvo
+                // efecto (panel v15, oleada 3, Red/offline).
+                loadMembers(householdId)
             }
         }
     }
@@ -433,6 +439,7 @@ internal fun appreciateErrorKey(reason: MemberRepository.AppreciateErrorReason):
     MemberRepository.AppreciateErrorReason.LIMIT_EXCEEDED -> "appreciate_error_limit"
     MemberRepository.AppreciateErrorReason.MEMBER_NOT_FOUND -> "transfer_error_member_not_found"
     MemberRepository.AppreciateErrorReason.TRANSFER_FAILED -> "transfer_error_failed"
+    MemberRepository.AppreciateErrorReason.UNCERTAIN -> "transfer_error_uncertain"
 }
 
 /** Traduce el motivo de fallo de "donar" a una clave de i18n. Ver [appreciateErrorKey]. */

@@ -54,6 +54,7 @@ import org.taskhub.network.models.TaskResponse
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
+import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.StatusDot
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.rememberHouseholdName
@@ -325,10 +326,11 @@ data class CalendarScreen(
                 when (val state = listState) {
                     is TaskListUiState.Loading -> {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp)
                         ) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            ShimmerList(count = 5, itemHeight = 88.dp)
                         }
                     }
 

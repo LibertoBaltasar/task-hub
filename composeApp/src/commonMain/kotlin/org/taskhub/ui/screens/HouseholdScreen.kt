@@ -544,12 +544,16 @@ data class HouseholdScreen(
                                                 // contraste auditado de onPrimaryContainer contra primaryContainer
                                                 // se mantiene en todo el degradado (≥4.5:1 en los 3 temas).
                                                 .background(
-                                                    Brush.linearGradient(
-                                                        colors = listOf(
-                                                            MaterialTheme.colorScheme.primaryContainer,
-                                                            lerp(MaterialTheme.colorScheme.primaryContainer, Color.Black, 0.08f)
-                                                        )
-                                                    )
+                                                    MaterialTheme.colorScheme.primaryContainer.let { primaryContainer ->
+                                                        remember(primaryContainer) {
+                                                            Brush.linearGradient(
+                                                                colors = listOf(
+                                                                    primaryContainer,
+                                                                    lerp(primaryContainer, Color.Black, 0.08f)
+                                                                )
+                                                            )
+                                                        }
+                                                    }
                                                 )
                                                 .padding(20.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally

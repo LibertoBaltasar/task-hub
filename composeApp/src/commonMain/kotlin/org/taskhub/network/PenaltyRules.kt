@@ -1,7 +1,10 @@
 /**
  * Reglas puras (sin I/O) de puntuación al completar tareas: puntualidad y
- * penalización por retraso. Usado por [FirestoreRepository]/[TaskRepository]
- * al resolver los puntos a otorgar en `completeAssignment`.
+ * penalización por retraso. Huérfana: `completeAssignment` delega ahora en
+ * la Cloud Function `completeAssignment`/`completeRecurringTask` (lógica
+ * server-side, panel v10-v12), así que ningún call-site del cliente invoca
+ * estas reglas hoy — confirmado sin referencias fuera de este archivo y su
+ * test (panel v15, oleada 2, hallazgo de KDoc desactualizado).
  */
 package org.taskhub.network
 
@@ -13,7 +16,8 @@ import org.taskhub.network.models.TaskResponse
  *
  * Extraído de `FirestoreRepository` (donde vivía como métodos `private`)
  * para poder testear esta lógica de negocio sin depender de red — panel v4,
- * Experto 13, hueco #1.
+ * Experto 13, hueco #1. Ver KDoc de cabecera del archivo: actualmente sin
+ * call-sites de producción.
  */
 object PenaltyRules {
 

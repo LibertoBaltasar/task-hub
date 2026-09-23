@@ -558,6 +558,18 @@ class MemberRepository(
                 val isConflict = e.code == "FAILED_PRECONDITION" || e.code == "ABORTED"
                 if (!isConflict || attempt == OPTIMISTIC_WRITE_MAX_RETRIES - 1) throw e
                 // Otro escritor ganó la carrera: reintentar con el valor fresco.
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Timeout/IOException (AMBIGUOUS): el servidor pudo haber completado
+                // el PATCH pese al fallo visto por el cliente — invalidar la caché
+                // para que la siguiente lectura muestre el saldo real en vez de un
+                // valor "congelado" que refuerza la falsa sensación de que la
+                // operación no tuvo efecto (panel v15, oleada 2/3).
+                if (e.errorCategory() == ErrorCategory.AMBIGUOUS) {
+                    taskCache.clearMembers(householdId)
+                }
+                throw e
             }
         }
     }
@@ -572,8 +584,14 @@ class MemberRepository(
         data class Error(val reason: AppreciateErrorReason) : AppreciateResult()
     }
 
-    /** Motivos por los que [appreciateMember] puede rechazar la operación sin lanzar. */
-    enum class AppreciateErrorReason { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED, MEMBER_NOT_FOUND, TRANSFER_FAILED }
+    /**
+     * Motivos por los que [appreciateMember] puede rechazar la operación sin lanzar.
+     * [UNCERTAIN]: el acreditado al receptor falló con un error ambiguo (timeout de
+     * red, IOException) — el servidor pudo haber completado la escritura antes del
+     * timeout; a diferencia de [TRANSFER_FAILED], reintentar la acción puede duplicar
+     * los puntos del receptor (mismo patrón que [DonateErrorReason.UNCERTAIN], panel v15).
+     */
+    enum class AppreciateErrorReason { SELF, INVALID_AMOUNT, LIMIT_EXCEEDED, MEMBER_NOT_FOUND, TRANSFER_FAILED, UNCERTAIN }
 
     /** Traduce el error de dominio (sin dependencias de red) de [PointsRules] al tipo público de este repo. */
     private fun PointsRules.AppreciateError.toRepoReason(): AppreciateErrorReason = when (this) {
@@ -701,7 +719,13 @@ class MemberRepository(
                     addMemberPoints(householdId, toMemberId, amount)
                 } catch (e: CancellationException) {
                     throw e
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    // Ver KDoc de [AppreciateErrorReason.UNCERTAIN]: un timeout aquí no
+                    // permite saber si el receptor ya fue acreditado (panel v15, mismo
+                    // patrón que el fix de [donatePoints] para AMBIGUOUS).
+                    if (e.errorCategory() == ErrorCategory.AMBIGUOUS) {
+                        return AppreciateResult.Error(AppreciateErrorReason.UNCERTAIN)
+                    }
                     return AppreciateResult.Error(AppreciateErrorReason.TRANSFER_FAILED)
                 }
                 return AppreciateResult.Ok(

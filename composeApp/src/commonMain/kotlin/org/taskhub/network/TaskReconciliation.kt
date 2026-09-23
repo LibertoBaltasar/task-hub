@@ -1,6 +1,10 @@
-// Lógica pura (sin I/O) de detección de tareas "completadas sin puntos" —
-// ver KDoc de [FirestoreRepository.reconcileMissingTaskPoints] para el
-// mecanismo de reparación completo y el fallo que soluciona.
+// Lógica pura (sin I/O) de detección de tareas "completadas sin puntos".
+// Huérfana en el cliente (sin call-sites fuera de su propio test): la
+// reparación real la hace la Cloud Function `reconcileMissingTaskPoints`
+// (`functions/src/reconcileMissingTaskPoints.ts`, job programado en backend),
+// no este objeto — confirmado por [org.taskhub.ui.models.TaskScreenModel],
+// que documenta que la reconciliación ya no se dispara desde el cliente
+// (panel v15, oleada 2, hallazgo de KDoc desactualizado).
 package org.taskhub.network
 
 import org.taskhub.network.models.TaskHistoryResponse

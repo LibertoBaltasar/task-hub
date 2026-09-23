@@ -10,12 +10,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.taskhub.ui.theme.semanticColors
@@ -67,10 +69,11 @@ fun PointsBadge(
 ) {
     val (container, content) = badgeToneColors(tone)
     if (gradient) {
+        val brush = remember(container, content) { gradientBrush(container, content) }
         Box(
             modifier = modifier
                 .clip(MaterialTheme.shapes.small)
-                .background(gradientBrush(container))
+                .background(brush)
         ) {
             Text(
                 text = text,
@@ -103,12 +106,23 @@ fun PointsBadge(
  *
  * Antes interpolaba también hacia [Color.White] (0.18f), lo que lavaba el
  * extremo claro y en temas claros dejaba el contraste con `content` por
- * debajo de 4.5:1 (panel v14 2026-09-20, hallazgo 1). Ahora ambos extremos
- * son más oscuros que [base], preservando el contraste auditado.
+ * debajo de 4.5:1 (panel v14 2026-09-20, hallazgo 1). Después (panel v15,
+ * a622bcd) se interpoló siempre hacia [Color.Black], lo que arregló 5/6
+ * combinaciones tema×modo pero rompió "Naturaleza oscuro" (`tertiary` =
+ * `Green200`, `onTertiary` = `Green900`: texto OSCURO sobre fondo CLARO,
+ * al revés que el resto — oscurecer further el degradado REDUCE el
+ * contraste con el texto en vez de aumentarlo). Ahora la dirección del
+ * lerp depende de la luminancia relativa de [content] frente a [base]:
+ * si el texto es más claro que el fondo (caso común: texto claro sobre
+ * fondo oscuro), oscurecer further el fondo; si el texto es más oscuro
+ * (caso [NaturalezaDarkColorScheme]), aclarar further el fondo — en
+ * ambos casos el degradado se aleja de la luminancia del texto, nunca se
+ * acerca (panel v15, hallazgo de accesibilidad #3).
  */
-private fun gradientBrush(base: Color): Brush = Brush.linearGradient(
-    colors = listOf(lerp(base, Color.Black, 0.14f), lerp(base, Color.Black, 0.04f))
-)
+private fun gradientBrush(base: Color, content: Color): Brush {
+    val target = if (content.luminance() > base.luminance()) Color.Black else Color.White
+    return Brush.linearGradient(colors = listOf(lerp(base, target, 0.14f), lerp(base, target, 0.04f)))
+}
 
 /**
  * Chip de estadística reutilizable: unifica los antiguos `InfoBadge`

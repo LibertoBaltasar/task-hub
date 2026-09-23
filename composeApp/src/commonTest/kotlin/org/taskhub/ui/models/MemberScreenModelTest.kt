@@ -22,6 +22,7 @@ class MemberScreenModelTest {
         assertEquals("appreciate_error_limit", appreciateErrorKey(MemberRepository.AppreciateErrorReason.LIMIT_EXCEEDED))
         assertEquals("transfer_error_member_not_found", appreciateErrorKey(MemberRepository.AppreciateErrorReason.MEMBER_NOT_FOUND))
         assertEquals("transfer_error_failed", appreciateErrorKey(MemberRepository.AppreciateErrorReason.TRANSFER_FAILED))
+        assertEquals("transfer_error_uncertain", appreciateErrorKey(MemberRepository.AppreciateErrorReason.UNCERTAIN))
     }
 
     @Test
@@ -33,6 +34,7 @@ class MemberScreenModelTest {
         assertEquals("transfer_error_failed", donateErrorKey(MemberRepository.DonateErrorReason.TRANSFER_FAILED))
         assertEquals("transfer_error_rollback_failed", donateErrorKey(MemberRepository.DonateErrorReason.ROLLBACK_FAILED))
         assertEquals("donate_error_exceeds_limit", donateErrorKey(MemberRepository.DonateErrorReason.AMOUNT_EXCEEDS_LIMIT))
+        assertEquals("transfer_error_uncertain", donateErrorKey(MemberRepository.DonateErrorReason.UNCERTAIN))
     }
 
     @Test

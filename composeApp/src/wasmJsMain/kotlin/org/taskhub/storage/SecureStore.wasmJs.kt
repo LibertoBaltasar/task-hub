@@ -139,7 +139,13 @@ private external fun jsAesCtrEncrypt(key: ByteArray, plainText: String): String
         for (let j=0;j<16&&i+j<D.length;j++) out[i+j]=D[i+j]^(ks[j>>>2]>>>(24-(j&3)*8)&255);
         for (let j=15;j>=12;j--) if (++ctr[j]!==0) break;
     }
-    return new TextDecoder().decode(out);
+    // fatal:true: una clave incorrecta (p. ej. tras recargar la página, con
+    // una ephemeralKey nueva) produce bytes que casi nunca son UTF-8 válido —
+    // sin fatal:true, TextDecoder los reemplaza en silencio por el carácter
+    // U+FFFD y devuelve basura como si fuera un valor real; con fatal:true
+    // lanza, y el catch de Kotlin en getString() ya existente la convierte en
+    // `null` limpio (panel v15, oleada 2, hallazgo estrella).
+    return new TextDecoder('utf-8', {fatal: true}).decode(out);
 }""")
 private external fun jsAesCtrDecrypt(key: ByteArray, encB64: String): String
 

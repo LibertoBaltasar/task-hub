@@ -33,10 +33,10 @@ válidos). Verificar contra código real antes de reportar.
 - [x] Oleada 1 (5): Estética(#1), Funcionalidad(#2), Accesibilidad(#3), UI/componentes(#4), UX(#5)
 - [x] Oleada 2 (4): Programador senior(#6), Arquitectura(#7), QA/bugs(#8), Seguridad(#9)
 - [x] Oleada 3 (4): Privacidad(#10), Rendimiento(#11), Red/offline/sync(#12), Cobertura pruebas(#13)
-- [ ] Consolidación informe final `docs/review-panel-expertos-v15-2026-09-24.md`
-- [ ] Aplicación de fixes seguros
-- [ ] Verificación build + jvmTest (XML real, --rerun-tasks, mínimo 273 tests, 0 fallos)
-- [ ] Commit final
+- [x] Consolidación informe final `docs/review-panel-expertos-v15-2026-09-24.md`
+- [x] Aplicación de fixes seguros (14 cambios)
+- [x] Verificación build + jvmTest (XML real, --rerun-tasks: 273 tests, 0 fallos)
+- [x] Commit final
 
 ### Oleada 3 (completada)
 

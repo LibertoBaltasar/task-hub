@@ -42,6 +42,7 @@ import kotlinx.datetime.*
 import org.taskhub.ui.components.EffectCategory
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.StatusDot
+import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.StatChip
 import org.taskhub.ui.components.effectsEnabled
 import org.taskhub.ui.i18n.AppStrings
@@ -74,10 +75,11 @@ internal fun StatsBody(householdId: String, memberId: String, statsModel: StatsS
     when {
                     uiState is StatsUiState.Loading || uiState is StatsUiState.Idle -> {
                         Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(24.dp)
                         ) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            ShimmerList(count = 4, itemHeight = 88.dp)
                         }
                     }
                     uiState is StatsUiState.Error -> {
