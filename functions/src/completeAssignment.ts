@@ -7,7 +7,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, REGION } from "./admin.js";
-import { requireAuth, loadActiveMember } from "./auth.js";
+import { requireAuth, loadActiveMember, loadHouseholdTimezone } from "./auth.js";
 import { resolveCompletionOutcome } from "./penalty.js";
 import { resolveNextAssignmentDecision } from "./rules.js";
 import { calculateNextDueDate, effectiveDueDateForAssignment } from "./completionHelpers.js";
@@ -53,14 +53,15 @@ export const completeAssignment = onCall<CompleteAssignmentRequest, Promise<Comp
       if (assignment.status !== "assigned") throw new HttpsError("aborted", "conflict");
 
       await loadActiveMember(tx, householdId, assignment.memberId);
+      const tz = await loadHouseholdTimezone(tx, householdId);
 
       const siblingsSnap = await tx.get(
         db.collection(`households/${householdId}/tasks/${taskId}/assignments`).where("status", "==", "assigned")
       );
 
-      const effectiveDueDate = effectiveDueDateForAssignment(task, assignment.dueDate);
+      const effectiveDueDate = effectiveDueDateForAssignment(task, assignment.dueDate, tz);
       const outcome = resolveCompletionOutcome(task, effectiveDueDate, now);
-      const nextDueDate = calculateNextDueDate(task, now);
+      const nextDueDate = calculateNextDueDate(task, now, tz);
 
       const siblings = siblingsSnap.docs.map((d) => ({ ref: d.ref, data: d.data() as TaskAssignmentDoc }));
 

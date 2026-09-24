@@ -67,7 +67,8 @@ object FirestoreParsers {
             createdAt = f["createdAt"]?.integerValue?.toLongOrNull() ?: 0L,
             updatedAt = f["updatedAt"]?.integerValue?.toLongOrNull() ?: 0L,
             isPersonal = f["isPersonal"]?.booleanValue ?: false,
-            ownerId = f["ownerId"]?.stringValue ?: ""
+            ownerId = f["ownerId"]?.stringValue ?: "",
+            timezone = f["timezone"]?.stringValue
         )
     }
 

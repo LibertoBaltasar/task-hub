@@ -953,6 +953,18 @@ data class EditTaskScreen(
                                     )
                                 }
                             }
+                            // D2 (2026-09-24): fechas pasadas se permiten (no se bloquean,
+                            // p.ej. para registrar tareas hechas fuera de plazo), pero se
+                            // avisa para que no pase desapercibido.
+                            if (deadlineDay.isValidDateFormat() && isPastDate(deadlineDay)) {
+                                item {
+                                    Text(
+                                        text = s("task_past_due_warning"),
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
                         }
 
                         // ── Rotación de asignación (solo tiene sentido con frecuencia

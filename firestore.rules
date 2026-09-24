@@ -502,12 +502,27 @@ service cloud.firestore {
       // acreditar puntos a OTRO miembro, acotado a solo `totalPoints`, solo
       // al alza y con un tope por escritura — nunca a admin/owner por sí
       // sola (eso lo sigue cubriendo isTrusted arriba).
-      allow update: if isTrusted(hid)
-        || (
-          request.auth.uid == mid
-          && request.resource.data.role == resource.data.role
+      allow update: if (
+          isTrusted(hid)
+          || (
+            request.auth.uid == mid
+            && request.resource.data.role == resource.data.role
+          )
+          || isPeerPointsTransfer(hid, mid)
         )
-        || isPeerPointsTransfer(hid, mid);
+        // D10 (2026-09-24): tope de saldo — ninguna escritura (ni siquiera de
+        // owner/admin) puede dejar totalPoints por encima de 100_000. No es
+        // un límite de producto real (nadie debería acercarse ni de lejos),
+        // es una cota de seguridad ante bugs de cliente o abuso del canal de
+        // "donar/agradecer" (isPeerPointsTransfer solo topa el delta de UNA
+        // escritura, +1000, no el saldo acumulado).
+        && request.resource.data.get('totalPoints', 0) <= 100000
+        // D10: rate-limit básico del presupuesto semanal de agradecimientos —
+        // mismo tope que WEEKLY_APPRECIATION_BUDGET en PointsRules.kt (50).
+        // Sin esto, el propio dueño del documento podía escribir
+        // `appreciationGiven` arbitrariamente alto: el presupuesto semanal
+        // hoy solo lo hace respetar el cliente, no las reglas.
+        && request.resource.data.get('appreciationGiven', 0) <= 50;
       // El propio dueño del documento también puede borrarlo — es la ruta que
       // usa [FirestoreRepository.leaveHousehold] (abandonar hogar / eliminar
       // cuenta) para borrar SU PROPIO miembro. Sin esta cláusula, cualquier

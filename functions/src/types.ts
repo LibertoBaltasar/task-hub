@@ -61,6 +61,13 @@ export interface MemberDoc {
   leftAt: number;
 }
 
+/** Subconjunto de `households/{hid}`. */
+export interface HouseholdDoc {
+  ownerId: string;
+  /** IANA (ej. "Europe/Madrid"). Opcional: hogares creados antes de D1 no lo tienen — fallback a `DEFAULT_TZ`. */
+  timezone?: string | null;
+}
+
 /** Decisión de a quién asignar la siguiente ocurrencia, y si hace falta crearla. */
 export interface NextAssignmentDecision {
   shouldCreate: boolean;

@@ -96,8 +96,18 @@ fun App(
         val settingsStore = koinInject<SettingsStore>()
 
         if (showSplash) {
+            // D9 (2026-09-24): el splash debe respetar el tema guardado (Default/
+            // Naturaleza/Minimal), no una paleta Teal/Coral fija — se resuelve aquí
+            // igual que `themeType` más abajo porque `LocalAppSettings` aún no
+            // está disponible en esta fase.
+            val splashThemeType = when (settingsStore.getTheme()) {
+                "NATURALEZA" -> TaskHubThemeType.NATURALEZA
+                "MINIMAL" -> TaskHubThemeType.MINIMAL
+                else -> TaskHubThemeType.DEFAULT
+            }
             SplashScreen(
                 lang = settingsStore.getLanguage(),
+                themeType = splashThemeType,
                 onFinished = { showSplash = false }
             )
             return@KoinApplication

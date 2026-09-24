@@ -1012,6 +1012,18 @@ data class CreateTaskScreen(
                                     )
                                 }
                             }
+                            // D2 (2026-09-24): fechas pasadas se permiten (no se bloquean,
+                            // p.ej. para registrar tareas hechas fuera de plazo), pero se
+                            // avisa para que no pase desapercibido.
+                            if (deadlineDay.isValidDateFormat() && isPastDate(deadlineDay)) {
+                                item {
+                                    Text(
+                                        text = s("task_past_due_warning"),
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
                         }
 
                         // ── Rotación de asignación (solo tiene sentido con frecuencia
@@ -1462,6 +1474,22 @@ private val TIME_FORMAT_REGEX = Regex("""(\d{2}):(\d{2})""")
 /** Comprueba el formato literal aaaa-mm-dd (no valida que la fecha exista). */
 internal fun String.isValidDateFormat(): Boolean =
     DATE_FORMAT_REGEX.matches(this)
+
+/**
+ * D2 (2026-09-24): `true` si [dateStr] (aaaa-mm-dd, se asume ya válida vía
+ * [isValidDateFormat]) es anterior al día de hoy en la zona horaria local.
+ * Solo se usa para mostrar un aviso — las fechas pasadas SÍ se permiten
+ * guardar (p.ej. registrar una tarea hecha fuera de plazo).
+ */
+internal fun isPastDate(dateStr: String): Boolean {
+    val parts = dateStr.split("-")
+    val year = parts.getOrNull(0)?.toIntOrNull() ?: return false
+    val month = parts.getOrNull(1)?.toIntOrNull() ?: return false
+    val day = parts.getOrNull(2)?.toIntOrNull() ?: return false
+    val selected = LocalDate(year, month, day)
+    val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
+    return selected < today
+}
 
 /** Valida formato HH:mm y rango real de hora/minuto (evita crash de LocalDateTime, ver comentario abajo). */
 internal fun String.isValidTimeFormat(): Boolean {

@@ -30,6 +30,14 @@ import androidx.compose.ui.graphics.Color
  *   error induciría a error sobre la gravedad real de la acción (panel v4,
  *   UI/Componentes #2).
  */
+// R9 (2026-09-24): Escape ya cierra este diálogo (y cualquier `AlertDialog`/
+// `Dialog` de Compose Multiplatform) en JVM desktop sin código adicional —
+// `DialogProperties.dismissOnBackPress` (true por defecto, no se pisa aquí
+// ni en HouseholdDialogs.kt) hace que el `Dialog` común detecte `Key.Escape`
+// e invoque `onDismissRequest` (verificado en el bytecode de
+// `androidx.compose.ui.window.Dialog_skikoKt`, la implementación real del
+// `Dialog` común en desktop). Añadir un `onKeyEvent`/`BackHandler` propio
+// sería una guarda redundante que nunca se dispararía primero.
 @Composable
 fun DestructiveConfirmDialog(
     title: String,

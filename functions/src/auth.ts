@@ -12,7 +12,8 @@
 import type { Transaction } from "firebase-admin/firestore";
 import { HttpsError } from "firebase-functions/v2/https";
 import { db } from "./admin.js";
-import { MemberDoc } from "./types.js";
+import { HouseholdDoc, MemberDoc } from "./types.js";
+import { DEFAULT_TZ } from "./rules.js";
 
 /** `context.auth != null` — sin esto no hay `uid` que validar contra el hogar. */
 export function requireAuth(uid: string | undefined): string {
@@ -27,6 +28,17 @@ export async function loadActiveMember(tx: Transaction, householdId: string, mem
   const data = snap.data() as MemberDoc;
   if ((data.leftAt ?? 0) !== 0) throw new HttpsError("permission-denied", "member-not-active");
   return data;
+}
+
+/**
+ * TZ IANA del hogar (D1: `households/{hid}.timezone`) dentro de la
+ * transacción, con fallback a `DEFAULT_TZ` si el hogar no existe o el campo
+ * no está poblado (hogares creados antes de D1).
+ */
+export async function loadHouseholdTimezone(tx: Transaction, householdId: string): Promise<string> {
+  const householdSnap = await tx.get(db.doc(`households/${householdId}`));
+  const data = householdSnap.data() as HouseholdDoc | undefined;
+  return data?.timezone || DEFAULT_TZ;
 }
 
 /** `isOwner(hid) || isAdminMember(hid)` — ver `firestore.rules`. */

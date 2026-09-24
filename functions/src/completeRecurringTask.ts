@@ -15,9 +15,9 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, REGION } from "./admin.js";
-import { requireAuth, loadActiveMember } from "./auth.js";
+import { requireAuth, loadActiveMember, loadHouseholdTimezone } from "./auth.js";
 import { resolveCompletionOutcome } from "./penalty.js";
-import { resolveNextAssignmentDecision, DEFAULT_TZ } from "./rules.js";
+import { resolveNextAssignmentDecision } from "./rules.js";
 import { calculateNextDueDate, effectiveDueDateForTask } from "./completionHelpers.js";
 import { epochToLocalDate, compareLocalDate } from "./dates.js";
 import { TaskAssignmentDoc, TaskDoc } from "./types.js";
@@ -72,6 +72,7 @@ export const completeRecurringTask = onCall<CompleteRecurringTaskRequest, Promis
       await loadActiveMember(tx, householdId, uid);
       await loadActiveMember(tx, householdId, memberId);
       const memberRef = db.doc(`households/${householdId}/members/${memberId}`);
+      const tz = await loadHouseholdTimezone(tx, householdId);
 
       const assignmentsSnap = await tx.get(
         db.collection(`households/${householdId}/tasks/${taskId}/assignments`).where("status", "==", "assigned")
@@ -97,19 +98,20 @@ export const completeRecurringTask = onCall<CompleteRecurringTaskRequest, Promis
       // ventana de "atrasada") siguen siendo responsabilidad del cliente
       // (ver cabecera de `rules.ts`), pero este chequeo mínimo —no se puede
       // volver a completar la MISMA tarea el MISMO día de calendario (zona
-      // `DEFAULT_TZ`)— acota el abuso a como máximo 1 otorgamiento por
+      // del hogar, D1: `households/{hid}.timezone`, fallback `DEFAULT_TZ`)—
+      // acota el abuso a como máximo 1 otorgamiento por
       // tarea y día, cerrando el vector de farming ilimitado.
       if (task.lastCompletedDate != null) {
-        const lastLocalDate = epochToLocalDate(task.lastCompletedDate, DEFAULT_TZ);
-        const nowLocalDate = epochToLocalDate(now, DEFAULT_TZ);
+        const lastLocalDate = epochToLocalDate(task.lastCompletedDate, tz);
+        const nowLocalDate = epochToLocalDate(now, tz);
         if (compareLocalDate(lastLocalDate, nowLocalDate) === 0) {
           throw new HttpsError("failed-precondition", "already-completed-today");
         }
       }
 
-      const effectiveDueDate = effectiveDueDateForTask(task);
+      const effectiveDueDate = effectiveDueDateForTask(task, tz);
       const outcome = resolveCompletionOutcome(task, effectiveDueDate, now);
-      const nextDueDate = calculateNextDueDate(task, now);
+      const nextDueDate = calculateNextDueDate(task, now, tz);
 
       const assignedThisCycle = assignmentsSnap.docs.map((d) => ({ ref: d.ref, data: d.data() as TaskAssignmentDoc }));
       const existingAssignmentForMember = assignedThisCycle.find((a) => a.data.memberId === memberId);

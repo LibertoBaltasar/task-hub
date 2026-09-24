@@ -51,7 +51,14 @@ data class HouseholdResponse(
      * independientemente de su [MemberResponse.role] — coincide con `isOwner(hid)`
      * en firestore.rules. Ver `isAdmin` en HouseholdScreen/TaskDetailScreen.
      */
-    val ownerId: String = ""
+    val ownerId: String = "",
+    /**
+     * TZ IANA (ej. "Europe/Madrid") usada por las Cloud Functions para
+     * calcular fin de día de vencimiento/rachas (D1). `null` en hogares
+     * creados antes de esta migración — las CF caen a `Europe/Madrid`.
+     * Por defecto, la TZ del dispositivo de quien crea el hogar.
+     */
+    val timezone: String? = null
 )
 
 /**

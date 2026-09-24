@@ -25,7 +25,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { DocumentSnapshot, FieldValue } from "firebase-admin/firestore";
 import { db, REGION } from "./admin.js";
-import { requireAuth, loadActiveMember, requireTrusted } from "./auth.js";
+import { requireAuth, loadActiveMember, requireTrusted, loadHouseholdTimezone } from "./auth.js";
 import { calculateNextDueDate } from "./completionHelpers.js";
 import { TaskAssignmentDoc, TaskDoc, TaskHistoryDoc } from "./types.js";
 
@@ -50,6 +50,7 @@ export const undoTaskCompletion = onCall<UndoTaskCompletionRequest, Promise<Undo
 
     return db.runTransaction(async (tx) => {
       await loadActiveMember(tx, householdId, uid);
+      const tz = await loadHouseholdTimezone(tx, householdId);
 
       const taskRef = db.doc(`households/${householdId}/tasks/${taskId}`);
       const taskSnap = await tx.get(taskRef);
@@ -105,7 +106,7 @@ export const undoTaskCompletion = onCall<UndoTaskCompletionRequest, Promise<Undo
       // Fecha límite del ciclo SIGUIENTE al que se completó (la que creó la
       // asignación `next_{taskId}_{...}` a regenerar/borrar) — misma fórmula
       // que se usó al completar: `calculateNextDueDate(task, completedAt)`.
-      const nextCycleDueDate = task.frequency !== "once" ? calculateNextDueDate(task, completedAt) : null;
+      const nextCycleDueDate = task.frequency !== "once" ? calculateNextDueDate(task, completedAt, tz) : null;
       let nextAssignmentSnap: DocumentSnapshot | null = null;
       if (nextCycleDueDate !== null) {
         nextAssignmentSnap = await tx.get(
@@ -120,9 +121,9 @@ export const undoTaskCompletion = onCall<UndoTaskCompletionRequest, Promise<Undo
         if (cycleAssignments.length > 0) {
           previousNextDueAt = cycleAssignments[0].data.dueDate;
         } else if (previousRecord) {
-          previousNextDueAt = calculateNextDueDate(task, previousRecord.completedAt);
+          previousNextDueAt = calculateNextDueDate(task, previousRecord.completedAt, tz);
         } else {
-          previousNextDueAt = calculateNextDueDate(task, task.createdAt);
+          previousNextDueAt = calculateNextDueDate(task, task.createdAt, tz);
         }
       }
 
