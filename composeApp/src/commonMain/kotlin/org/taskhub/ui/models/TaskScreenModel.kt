@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import org.taskhub.network.ErrorCategory
 import org.taskhub.network.errorCategory
 import org.taskhub.network.FirestoreRepository
+import org.taskhub.network.StreakRules
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.i18n.toUserMessage
 import org.taskhub.network.models.TaskResponse
@@ -1091,11 +1092,8 @@ class TaskScreenModel(
     // ── Helpers ─────────────────────────────────────────────
 
     /**
-     * Updates the member's streak:
-     * - If today's date differs from lastStreakDate, check if it's consecutive
-     * - If yesterday -> streak++
-     * - If older -> streak = 1 (new streak)
-     * - If same day -> no change (already counted)
+     * Actualiza la racha del miembro con [StreakRules.nextStreak] (R19: lógica
+     * pura extraída a `network/StreakRules.kt` para poder testearla sin red).
      *
      * Recibe [member] ya cargado (en vez de volver a pedirlo a Firestore) y
      * devuelve la versión actualizada, para que el llamador pueda encadenar
@@ -1103,45 +1101,28 @@ class TaskScreenModel(
      */
     private suspend fun updateMemberStreak(householdId: String, member: MemberResponse): MemberResponse {
         val tz = TimeZone.currentSystemDefault()
-        val now = Clock.System.now()
-        val today = now.toLocalDateTime(tz).date
+        val today = Clock.System.now().toLocalDateTime(tz).date
 
-        val lastDateEpoch = member.lastStreakDate
-        val todayEpoch = today.atStartOfDayIn(tz).toEpochMilliseconds()
-
-        if (lastDateEpoch >= todayEpoch) {
-            // Already counted today
-            return member
-        }
-
-        val newStreak: Int
-        if (lastDateEpoch == 0L) {
-            // First streak ever
-            newStreak = 1
-        } else {
-            val lastDate = kotlinx.datetime.Instant.fromEpochMilliseconds(lastDateEpoch)
-                .toLocalDateTime(tz).date
-            val yesterday = today.plus(-1, DateTimeUnit.DAY)
-
-            newStreak = if (lastDate == yesterday) {
-                // Consecutive day
-                member.currentStreak + 1
-            } else {
-                // Gap — new streak
-                1
-            }
-        }
-
-        val newBest = maxOf(newStreak, member.bestStreak)
+        val update = StreakRules.nextStreak(
+            lastStreakDateEpoch = member.lastStreakDate,
+            currentStreak = member.currentStreak,
+            bestStreak = member.bestStreak,
+            today = today,
+            tz = tz
+        ) ?: return member // ya contada hoy
 
         repo.updateMemberStreak(
             householdId = householdId,
             memberId = member.id,
-            currentStreak = newStreak,
-            bestStreak = newBest,
-            lastStreakDate = todayEpoch
+            currentStreak = update.currentStreak,
+            bestStreak = update.bestStreak,
+            lastStreakDate = update.lastStreakDate
         )
-        return member.copy(currentStreak = newStreak, bestStreak = newBest, lastStreakDate = todayEpoch)
+        return member.copy(
+            currentStreak = update.currentStreak,
+            bestStreak = update.bestStreak,
+            lastStreakDate = update.lastStreakDate
+        )
     }
 
     /**

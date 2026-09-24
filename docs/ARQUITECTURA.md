@@ -32,7 +32,7 @@ composable raíz `App()`:
 | **Koin** | DI multiplatform sin generación de código (a diferencia de Hilt/Dagger, que son solo-Android/JVM). `koinInject`/`koinScreenModel` funcionan igual en las tres plataformas. |
 | **multiplatform-settings** | Envoltorio común sobre `SharedPreferences` (Android), `NSUserDefaults` (iOS) y `java.util.prefs.Preferences` (JVM) — persistencia simple sin reimplementar tres backends. |
 | **Ktor + REST de Firestore, NO el SDK de Firestore** | El SDK oficial de Firestore no tiene soporte first-class para Kotlin/Native (iOS) ni JVM desktop; es esencialmente solo-Android. Hablar directamente con la API REST de Firestore vía Ktor (que sí es multiplatform) permite compartir el 100% del código de red en `commonMain`, al coste de reimplementar auth/parseo de documentos a mano (ver `network/FirestoreClient.kt`). |
-| **Sin backend/Cloud Functions propio** | Toda la lógica de negocio (cálculo de puntos, penalizaciones, recurrencia, validación de escrituras) vive en el cliente (`network/*Rules.kt`) y en `firestore.rules` (reglas de seguridad declarativas del lado de Firestore). No hay servidor intermedio que mantener/desplegar — a cambio, ciertas validaciones (p. ej. que `points` en `taskHistory` refleje realmente el cálculo correcto de una tarea) no pueden garantizarse del todo sin un backend; ver el comentario "limitación arquitectónica" en `firestore.rules`. |
+| **La mayoría de la lógica sigue en cliente + `firestore.rules`, con un backend delgado (`functions/`) para las operaciones que necesitan atomicidad** | El grueso del cálculo de negocio (puntos, penalizaciones, recurrencia) vive en `network/*Rules.kt` y se valida declarativamente en `firestore.rules`. Las 5 Cloud Functions de `functions/src/` (ver sección 3bis) cubren específicamente las operaciones donde varias escrituras HTTP secuenciales sin backend dejaban una ventana de inconsistencia (p. ej. completar una tarea y repartir puntos): son callables HTTPS que envuelven esos pasos en una única transacción de Firestore server-side. No hay un backend "grande" tipo API REST propia — solo estas funciones puntuales. |
 
 Dependencias clave y sus versiones están fijadas en `gradle/libs.versions.toml`
 (`ktor = 3.0.3`, `koin = 4.0.2`, `voyager = 1.1.0-beta03`,
@@ -127,6 +127,39 @@ Puntos relevantes de este flujo, verificados en el código:
   datos de Firestore en el KDoc de cabecera de
   `ui/models/TaskScreenModel.kt` — consultar también
   `docs/MODELO-DATOS.md` (ver "Ver también").
+
+## 3bis. Cloud Functions (`functions/`)
+
+Paquete Node/TypeScript independiente (`functions/`, deploy propio, no forma
+parte del build de Compose Multiplatform) con 5 Cloud Functions en
+`europe-west1` (`functions/src/index.ts`, constante `REGION` en
+`functions/src/admin.ts`). Diseño completo en
+`docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`; resumen:
+
+| Función | Tipo | Qué resuelve |
+|---|---|---|
+| `completeRecurringTask` | Callable HTTPS | Completar una tarea recurrente (daily/weekly/monthly): otorga puntos, aplica penalización si toca, y calcula/persiste la siguiente ocurrencia — todo en una única transacción de Firestore, donde antes eran varias escrituras HTTP secuenciales desde el cliente. |
+| `completeAssignment` | Callable HTTPS | Equivalente para completar una asignación (`assignments/{id}`) de una tarea con rotación entre miembros. |
+| `undoTaskCompletion` | Callable HTTPS | Deshacer la última compleción: revierte puntos, restaura el estado de racha/asignación previo. |
+| `reassignTaskCompletion` | Callable HTTPS | Reasignar a otro miembro quién completó una tarea (solo owner/admin — `requireTrusted`), transfiriendo los puntos ya otorgados. |
+| `reconcileMissingTaskPointsScheduled` | `onSchedule` (cada 6h) | Red de seguridad: aplica puntos pendientes de registros `taskHistory` legacy con `pointsApplied == false` (datos previos a esta migración; las 4 funciones transaccionales de arriba ya no pueden dejar ese estado). |
+
+Puntos relevantes:
+
+- Todas corren con las credenciales de la Service Account admin del proyecto
+  (`admin.ts`), que **bypassea `firestore.rules`** — los topes que las reglas
+  imponen a escrituras de cliente (p. ej. el tope de `totalPoints`, D10) no
+  aplican a estas funciones; la validación de esas invariantes es
+  responsabilidad del propio código TypeScript.
+- Usan zona horaria por hogar (`households/{hid}.timezone`, D1) para calcular
+  fin de día de vencimiento/rachas — `auth.loadHouseholdTimezone()` la lee
+  dentro de la misma transacción, con fallback a `DEFAULT_TZ` ("Europe/Madrid",
+  `functions/src/rules.ts`) si el hogar no tiene el campo poblado (hogares
+  creados antes de esa migración).
+- El resto de operaciones de escritura de la app (crear tarea, editar hogar,
+  canjear recompensa, etc.) siguen sin pasar por aquí: van directas del
+  cliente a la API REST de Firestore, validadas solo por `firestore.rules`,
+  como describe la sección 3 de este documento.
 
 ## 4. DI con Koin
 
@@ -251,14 +284,19 @@ compilación para cada target.
   tres plataformas a cambio de implementar a mano auth (`FirestoreClient.ensureAuth`),
   parseo de documentos (`FirestoreParsers.kt`) y paginación
   (`listAllDocuments`).
-- **Sin backend/Cloud Functions propio**: menos infraestructura que operar;
-  la validación de escrituras se hace declarativamente en `firestore.rules`
-  (desplegadas vía `scripts/deploy_firestore_rules.py`, según el propio
-  historial de comentarios del archivo). Limitación reconocida en el propio
-  `firestore.rules`: no puede validarse en servidor que un `points`/`pointsSpent`
-  concreto sea el resultado *correcto* del cálculo de una tarea (solo que no
-  sea negativo o no exceda el coste real) — un backend cerraría ese hueco,
-  pero no existe hoy.
+- **`firestore.rules` para la mayoría de escrituras, Cloud Functions (`functions/`)
+  solo donde hacía falta atomicidad real**: la mayor parte de la validación
+  de escrituras sigue siendo declarativa en `firestore.rules` (desplegadas
+  vía `scripts/deploy_firestore_rules.py`) — menos infraestructura que operar
+  que un backend completo. Pero las operaciones de "completar tarea" (varios
+  documentos a la vez: puntos, historial, siguiente ocurrencia) sí se
+  migraron a las 5 Cloud Functions transaccionales de la sección 3bis,
+  precisamente porque esa combinación de escrituras HTTP secuenciales sin
+  backend dejaba una ventana real de inconsistencia ante fallos a mitad de
+  camino. Limitación que persiste para el resto de escrituras (fuera de esas
+  5 funciones): `firestore.rules` no puede validar en servidor que un
+  `points`/`pointsSpent` concreto sea el resultado *correcto* del cálculo de
+  una tarea (solo que no sea negativo o no exceda el coste real).
 - **multiplatform-settings para persistencia simple**: evita reimplementar
   `SharedPreferences`/`NSUserDefaults`/`Preferences` a mano; se usa para todo
   lo que no es sensible (tema, idioma, notificaciones, hogares guardados,

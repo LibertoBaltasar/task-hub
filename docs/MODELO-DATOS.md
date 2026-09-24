@@ -8,10 +8,17 @@ está. Todo lo descrito aquí está verificado contra el código real —
 `network/FirestoreParsers.kt`, los repositorios de `network/` y
 `firestore.rules` — no contra un diseño teórico.
 
-No hay backend propio: la app cliente habla directamente con la API REST de
-Firestore (Ktor, `network/FirestoreClient.kt`) y con Firebase Auth (alta
-anónima + Google Sign-In). `firestore.rules` es, por tanto, la única capa de
-autorización del sistema — no existe un servidor intermedio que valide nada.
+No hay un backend propio de propósito general: la app cliente habla
+directamente con la API REST de Firestore (Ktor, `network/FirestoreClient.kt`)
+y con Firebase Auth (alta anónima + Google Sign-In), y `firestore.rules` es la
+capa de autorización para esa vía. Existe, aparte, un paquete delgado de 5
+Cloud Functions (`functions/src/`, ver `docs/ARQUITECTURA.md` sección 3bis)
+para las operaciones de "completar tarea" que necesitan varias escrituras
+atómicas — esas sí corren server-side con su propia validación de auth
+(`requireAuth`/`requireTrusted`) y bypassean `firestore.rules` (usan la
+Service Account admin). El resto de escrituras de la app (crear/editar tareas,
+hogares, recompensas...) no pasan por ahí: siguen yendo directas del cliente a
+Firestore, validadas solo por `firestore.rules`.
 
 > `docs/specs.md` describe la visión de producto original con un backend
 > Ktor + PostgreSQL y endpoints `POST /api/...`; ese diseño quedó obsoleto:
@@ -114,6 +121,7 @@ Campos (`HouseholdResponse`):
 | `createdAt` / `updatedAt` | int (epoch millis) | Timestamps. |
 | `isPersonal` | boolean | `true` = espacio personal auto-creado (ID determinista `personal_{uid}`), no un hogar compartido real. |
 | `ownerId` | string | UID de quien creó el hogar. Siempre "de confianza" (equivalente a admin) al margen de su rol de miembro — es la base de `isOwner(hid)` en las reglas. |
+| `timezone` | string? | TZ IANA (p. ej. `"Europe/Madrid"`), D1 (2026-09-24). Por defecto la TZ del dispositivo de quien crea el hogar (`deviceTimezone` en `HouseholdRepository.createHousehold`). `null`/ausente en hogares creados antes de esta migración. La leen las Cloud Functions de `functions/src/` (`auth.loadHouseholdTimezone`) para calcular fin de día de vencimiento/rachas, con fallback a `Europe/Madrid` (`DEFAULT_TZ`) si no está poblado. |
 
 ### `households/{hid}/members/{mid}` — miembro de un hogar
 

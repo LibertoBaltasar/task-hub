@@ -37,6 +37,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import org.taskhub.ui.components.AppLogo
 import org.taskhub.ui.components.EmptyHouseholdsIllustration
+import org.taskhub.ui.components.EmptyState
 import org.taskhub.ui.components.HouseholdSettingsDialog
 import org.taskhub.ui.components.HouseholdTaskSection
 import org.taskhub.ui.components.LocalAppSettings
@@ -184,39 +185,23 @@ class HomeScreen : Screen {
                     ShimmerList(count = 4, itemHeight = 96.dp)
                 }
             } else if (households.isEmpty()) {
-                Box(
+                EmptyState(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
                         .padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        EmptyHouseholdsIllustration()
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            s("home_empty_title"),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            s("home_empty_subtitle"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(24.dp))
-                        Button(
-                            onClick = { navigator.push(CreateHouseholdScreen()) },
-                        ) {
+                    illustration = { EmptyHouseholdsIllustration() },
+                    title = s("home_empty_title"),
+                    titleStyle = MaterialTheme.typography.titleLarge,
+                    message = s("home_empty_subtitle"),
+                    action = {
+                        Button(onClick = { navigator.push(CreateHouseholdScreen()) }) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(s("welcome_create"), fontWeight = FontWeight.SemiBold)
                         }
                     }
-                }
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(padding),

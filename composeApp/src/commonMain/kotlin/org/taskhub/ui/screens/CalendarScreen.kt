@@ -49,6 +49,7 @@ import org.taskhub.network.RecurrenceRules
 import org.taskhub.network.models.TaskResponse
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
+import org.taskhub.ui.components.localizedMonthAbbr as monthAbbr
 import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.StatusDot
@@ -1324,13 +1325,26 @@ internal fun isTaskPendingWithoutDueDate(task: TaskResponse): Boolean =
     task.frequency == "once" && task.dueDate <= 0 && task.lastCompletedDate == null
 
 /**
- * Tareas "once" con fecha ya pasada y aún no completadas: se listan en
- * la sección "Caducadas" debajo del calendario.
+ * Tareas con una ocurrencia pendiente ya vencida: se listan en la sección
+ * "Caducadas" debajo del calendario. Cubre "once" con [TaskResponse.dueDate]
+ * pasado y sin completar, y también recurrentes (daily/weekly/monthly, R18,
+ * 2026-09-24) con [TaskResponse.nextDueAt] pasado — ese campo siempre
+ * representa la ocurrencia pendiente actual (se recalcula a la SIGUIENTE
+ * cada vez que se completa, ver su KDoc en DTOs.kt), así que basta con que
+ * su fecha sea anterior a [today]; no hace falta mirar [TaskResponse.lastCompletedDate]
+ * aparte. `null` (recurrente creada antes de que existiera este campo) no se
+ * considera vencida — mismo fallback que ya usa el resto del cálculo de
+ * penalización en el cliente.
  */
-internal fun isTaskOverdueOverall(task: TaskResponse, today: LocalDate, tz: TimeZone): Boolean =
-    task.frequency == "once" && task.dueDate > 0 &&
+internal fun isTaskOverdueOverall(task: TaskResponse, today: LocalDate, tz: TimeZone): Boolean = when (task.frequency) {
+    "once" -> task.dueDate > 0 &&
         Instant.fromEpochMilliseconds(task.dueDate).toLocalDateTime(tz).date < today &&
         task.lastCompletedDate == null
+    "daily", "weekly", "monthly" -> task.nextDueAt?.let {
+        Instant.fromEpochMilliseconds(it).toLocalDateTime(tz).date < today
+    } ?: false
+    else -> false
+}
 
 /**
  * Check if a task was completed on a specific date.
@@ -1425,22 +1439,6 @@ private fun dayFull(dayOfWeek: DayOfWeek, lang: String): String = when (dayOfWee
     DayOfWeek.FRIDAY -> AppStrings.get("recurrence_day_friday", lang)
     DayOfWeek.SATURDAY -> AppStrings.get("recurrence_day_saturday", lang)
     DayOfWeek.SUNDAY -> AppStrings.get("recurrence_day_sunday", lang)
-    else -> ""
-}
-
-private fun monthAbbr(month: Month, lang: String): String = when (month) {
-    Month.JANUARY -> AppStrings.get("month_abbr_january", lang)
-    Month.FEBRUARY -> AppStrings.get("month_abbr_february", lang)
-    Month.MARCH -> AppStrings.get("month_abbr_march", lang)
-    Month.APRIL -> AppStrings.get("month_abbr_april", lang)
-    Month.MAY -> AppStrings.get("month_abbr_may", lang)
-    Month.JUNE -> AppStrings.get("month_abbr_june", lang)
-    Month.JULY -> AppStrings.get("month_abbr_july", lang)
-    Month.AUGUST -> AppStrings.get("month_abbr_august", lang)
-    Month.SEPTEMBER -> AppStrings.get("month_abbr_september", lang)
-    Month.OCTOBER -> AppStrings.get("month_abbr_october", lang)
-    Month.NOVEMBER -> AppStrings.get("month_abbr_november", lang)
-    Month.DECEMBER -> AppStrings.get("month_abbr_december", lang)
     else -> ""
 }
 

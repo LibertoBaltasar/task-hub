@@ -33,6 +33,7 @@ import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.DestructiveConfirmDialog
 import org.taskhub.ui.components.EmptyRewardsIllustration
+import org.taskhub.ui.components.EmptyState
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.PointsBadge
@@ -160,28 +161,12 @@ internal fun RewardsBody(householdId: String, memberModel: MemberScreenModel) {
 
             is RewardUiState.Success -> {
                 if (rState.rewards.isEmpty()) {
-                    Box(
+                    EmptyState(
                         modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            EmptyRewardsIllustration()
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                text = s("reward_list_empty_title"),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = if (isAdmin) s("reward_list_empty_admin") else s("reward_list_empty_member"),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
+                        illustration = { EmptyRewardsIllustration() },
+                        title = s("reward_list_empty_title"),
+                        message = if (isAdmin) s("reward_list_empty_admin") else s("reward_list_empty_member")
+                    )
                 } else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),

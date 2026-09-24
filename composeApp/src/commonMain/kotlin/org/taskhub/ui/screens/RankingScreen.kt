@@ -32,6 +32,7 @@ import org.taskhub.network.models.MemberResponse
 import org.taskhub.ui.components.AnimatedCounter
 import org.taskhub.ui.components.EffectCategory
 import org.taskhub.ui.components.EmptyRankingIllustration
+import org.taskhub.ui.components.EmptyState
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.UserAvatar
@@ -104,28 +105,12 @@ internal fun RankingBody(householdId: String, memberModel: MemberScreenModel) {
             }
         }
         members.isEmpty() -> {
-            Box(
+            EmptyState(
                 modifier = Modifier.fillMaxSize().padding(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    EmptyRankingIllustration()
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        s("ranking_empty_title"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        s("ranking_empty_subtitle"),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
+                illustration = { EmptyRankingIllustration() },
+                title = s("ranking_empty_title"),
+                message = s("ranking_empty_subtitle")
+            )
         }
         else -> {
             val reduceMotion = shouldReduceMotion()

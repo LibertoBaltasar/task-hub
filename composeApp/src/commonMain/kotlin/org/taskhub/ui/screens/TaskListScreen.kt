@@ -57,7 +57,9 @@ import org.taskhub.ui.components.AnimatedCheckmark
 import org.taskhub.ui.components.ConfettiOverlay
 import org.taskhub.ui.components.EffectCategory
 import org.taskhub.ui.components.effectsEnabled
+import org.taskhub.ui.components.EmptyState
 import org.taskhub.ui.components.EmptyTasksIllustration
+import org.taskhub.ui.components.formatFriendlyDate
 import org.taskhub.ui.components.ErrorAwareSnackbarHost
 import org.taskhub.ui.components.ExpandableSectionHeader
 import org.taskhub.ui.components.HouseholdSettingsDialog
@@ -418,17 +420,6 @@ private fun localizedDayName(dayOfWeek: DayOfWeek, lang: String): String = when 
     else -> ""
 }
 
-private fun localizedDayNameAbbr(dayOfWeek: DayOfWeek, lang: String): String = when (dayOfWeek) {
-    DayOfWeek.MONDAY -> AppStrings.get("day_abbr_monday", lang)
-    DayOfWeek.TUESDAY -> AppStrings.get("day_abbr_tuesday", lang)
-    DayOfWeek.WEDNESDAY -> AppStrings.get("day_abbr_wednesday", lang)
-    DayOfWeek.THURSDAY -> AppStrings.get("day_abbr_thursday", lang)
-    DayOfWeek.FRIDAY -> AppStrings.get("day_abbr_friday", lang)
-    DayOfWeek.SATURDAY -> AppStrings.get("day_abbr_saturday", lang)
-    DayOfWeek.SUNDAY -> AppStrings.get("day_abbr_sunday", lang)
-    else -> ""
-}
-
 // ────────────────────────────────────────────────────────────
 //  Group tasks by status (not instances — calculated locally)
 // ────────────────────────────────────────────────────────────
@@ -728,34 +719,18 @@ private fun TaskListContent(
         if (state.tasks.isEmpty()) {
             item {
                 Spacer(Modifier.height(24.dp))
-                Box(
+                EmptyState(
                     modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        EmptyTasksIllustration()
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            s("task_list_empty_title"),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            s("task_list_empty_subtitle"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(24.dp))
-                        Button(
-                            onClick = onCreateFirstTask,
-                        ) {
+                    illustration = { EmptyTasksIllustration() },
+                    title = s("task_list_empty_title"),
+                    titleStyle = MaterialTheme.typography.titleLarge,
+                    message = s("task_list_empty_subtitle"),
+                    action = {
+                        Button(onClick = onCreateFirstTask) {
                             Text(s("task_list_create_first"), fontWeight = FontWeight.SemiBold)
                         }
                     }
-                }
+                )
             }
         } else if (tasksWithStatus.isEmpty() || groups.isEmpty()) {
             item {
@@ -1470,40 +1445,6 @@ private fun formatDeadline(epochMillis: Long): String {
     val hour = local.hour.toString().padStart(2, '0')
     val min = local.minute.toString().padStart(2, '0')
     return "$day/$month ${hour}:${min}"
-}
-
-/**
- * Friendly date string for card display: "Hoy", "Mañana", day name (if
- * within this week), or "day month-abbr" (e.g. "25 sep").
- */
-private fun formatFriendlyDate(epochMillis: Long, lang: String): String {
-    if (epochMillis <= 0) return ""
-    val tz = TimeZone.currentSystemDefault()
-    val today = Clock.System.now().toLocalDateTime(tz).date
-    val date = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(tz).date
-    val daysDiff = date.toEpochDays() - today.toEpochDays()
-    return when {
-        daysDiff == 0 -> AppStrings.get("tasks_due_today", lang)
-        daysDiff == 1 -> AppStrings.get("due_date_tomorrow", lang)
-        daysDiff in (-6..-1) || daysDiff in (2..6) -> localizedDayNameAbbr(date.dayOfWeek, lang)
-        else -> "${date.dayOfMonth} ${localizedMonthAbbr(date.monthNumber, lang)}"
-    }
-}
-
-private fun localizedMonthAbbr(monthNumber: Int, lang: String): String = when (monthNumber) {
-    1 -> AppStrings.get("month_abbr_january", lang)
-    2 -> AppStrings.get("month_abbr_february", lang)
-    3 -> AppStrings.get("month_abbr_march", lang)
-    4 -> AppStrings.get("month_abbr_april", lang)
-    5 -> AppStrings.get("month_abbr_may", lang)
-    6 -> AppStrings.get("month_abbr_june", lang)
-    7 -> AppStrings.get("month_abbr_july", lang)
-    8 -> AppStrings.get("month_abbr_august", lang)
-    9 -> AppStrings.get("month_abbr_september", lang)
-    10 -> AppStrings.get("month_abbr_october", lang)
-    11 -> AppStrings.get("month_abbr_november", lang)
-    12 -> AppStrings.get("month_abbr_december", lang)
-    else -> ""
 }
 
 /**
