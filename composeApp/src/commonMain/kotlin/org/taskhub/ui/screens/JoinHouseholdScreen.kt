@@ -60,6 +60,7 @@ class JoinHouseholdScreen : Screen {
         val s = { key: String -> AppStrings.get(key, appSettings.currentLanguage) }
 
         var inviteCode by remember { mutableStateOf("") }
+        var codeTouched by remember { mutableStateOf(false) }
         var displayName by remember { mutableStateOf("") }
         val focusManager = LocalFocusManager.current
 
@@ -143,10 +144,18 @@ class JoinHouseholdScreen : Screen {
 
                 // Step 1: Enter invite code
                 if (joinedHouseholdId == null) {
+                    // Panel v17 (hallazgo MENOR de UX): antes el botón "Unirse"
+                    // simplemente aparecía gris sin que el campo explicara por
+                    // qué — mismo patrón isError/supportingText que el resto
+                    // de formularios (CreateTaskScreen, CreateRewardScreen).
+                    val codeInvalid = codeTouched && inviteCode.trim().length < 4
                     OutlinedTextField(
                         value = inviteCode,
                         // Códigos de invitación son alfanuméricos en mayúsculas, máx. 8 chars.
-                        onValueChange = { inviteCode = it.uppercase().take(8) },
+                        onValueChange = {
+                            inviteCode = it.uppercase().take(8)
+                            codeTouched = true
+                        },
                         label = { Text(s("household_invite_code")) },
                         placeholder = { Text(s("join_household_code_placeholder")) },
                         singleLine = true,
@@ -155,7 +164,9 @@ class JoinHouseholdScreen : Screen {
                         keyboardActions = KeyboardActions(
                             onDone = { focusManager.clearFocus() }
                         ),
-                        enabled = householdState !is HouseholdUiState.Loading
+                        enabled = householdState !is HouseholdUiState.Loading,
+                        isError = codeInvalid,
+                        supportingText = { Text(s("join_household_code_hint")) }
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))

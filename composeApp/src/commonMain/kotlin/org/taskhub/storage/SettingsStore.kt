@@ -273,6 +273,34 @@ class SettingsStore(
         }
     }
 
+    /**
+     * Última vez (epoch millis) que [org.taskhub.ui.models.CalendarSyncManager.reconcile]
+     * terminó con éxito para [householdId] en este dispositivo — `0` si nunca.
+     * Panel v17 (hallazgo IMPORTANTE de rendimiento): `reconcile()` se
+     * disparaba en CADA apertura de `HouseholdScreen`/`PersonalSpaceScreen`
+     * (Voyager crea una instancia nueva de `Screen` en cada `push`, no solo
+     * la primera vez de la sesión), repitiendo `getTasks` + `getAllAssignments`
+     * de todo el hogar aunque no hubiera nada pendiente el 99% de las veces.
+     */
+    fun getLastCalendarReconcileAt(householdId: String): Long = getCalendarReconcileMap()[householdId] ?: 0L
+
+    /** Marca [householdId] como reconciliado ahora mismo en este dispositivo. */
+    fun setLastCalendarReconcileAt(householdId: String, epochMs: Long) {
+        val map = getCalendarReconcileMap().toMutableMap()
+        map[householdId] = epochMs
+        settings.putString(KEY_CALENDAR_RECONCILE_AT, json.encodeToString(map))
+    }
+
+    private fun getCalendarReconcileMap(): Map<String, Long> {
+        val raw = settings.getString(KEY_CALENDAR_RECONCILE_AT, "")
+        if (raw.isEmpty()) return emptyMap()
+        return try {
+            json.decodeFromString(raw)
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
     // ── Sondeo de notificaciones (IDs ya notificados por hogar) ──────────
     //
     // El polling periódico en Android (`NotificationPollWorker`) usa este
@@ -341,6 +369,7 @@ class SettingsStore(
         private const val KEY_GOOGLE_EMAIL = "taskhub_google_email"
         private const val KEY_GOOGLE_REFRESH_TOKEN = "taskhub_google_refresh_token"
         private const val KEY_CALENDAR_IDS = "taskhub_calendar_ids"
+        private const val KEY_CALENDAR_RECONCILE_AT = "taskhub_calendar_reconcile_at"
         private const val KEY_NOTIFICATION_POLL_MARKERS = "taskhub_notification_poll_markers"
     }
 }

@@ -13,11 +13,11 @@
  * reintentos automáticos de la transacción).
  */
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { FieldValue } from "firebase-admin/firestore";
 import { db, REGION } from "./admin.js";
 import { requireAuth, loadActiveMember, loadHouseholdTimezone } from "./auth.js";
 import { resolveCompletionOutcome } from "./penalty.js";
 import { resolveNextAssignmentDecision } from "./rules.js";
+import { clampTotalPoints } from "./points.js";
 import { calculateNextDueDate, effectiveDueDateForTask } from "./completionHelpers.js";
 import { epochToLocalDate, compareLocalDate } from "./dates.js";
 import { TaskAssignmentDoc, TaskDoc } from "./types.js";
@@ -70,7 +70,7 @@ export const completeRecurringTask = onCall<CompleteRecurringTaskRequest, Promis
       // Validación de seguridad (sección 2.1): llamador miembro activo +
       // memberId (quien recibe los puntos) también miembro activo del mismo hogar.
       await loadActiveMember(tx, householdId, uid);
-      await loadActiveMember(tx, householdId, memberId);
+      const targetMember = await loadActiveMember(tx, householdId, memberId);
       const memberRef = db.doc(`households/${householdId}/members/${memberId}`);
       const tz = await loadHouseholdTimezone(tx, householdId);
 
@@ -121,7 +121,9 @@ export const completeRecurringTask = onCall<CompleteRecurringTaskRequest, Promis
       if (task.frequency !== "once") taskUpdate.nextDueAt = nextDueDate;
       tx.update(taskRef, taskUpdate);
 
-      tx.update(memberRef, { totalPoints: FieldValue.increment(outcome.pointsAwarded) });
+      // Panel v17 (hallazgo CRÍTICO de seguridad): clamp en vez de
+      // FieldValue.increment ciego — ver KDoc de [clampTotalPoints].
+      tx.update(memberRef, { totalPoints: clampTotalPoints(targetMember.totalPoints, outcome.pointsAwarded) });
 
       const historyRef = db.collection(`households/${householdId}/taskHistory`).doc();
       tx.set(historyRef, {
@@ -143,11 +145,16 @@ export const completeRecurringTask = onCall<CompleteRecurringTaskRequest, Promis
       }
 
       if (task.frequency !== "once" && nextDueDate !== null) {
+        // Panel v17 (hallazgo CRÍTICO de arquitectura): faltaba pasar `tz`
+        // — sin ella, la decisión de a quién asignar el siguiente ciclo caía
+        // silenciosamente al DEFAULT_TZ ("Europe/Madrid") aunque `tz` ya se
+        // hubiera cargado arriba para el resto de esta misma transacción.
         const decision = resolveNextAssignmentDecision(
           task.assignmentRotation ?? [],
           nextDueDate,
           memberId,
-          assignedThisCycle.map((a) => a.data)
+          assignedThisCycle.map((a) => a.data),
+          tz
         );
         if (decision.shouldCreate) {
           const nextRef = db.doc(`households/${householdId}/tasks/${taskId}/assignments/next_${taskId}_${nextDueDate}`);

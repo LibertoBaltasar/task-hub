@@ -234,8 +234,9 @@ class FakeFirestoreRepository(
         lastCompletedDate: Long?
     ): Long? = null
 
-    override suspend fun updateSubtasks(householdId: String, taskId: String, subtasks: List<Subtask>) {
-        updateSubtasksCalls += subtasks
+    override suspend fun updateSubtasks(householdId: String, taskId: String, transform: (List<Subtask>) -> List<Subtask>) {
+        val current = tasks.find { it.id == taskId }?.subtasks ?: emptyList()
+        updateSubtasksCalls += transform(current)
     }
 
     override suspend fun deleteTask(householdId: String, taskId: String) {

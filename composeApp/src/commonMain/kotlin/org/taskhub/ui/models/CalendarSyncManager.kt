@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.datetime.Clock
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.GoogleCalendarRepository
 import org.taskhub.network.models.TaskAssignmentResponse
@@ -106,6 +107,11 @@ class CalendarSyncManagerImpl(
      * de la API (condición de aprobación de la tarjeta de rendimiento).
      */
     private val createEventSemaphore = Semaphore(4)
+
+    private companion object {
+        /** Ver KDoc de [reconcile] (panel v17, hallazgo de rendimiento). */
+        const val RECONCILE_THROTTLE_MS = 15 * 60 * 1000L
+    }
 
     /** Devuelve el calendarId cacheado localmente, o lo crea/busca y lo cachea. */
     private suspend fun ensureCalendarId(
@@ -246,6 +252,14 @@ class CalendarSyncManagerImpl(
      */
     override suspend fun reconcile(householdId: String, householdName: String, isPersonal: Boolean) {
         if (!settingsStore.isCalendarSyncEnabled()) return
+        // Panel v17 (hallazgo IMPORTANTE de rendimiento): throttle — sin
+        // esto, cada apertura de HouseholdScreen/PersonalSpaceScreen repetía
+        // el fetch completo (getTasks + getAllAssignments) aunque no hubiera
+        // nada pendiente el 99% de las veces (ver KDoc de
+        // [SettingsStore.getLastCalendarReconcileAt]).
+        val now = Clock.System.now().toEpochMilliseconds()
+        val lastReconcileAt = settingsStore.getLastCalendarReconcileAt(householdId)
+        if (now - lastReconcileAt < RECONCILE_THROTTLE_MS) return
         try {
             val myMemberId = repo.resolveCurrentMember(householdId)
             // Tareas cargadas UNA vez y reutilizadas tanto para
@@ -261,6 +275,10 @@ class CalendarSyncManagerImpl(
                 emptyList()
             }
             val assignments = repo.getAllAssignments(householdId, tasks)
+            // Se marca "reconciliado" en cuanto se completa el fetch caro
+            // (independientemente de si había algo pendiente) — es lo que el
+            // throttle de arriba quiere evitar repetir.
+            settingsStore.setLastCalendarReconcileAt(householdId, now)
             val pending = assignments.filter {
                 it.memberId == myMemberId &&
                     it.dueDate > 0 &&

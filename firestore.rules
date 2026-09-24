@@ -3,7 +3,56 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v11)
+    //  Task Hub — Reglas de seguridad (v12)
+    //
+    //  v12 editada 2026-09-24 (panel de expertos v17, auditoría desde cero,
+    //  hallazgo CRÍTICO del especialista de funcionalidad end-to-end).
+    //  Dos bugs introducidos sin querer por el "big bang" de v9 (que cerró
+    //  `taskHistory`/`rewardRedemptions` a escritura de cliente salvo casos
+    //  puntuales), nunca vueltos a probar contra la feature de anonimización
+    //  al abandonar/expulsar (añadida 9 días después, panel v14 2026-09-20):
+    //
+    //   1. `taskHistory/{thid}` tenía `allow update: if false` SIN excepción
+    //      — bloqueaba también el PATCH legítimo de
+    //      [TaskRepository.anonymizeMemberTaskHistory] que reescribe
+    //      `memberId` → el sentinel `"deleted_member"` cuando alguien
+    //      abandona/es expulsado de un hogar compartido. Efecto real: esa
+    //      anonimización fallaba con 403 el 100% de las veces (el fallo se
+    //      tragaba en un best-effort, solo visible como un evento de
+    //      analytics) y el UID real de cualquier miembro que se va queda
+    //      visible para siempre en el historial de puntos del hogar para el
+    //      resto de miembros — contradice la promesa de privacidad
+    //      documentada en el propio KDoc de la función. Se añade una rama
+    //      que permite ÚNICAMENTE reescribir el campo `memberId` hacia ese
+    //      sentinel exacto: a `isTrusted(hid)` (expulsión por admin/owner,
+    //      donde el llamador sigue siendo miembro) o a quien sea DUEÑO del
+    //      registro (`resource.data.memberId == request.auth.uid`, caso de
+    //      abandono voluntario — en `leaveHousehold` el propio documento de
+    //      miembro del llamador ya se ha BORRADO antes de llamar a esta
+    //      anonimización, así que `isMember(hid)` ya no es cierto en ese
+    //      punto y no puede exigirse aquí).
+    //   2. Mismo bug, mismo motivo, en `rewardRedemptions/{rrid}`: su
+    //      `allow update` solo permitía `isTrusted(hid)`, así que un
+    //      miembro `role == "child"` (no admin/owner) que abandona el hogar
+    //      por su cuenta nunca podía anonimizar sus propios canjes. Se
+    //      añade la misma rama de "dueño del registro reescribiendo
+    //      únicamente memberId hacia el sentinel".
+    //
+    //  Además (hallazgo CRÍTICO del especialista de seguridad/AppSec): las 4
+    //  Cloud Functions que mueven `totalPoints` (Admin SDK, saltan estas
+    //  reglas por completo) no tenían NINGÚN tope — el tope de 100.000 de
+    //  `members/{mid}.update` de más abajo solo protegía la vía de escritura
+    //  directa del cliente. Un miembro podía crear una tarea con `points`
+    //  arbitrariamente grande (o negativo, para drenar el saldo de OTRO
+    //  miembro) y completarla vía la Cloud Function callable para saltarse
+    //  el tope por completo. El fix real vive en `functions/src/` (clamp de
+    //  `totalPoints` dentro de cada transacción); aquí se añade una segunda
+    //  barrera, en el origen: `tasks/{tid}.points` ahora se valida en
+    //  `create`/`update` a un rango `[0, 100000]` — cierra también la vía
+    //  directa de cliente (crear una tarea con puntos absurdos nunca
+    //  pasaba de aquí, pero no estaba explícitamente cerrada) y limita de
+    //  qué tamaño puede ser el "material primo" que una Cloud Function
+    //  llegue a leer.
     //
     //  v11 editada 2026-09-24 (panel de expertos v16, auditoría desde cero,
     //  hallazgo I4 — Seguridad/AppSec). Antes, `households/{hid}/members/
@@ -541,10 +590,18 @@ service cloud.firestore {
     // NINGUNA rama — completar/deshacer/reasignar una tarea pasan
     // enteramente por Cloud Functions (Admin SDK, salta esta regla).
     match /households/{hid}/tasks/{tid} {
-      allow read, create, delete: if isMember(hid) || isOwner(hid);
+      allow read, delete: if isMember(hid) || isOwner(hid);
+      // v12: `points` acotado a [0, 100000] — ver cabecera del archivo
+      // (hallazgo de seguridad, bypass del tope de totalPoints vía Cloud
+      // Function). get(..., 0): por si algún caller no manda el campo.
+      allow create: if (isMember(hid) || isOwner(hid))
+        && request.resource.data.get('points', 0) >= 0
+        && request.resource.data.get('points', 0) <= 100000;
       allow update: if (isMember(hid) || isOwner(hid))
         && !request.resource.data.diff(resource.data).affectedKeys()
-             .hasAny(['lastCompletedDate', 'completedBy', 'nextDueAt']);
+             .hasAny(['lastCompletedDate', 'completedBy', 'nextDueAt'])
+        && request.resource.data.get('points', 0) >= 0
+        && request.resource.data.get('points', 0) <= 100000;
     }
     // v9 (big bang, ver cabecera): `update` bloquea los campos que antes
     // escribía el cliente al completar/reasignar (`status`/`completedAt`/
@@ -570,7 +627,19 @@ service cloud.firestore {
     match /households/{hid}/taskHistory/{thid} {
       allow read: if isMember(hid) || isOwner(hid);
       allow create: if false;
-      allow update: if false;
+      // v12 (ver cabecera del archivo, hallazgo CRÍTICO de funcionalidad):
+      // única excepción al `update: if false` de v9 — reescribir
+      // ÚNICAMENTE `memberId` hacia el sentinel de anonimización
+      // (`"deleted_member"`, ver [FirestoreRepository.ANONYMIZED_MEMBER_ID]).
+      // `isTrusted(hid)` cubre la expulsión (el admin que expulsa sigue
+      // siendo miembro); `resource.data.memberId == request.auth.uid` cubre
+      // el abandono voluntario, donde el propio documento de miembro del
+      // llamador ya se ha borrado antes de esta llamada (isMember(hid) ya
+      // no es cierto ahí, por eso no se exige).
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys() == ['memberId'].toSet()
+        && request.resource.data.memberId == 'deleted_member'
+        && (isTrusted(hid) || resource.data.memberId == request.auth.uid);
       // delete: sin cambios en v9 — admin/owner puede borrar cualquier
       // registro; el propio miembro puede borrar SU PROPIO registro
       // (memberId == auth.uid). Ya no lo usa el cliente para deshacer
@@ -606,7 +675,18 @@ service cloud.firestore {
         && existsMemberDoc(hid, request.resource.data.memberId)
         && request.resource.data.pointsSpent
            == get(/databases/$(database)/documents/households/$(hid)/rewards/$(request.resource.data.rewardId)).data.cost;
-      allow update, delete: if isTrusted(hid);
+      // v12 (ver cabecera del archivo): misma excepción de anonimización
+      // que taskHistory — reescribir ÚNICAMENTE memberId hacia el sentinel,
+      // por isTrusted (expulsión) o por el propio dueño del registro
+      // (abandono voluntario, ya no isMember en ese punto).
+      allow update: if isTrusted(hid)
+        || (
+          signedIn()
+          && request.resource.data.diff(resource.data).affectedKeys() == ['memberId'].toSet()
+          && request.resource.data.memberId == 'deleted_member'
+          && resource.data.memberId == request.auth.uid
+        );
+      allow delete: if isTrusted(hid);
     }
     // Panel v16 (2026-09-24, hallazgo I4): antes, `write` estaba abierto a
     // cualquier miembro del hogar sobre el documento `_meta` de CUALQUIER

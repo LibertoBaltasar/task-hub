@@ -1445,14 +1445,16 @@ open class FirestoreRepository(
     )
 
     /**
-     * Update only the subtasks array on a task document.
-     * Used for quick toggling of individual subtask checkboxes.
+     * Actualiza el array `subtasks` de una tarea aplicando [transform] sobre
+     * el array FRESCO leído en el momento de escribir (concurrencia
+     * optimista, ver KDoc de [TaskRepository.updateSubtasks]) — usado para
+     * marcar/desmarcar una subtarea concreta.
      */
     open suspend fun updateSubtasks(
         householdId: String,
         taskId: String,
-        subtasks: List<Subtask>
-    ) = taskRepository.updateSubtasks(householdId, taskId, subtasks)
+        transform: (List<Subtask>) -> List<Subtask>
+    ) = taskRepository.updateSubtasks(householdId, taskId, transform)
 
     /**
      * Delete a task document.

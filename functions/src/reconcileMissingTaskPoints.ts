@@ -23,9 +23,10 @@
  * `pointsApplied == false` (datos legacy previos a esta migración).
  */
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { FieldValue } from "firebase-admin/firestore";
+import { logger } from "firebase-functions/v2";
 import { db, REGION } from "./admin.js";
-import { TaskHistoryDoc } from "./types.js";
+import { clampTotalPoints } from "./points.js";
+import { MemberDoc, TaskHistoryDoc } from "./types.js";
 
 /** Aplica los puntos pendientes de un lote de registros `pointsApplied == false`. Exportado para test. */
 export async function reconcileMissingTaskPoints(): Promise<number> {
@@ -43,13 +44,22 @@ export async function reconcileMissingTaskPoints(): Promise<number> {
         const memberRef = householdRef.collection("members").doc(fresh.memberId);
         const memberSnap = await tx.get(memberRef);
         if (memberSnap.exists) {
-          tx.update(memberRef, { totalPoints: FieldValue.increment(fresh.points) });
+          // Panel v17 (hallazgo CRÍTICO de seguridad): clamp en vez de
+          // FieldValue.increment ciego — ver KDoc de [clampTotalPoints].
+          const member = memberSnap.data() as MemberDoc;
+          tx.update(memberRef, { totalPoints: clampTotalPoints(member.totalPoints, fresh.points) });
         }
         tx.update(doc.ref, { pointsApplied: true });
       });
       reconciled++;
-    } catch {
-      // Best-effort: un fallo reparando un registro no aborta el resto.
+    } catch (e) {
+      // Best-effort: un fallo reparando un registro no aborta el resto, pero
+      // panel v17 (hallazgo de programador senior): antes se tragaba sin
+      // ningún log — un fallo sistemático de esta "red de seguridad" podía
+      // pasar desapercibido indefinidamente (0 excepciones visibles en cada
+      // pasada de 6h). Se loguea con el path del documento para poder
+      // investigar/alertar.
+      logger.error("reconcileMissingTaskPoints: fallo reparando registro", { docPath: doc.ref.path, error: e });
     }
   }
   return reconciled;

@@ -12,6 +12,9 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.russhwolf.settings.Settings
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.taskhub.network.FirestoreClient
 import org.taskhub.network.FirestoreRepository
 import org.taskhub.network.MemberRepository
@@ -87,16 +90,24 @@ class NotificationPollWorker(
         val notificationRepository = NotificationRepository(firestoreBaseUrl(), firestoreClient, taskCache)
         val lang = settingsStore.getLanguage()
 
-        for (household in households) {
-            try {
-                pollHousehold(household.id, firestoreClient, memberRepository, notificationRepository, settingsStore, lang)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Best-effort: un hogar sin red/permiso (p.ej. lo acaban de
-                // expulsar) no debe impedir sondear el resto.
-                Log.w(TAG, "Fallo sondeando hogar ${household.id}: ${e.message}")
-            }
+        // Panel v17 (hallazgo MENOR de rendimiento): antes secuencial — con
+        // varios hogares guardados, el ciclo de ~30min tardaba proporcional
+        // al número de hogares, alargando el tiempo despierto del Worker sin
+        // necesidad (cada hogar ya se maneja con try/catch independiente).
+        coroutineScope {
+            households.map { household ->
+                async {
+                    try {
+                        pollHousehold(household.id, firestoreClient, memberRepository, notificationRepository, settingsStore, lang)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Best-effort: un hogar sin red/permiso (p.ej. lo acaban de
+                        // expulsar) no debe impedir sondear el resto.
+                        Log.w(TAG, "Fallo sondeando hogar ${household.id}: ${e.message}")
+                    }
+                }
+            }.awaitAll()
         }
         return Result.success()
     }

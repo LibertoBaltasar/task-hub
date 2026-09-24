@@ -9,10 +9,11 @@
  * `firestore.rules` para corregir quién completó una tarea.
  */
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { FieldValue, QueryDocumentSnapshot } from "firebase-admin/firestore";
+import { QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { db, REGION } from "./admin.js";
 import { requireAuth, requireTrusted, loadActiveMember } from "./auth.js";
-import { TaskAssignmentDoc, TaskDoc, TaskHistoryDoc } from "./types.js";
+import { clampTotalPoints } from "./points.js";
+import { TaskAssignmentDoc, TaskDoc, TaskHistoryDoc, MemberDoc } from "./types.js";
 
 export interface ReassignTaskCompletionRequest {
   householdId: string;
@@ -37,7 +38,7 @@ export const reassignTaskCompletion = onCall<ReassignTaskCompletionRequest, Prom
 
     return db.runTransaction(async (tx) => {
       await requireTrusted(tx, householdId, uid);
-      await loadActiveMember(tx, householdId, newMemberId);
+      const newMember = await loadActiveMember(tx, householdId, newMemberId);
 
       const taskRef = db.doc(`households/${householdId}/tasks/${taskId}`);
       const taskSnap = await tx.get(taskRef);
@@ -46,6 +47,15 @@ export const reassignTaskCompletion = onCall<ReassignTaskCompletionRequest, Prom
 
       const oldMemberId = task.completedBy ?? null;
       const completedAt = task.lastCompletedDate ?? now;
+
+      // Panel v17 (hallazgo CRÍTICO de seguridad): antes se restaba/sumaba
+      // con FieldValue.increment ciego, sin tope — leer el doc del miembro
+      // saliente aquí (dentro de la transacción) para poder clampar el
+      // resultado igual que en completeRecurringTask/completeAssignment.
+      let oldMemberSnap = null;
+      if (oldMemberId !== null && oldMemberId !== newMemberId) {
+        oldMemberSnap = await tx.get(db.doc(`households/${householdId}/members/${oldMemberId}`));
+      }
 
       const historySnap = await tx.get(
         db
@@ -73,11 +83,12 @@ export const reassignTaskCompletion = onCall<ReassignTaskCompletionRequest, Prom
       tx.update(taskRef, { completedBy: newMemberId });
 
       if (oldMemberId !== null && oldMemberId !== newMemberId) {
-        tx.update(db.doc(`households/${householdId}/members/${oldMemberId}`), {
-          totalPoints: FieldValue.increment(-actualPoints)
-        });
+        if (oldMemberSnap?.exists) {
+          const oldMember = oldMemberSnap.data() as MemberDoc;
+          tx.update(oldMemberSnap.ref, { totalPoints: clampTotalPoints(oldMember.totalPoints, -actualPoints) });
+        }
         tx.update(db.doc(`households/${householdId}/members/${newMemberId}`), {
-          totalPoints: FieldValue.increment(actualPoints)
+          totalPoints: clampTotalPoints(newMember.totalPoints, actualPoints)
         });
         if (historyDoc) {
           tx.update(historyDoc.ref, { memberId: newMemberId });

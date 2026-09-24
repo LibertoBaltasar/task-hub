@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
@@ -203,6 +202,12 @@ class HomeScreen : Screen {
                     }
                 )
             } else {
+                // Panel v17 (hallazgo MENOR de rendimiento): hoisted fuera del
+                // bloque de contenido de LazyColumn — ese bloque es
+                // `LazyListScope.() -> Unit`, NO un contexto @Composable
+                // (solo lo que va dentro de `item {}`/`items {}` lo es), así
+                // que `remember` no se puede llamar ahí dentro.
+                val shared = remember(households) { households.filter { !it.isPersonal } }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().padding(padding),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -230,7 +235,6 @@ class HomeScreen : Screen {
                         }
                     }
 
-                    val shared = households.filter { !it.isPersonal }
                     if (shared.isNotEmpty()) {
                         item(key = "shared_header") {
                             Text(

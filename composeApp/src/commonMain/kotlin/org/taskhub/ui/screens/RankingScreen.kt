@@ -284,16 +284,23 @@ private fun RankingRow(
             // Points
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Panel v17 (hallazgo CRÍTICO de accesibilidad): antes
+                    // `colorScheme.tertiary` fijo, sin relación con `bgColor`
+                    // real de esta fila — fallaba WCAG AA (hasta 2.18:1) en
+                    // varias combinaciones tema/modo, sobre todo oscuro.
+                    // `secondaryTextColor` ya es el par on*Container/
+                    // onSurfaceVariant correcto para el `bgColor` de esta
+                    // posición (ver arriba).
                     Text(
                         text = "⭐ ",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.tertiary
+                        color = secondaryTextColor
                     )
                     AnimatedCounter(
                         value = member.totalPoints,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = secondaryTextColor,
                         fontWeight = FontWeight.Bold
                     )
                 }

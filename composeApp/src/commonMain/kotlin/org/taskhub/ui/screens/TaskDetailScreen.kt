@@ -44,7 +44,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.taskhub.network.models.TaskAssignmentResponse
 import org.taskhub.network.models.MemberResponse
-import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.models.*
 import org.taskhub.ui.components.AchievementToast
 import org.taskhub.ui.components.AnimatedCheckmark
@@ -321,8 +320,20 @@ data class TaskDetailScreen(
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(16.dp))
-                                Button(onClick = { model.loadTaskDetail(householdId, taskId) }) {
-                                    Text(s("tasks_retry"))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // Panel v17 (hallazgo MENOR de UX): si el
+                                    // error persiste (p.ej. tarea borrada por
+                                    // otro miembro, o deep link a un ID
+                                    // inexistente), "Reintentar" vuelve a
+                                    // fallar indefinidamente — se añade una
+                                    // salida explícita en el propio cuerpo del
+                                    // error, no solo la flecha del topbar.
+                                    OutlinedButton(onClick = { navigator.pop() }) {
+                                        Text(s("tasks_back"))
+                                    }
+                                    Button(onClick = { model.loadTaskDetail(householdId, taskId) }) {
+                                        Text(s("tasks_retry"))
+                                    }
                                 }
                             }
                         }
@@ -1479,11 +1490,17 @@ private fun AssignmentCard(
                 }
 
                 // Mandatory badge
+                // Panel v17 (hallazgo IMPORTANTE de accesibilidad):
+                // `colorScheme.tertiary` sobre el `surface` de esta Card
+                // fallaba WCAG AA (4.19:1 en Naturaleza claro, bajo el
+                // umbral 4.5:1 para texto normal) — `semanticColors.warning`
+                // está auditado explícitamente para texto sobre fondos
+                // neutros en los 3 temas.
                 if (assignment.mandatory) {
                     Text(
                         text = s("task_detail_mandatory_badge"),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary
+                        color = MaterialTheme.semanticColors.warning
                     )
                 }
 
@@ -1495,7 +1512,7 @@ private fun AssignmentCard(
                         text = if (onTime) s("task_detail_on_time_pts").replace("%d", pts.toString())
                         else s("task_detail_late_pts").replace("%d", pts.toString()),
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (onTime) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
+                        color = if (onTime) MaterialTheme.colorScheme.primary else MaterialTheme.semanticColors.warning
                     )
                     if (assignment.completedAt != null) {
                         Text(

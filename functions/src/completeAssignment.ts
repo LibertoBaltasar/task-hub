@@ -5,11 +5,11 @@
  * `FirestoreRepository.completeAssignment` + `regenerateNextAssignment`.
  */
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { FieldValue } from "firebase-admin/firestore";
 import { db, REGION } from "./admin.js";
 import { requireAuth, loadActiveMember, loadHouseholdTimezone } from "./auth.js";
 import { resolveCompletionOutcome } from "./penalty.js";
 import { resolveNextAssignmentDecision } from "./rules.js";
+import { clampTotalPoints } from "./points.js";
 import { calculateNextDueDate, effectiveDueDateForAssignment } from "./completionHelpers.js";
 import { TaskAssignmentDoc, TaskDoc } from "./types.js";
 
@@ -52,7 +52,7 @@ export const completeAssignment = onCall<CompleteAssignmentRequest, Promise<Comp
       if (assignment.taskId !== taskId) throw new HttpsError("invalid-argument", "assignment-task-mismatch");
       if (assignment.status !== "assigned") throw new HttpsError("aborted", "conflict");
 
-      await loadActiveMember(tx, householdId, assignment.memberId);
+      const targetMember = await loadActiveMember(tx, householdId, assignment.memberId);
       const tz = await loadHouseholdTimezone(tx, householdId);
 
       const siblingsSnap = await tx.get(
@@ -74,7 +74,9 @@ export const completeAssignment = onCall<CompleteAssignmentRequest, Promise<Comp
       });
 
       const memberRef = db.doc(`households/${householdId}/members/${assignment.memberId}`);
-      tx.update(memberRef, { totalPoints: FieldValue.increment(outcome.pointsAwarded) });
+      // Panel v17 (hallazgo CRÍTICO de seguridad): clamp en vez de
+      // FieldValue.increment ciego — ver KDoc de [clampTotalPoints].
+      tx.update(memberRef, { totalPoints: clampTotalPoints(targetMember.totalPoints, outcome.pointsAwarded) });
 
       const historyRef = db.collection(`households/${householdId}/taskHistory`).doc();
       tx.set(historyRef, {
@@ -100,11 +102,14 @@ export const completeAssignment = onCall<CompleteAssignmentRequest, Promise<Comp
       }
 
       if (task.frequency !== "once" && nextDueDate !== null) {
+        // Panel v17 (hallazgo CRÍTICO de arquitectura): ver comentario
+        // equivalente en completeRecurringTask.ts — faltaba `tz`.
         const decision = resolveNextAssignmentDecision(
           task.assignmentRotation ?? [],
           nextDueDate,
           assignment.memberId,
-          siblings.map((s) => s.data)
+          siblings.map((s) => s.data),
+          tz
         );
         if (decision.shouldCreate) {
           const nextRef = db.doc(`households/${householdId}/tasks/${taskId}/assignments/next_${taskId}_${nextDueDate}`);

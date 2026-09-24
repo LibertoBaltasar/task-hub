@@ -11,6 +11,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.datetime.Clock
 import org.taskhub.network.models.AssignmentSlot
 import org.taskhub.network.models.CommentResponse
@@ -53,6 +55,16 @@ class TaskRepository(
         with(firestoreClient) { updateMaskFieldPaths(fields) }
     private fun extractDocId(resourceName: String, operation: String): String =
         firestoreClient.extractDocId(resourceName, operation)
+
+    /**
+     * Panel v17 (hallazgo CRÍTICO de rendimiento): [getAllAssignments] hacía
+     * una petición HTTP por tarea, todas lanzadas a la vez sin límite — un
+     * hogar con 30 tareas disparaba 30 peticiones concurrentes cada vez que
+     * se abría TaskListScreen/StatsScreen/se reconciliaba Calendar. Mismo
+     * patrón que [org.taskhub.ui.models.CalendarSyncManager.createEventSemaphore]
+     * para acotar la concurrencia sin serializar del todo.
+     */
+    private val getAllAssignmentsSemaphore = Semaphore(4)
 
     // ────────────────────────────────────────────────────────
     //  Serialización compartida entre createTask/updateTask
@@ -555,12 +567,14 @@ class TaskRepository(
         return coroutineScope {
             tasks.map { task ->
                 async {
-                    try {
-                        getAssignments(householdId, task.id)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Exception) {
-                        emptyList() // Task has no assignments yet — skip
+                    getAllAssignmentsSemaphore.withPermit {
+                        try {
+                            getAssignments(householdId, task.id)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            emptyList() // Task has no assignments yet — skip
+                        }
                     }
                 }
             }.awaitAll().flatten()
@@ -580,13 +594,21 @@ class TaskRepository(
         assignmentRotation: List<AssignmentSlot>
     ) {
         val fields = mapOf("assignmentRotation" to assignmentRotationField(assignmentRotation))
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths("assignmentRotation")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
+        // Panel v17 (hallazgo CRÍTICO de red/offline): try/finally — un
+        // timeout no distingue "nunca llegó al servidor" de "se aplicó pero
+        // se perdió la respuesta"; invalidar de más es barato, no invalidar
+        // de menos deja la caché sirviendo datos obsoletos indefinidamente
+        // (mismo motivo que [FirestoreRepository.completeTask]).
+        try {
+            client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
+                withAuth()
+                updateMaskFieldPaths("assignmentRotation")
+                contentType(ContentType.Application.Json)
+                setBody(FirestoreDocument(fields))
+            }
+        } finally {
+            taskCache.clearTasks(householdId)
         }
-        taskCache.clearTasks(householdId)
     }
 
     /**
@@ -606,15 +628,20 @@ class TaskRepository(
                 FirestoreValue(nullValue = "NULL_VALUE")
             }
         )
-        client.patch(
-            "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
-        ) {
-            withAuth()
-            updateMaskFieldPaths("googleEventId")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
+        // Panel v17 (hallazgo CRÍTICO de red/offline): ver comentario en
+        // [updateAssignmentRotation].
+        try {
+            client.patch(
+                "$baseUrl/households/$householdId/tasks/$taskId/assignments/$assignmentId"
+            ) {
+                withAuth()
+                updateMaskFieldPaths("googleEventId")
+                contentType(ContentType.Application.Json)
+                setBody(FirestoreDocument(fields))
+            }
+        } finally {
+            taskCache.clearAssignments(householdId, taskId)
         }
-        taskCache.clearAssignments(householdId, taskId)
     }
 
     // ────────────────────────────────────────────────────────
@@ -702,13 +729,18 @@ class TaskRepository(
         val nextDueAt = computeNextDueAt(frequency, recurrenceDay, recurrenceDays, lastCompletedDate ?: now)
         fields["nextDueAt"] = nextDueAtField(nextDueAt)
 
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths(fields.keys)
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
+        // Panel v17 (hallazgo CRÍTICO de red/offline): ver comentario en
+        // [updateAssignmentRotation].
+        try {
+            client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
+                withAuth()
+                updateMaskFieldPaths(fields.keys)
+                contentType(ContentType.Application.Json)
+                setBody(FirestoreDocument(fields))
+            }
+        } finally {
+            taskCache.clearTasks(householdId)
         }
-        taskCache.clearTasks(householdId)
         // Se devuelve para que el caller (FirestoreRepository.updateTask →
         // TaskScreenModel.updateTask) pueda usarlo como dueDate de las
         // asignaciones al editar una tarea recurrente sin fecha límite manual
@@ -718,48 +750,72 @@ class TaskRepository(
     }
 
     /**
-     * Update only the subtasks array on a task document.
-     * Used for quick toggling of individual subtask checkboxes.
+     * Actualiza el array `subtasks` de una tarea aplicando [transform] sobre
+     * el array FRESCO leído dentro del propio reintento — usado para marcar/
+     * desmarcar una subtarea concreta sin pisar el cambio de otro dispositivo.
+     *
+     * Panel v17 (hallazgo CRÍTICO de red/offline): antes recibía la lista ya
+     * calculada por el caller (leída ANTES de esta llamada) y hacía un PATCH
+     * ciego del array completo, sin `currentDocument.updateTime`. Dos
+     * dispositivos marcando subtareas DISTINTAS de la misma tarea casi a la
+     * vez podían pisarse: el segundo PATCH sobreescribía el array entero
+     * basado en una foto anterior a la escritura del primero, revirtiendo su
+     * cambio en silencio. Ahora usa concurrencia optimista igual que
+     * [MemberRepository.addMemberPoints]: en cada reintento relee el
+     * documento fresco, aplica [transform] sobre SU array de subtareas (no
+     * sobre uno capturado fuera del bucle) y manda `currentDocument.updateTime`
+     * como precondición — si otro escritor ganó la carrera entretanto,
+     * Firestore rechaza el PATCH y se reintenta con el valor ya actualizado.
      */
     suspend fun updateSubtasks(
         householdId: String,
         taskId: String,
-        subtasks: List<Subtask>
+        transform: (List<Subtask>) -> List<Subtask>
     ) {
-        val fields = mapOf(
-            "subtasks" to FirestoreValue(
-                arrayValue = FirestoreArrayValue(
-                    values = subtasks.map { st ->
-                        FirestoreValue(
-                            mapValue = FirestoreMapValue(
-                                fields = mapOf(
-                                    "id" to FirestoreValue(stringValue = st.id),
-                                    "text" to FirestoreValue(stringValue = st.text),
-                                    "completed" to FirestoreValue(booleanValue = st.completed)
-                                )
-                            )
-                        )
-                    }
-                )
-            )
-        )
-        client.patch("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
-            updateMaskFieldPaths("subtasks")
-            contentType(ContentType.Application.Json)
-            setBody(FirestoreDocument(fields))
+        val docUrl = "$baseUrl/households/$householdId/tasks/$taskId"
+        repeat(FirestoreClient.OPTIMISTIC_WRITE_MAX_RETRIES) { attempt ->
+            val current: FirestoreDocumentResponse = client.getWithRetry(docUrl) { withAuth() }.body()
+            val updatedSubtasks = transform(toTaskResponse(current, householdId).subtasks)
+            val fields = mapOf("subtasks" to subtasksField(updatedSubtasks))
+            try {
+                client.patch(docUrl) {
+                    withAuth()
+                    updateMaskFieldPaths("subtasks")
+                    current.updateTime?.let { parameter("currentDocument.updateTime", it) }
+                    contentType(ContentType.Application.Json)
+                    setBody(FirestoreDocument(fields))
+                }
+                taskCache.clearTasks(householdId)
+                return
+            } catch (e: FirestoreException) {
+                val isConflict = e.code == "FAILED_PRECONDITION" || e.code == "ABORTED"
+                if (!isConflict || attempt == FirestoreClient.OPTIMISTIC_WRITE_MAX_RETRIES - 1) throw e
+                // Otro escritor ganó la carrera: reintentar con el valor fresco.
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Timeout/IOException (AMBIGUOUS): ver KDoc de [MemberRepository.addMemberPoints].
+                if (e.errorCategory() == ErrorCategory.AMBIGUOUS) {
+                    taskCache.clearTasks(householdId)
+                }
+                throw e
+            }
         }
-        taskCache.clearTasks(householdId)
     }
 
     /**
      * Delete a task document.
      */
     suspend fun deleteTask(householdId: String, taskId: String) {
-        client.delete("$baseUrl/households/$householdId/tasks/$taskId") {
-            withAuth()
+        // Panel v17 (hallazgo CRÍTICO de red/offline): ver comentario en
+        // [updateAssignmentRotation].
+        try {
+            client.delete("$baseUrl/households/$householdId/tasks/$taskId") {
+                withAuth()
+            }
+        } finally {
+            taskCache.clearTasks(householdId)
         }
-        taskCache.clearTasks(householdId)
     }
 
     private fun toTaskResponse(doc: FirestoreDocumentResponse, householdId: String): TaskResponse =

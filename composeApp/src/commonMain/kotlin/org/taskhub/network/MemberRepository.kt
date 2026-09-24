@@ -863,6 +863,20 @@ class MemberRepository(
      * dos dispositivos), el PATCH que llega segundo ve el precondition fallar y
      * reintenta con el array ya actualizado, en vez de sobrescribirlo y perder
      * el logro que ganó la carrera.
+     *
+     * Panel v17 (hallazgo IMPORTANTE de QA): cuando el documento `_meta`
+     * TODAVÍA NO EXISTE (`current == null`, primer logro de este miembro),
+     * el PATCH se mandaba SIN precondición alguna (`current?.updateTime` es
+     * null, el `let` no aporta nada) — dos dispositivos desbloqueando
+     * logros DISTINTOS por primera vez casi a la vez podían pisarse: ambos
+     * leían `current = null`, ambos creaban el documento con SU único logro,
+     * y el segundo PATCH (último-en-escribir-gana sobre el array completo)
+     * borraba en silencio el logro del primero. Ahora se manda
+     * `currentDocument.exists = false` como precondición en ese caso: si
+     * alguien más ya creó el documento entretanto, el PATCH falla con el
+     * mismo `FAILED_PRECONDITION` que ya maneja el resto de esta función, y
+     * el reintento relee el documento (ahora sí existente) para fusionar en
+     * vez de pisar.
      */
     suspend fun addMemberAchievement(householdId: String, memberId: String, achievementId: String) {
         val docUrl = "$baseUrl/households/$householdId/members/$memberId/achievements/_meta"
@@ -887,7 +901,11 @@ class MemberRepository(
                 client.patch(docUrl) {
                     withAuth()
                     updateMaskFieldPaths("unlocked", "updatedAt")
-                    current?.updateTime?.let { parameter("currentDocument.updateTime", it) }
+                    if (current?.updateTime != null) {
+                        parameter("currentDocument.updateTime", current.updateTime)
+                    } else {
+                        parameter("currentDocument.exists", "false")
+                    }
                     contentType(ContentType.Application.Json)
                     setBody(FirestoreDocument(fields))
                 }

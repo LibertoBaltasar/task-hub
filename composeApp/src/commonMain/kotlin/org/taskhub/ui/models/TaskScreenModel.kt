@@ -1203,17 +1203,21 @@ class TaskScreenModel(
     // la lista antes de que la primera escritura se confirmara y la sobrescribía).
     private val subtaskTogglesInFlight = mutableSetOf<String>()
 
-    /** Marca/desmarca una subtarea (lee la tarea fresca, la muta en memoria y hace PATCH del array completo). */
+    /**
+     * Marca/desmarca una subtarea. [FirestoreRepository.updateSubtasks] relee
+     * el array fresco dentro de su propio reintento (concurrencia optimista,
+     * panel v17) y aplica el toggle sobre ESE array, no sobre uno capturado
+     * aquí — así dos dispositivos alternando subtareas distintas de la misma
+     * tarea no se pisan entre sí.
+     */
     fun toggleSubtask(householdId: String, taskId: String, subtaskId: String) {
         if (taskId in subtaskTogglesInFlight) return
         subtaskTogglesInFlight += taskId
         screenModelScope.launch {
             try {
-                val task = repo.getTask(householdId, taskId)
-                val updatedSubtasks = task.subtasks.map { st ->
-                    if (st.id == subtaskId) st.copy(completed = !st.completed) else st
+                repo.updateSubtasks(householdId, taskId) { current ->
+                    current.map { st -> if (st.id == subtaskId) st.copy(completed = !st.completed) else st }
                 }
-                repo.updateSubtasks(householdId, taskId, updatedSubtasks)
                 buzz(HapticKind.SELECTION)
                 // Refresh detail
                 loadTaskDetail(householdId, taskId)
