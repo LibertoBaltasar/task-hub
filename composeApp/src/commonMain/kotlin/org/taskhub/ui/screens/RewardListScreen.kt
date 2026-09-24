@@ -29,7 +29,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.RewardResponse
 import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.DestructiveConfirmDialog

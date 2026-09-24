@@ -57,6 +57,7 @@ import org.taskhub.storage.SavedHousehold
 import org.taskhub.storage.SettingsStore
 import org.taskhub.storage.TaskCache
 import org.taskhub.platform.secureRandomInt
+import org.taskhub.platform.logAnalyticsEvent
 import org.taskhub.ui.i18n.AppStrings
 
 /**
@@ -390,6 +391,28 @@ open class FirestoreRepository(
 
     private fun HttpRequestBuilder.updateMaskFieldPaths(fields: Collection<String>) =
         with(firestoreClient) { updateMaskFieldPaths(fields) }
+
+    /**
+     * Panel v16 (2026-09-24, hallazgo I7): las funciones `anonymizeMember*`
+     * son best-effort por documento y antes tragaban cualquier fallo
+     * parcial en silencio — el nombre real de un miembro que se fue podía
+     * quedar expuesto para siempre sin que nadie (ni el usuario, ni el
+     * operador de la app) lo detectara, pese a que `privacy.html` promete
+     * anonimizar su actividad pasada. No se bloquea el abandono/borrado de
+     * cuenta por esto (sigue siendo best-effort), pero el fallo deja de ser
+     * invisible: se registra como evento de analytics sin PII (solo la
+     * señal "incompleto"), consultable para detectar/reintentar.
+     */
+    private fun reportAnonymizationIncomplete(allSucceeded: Boolean) {
+        if (allSucceeded) return
+        try {
+            logAnalyticsEvent("member_anonymization_incomplete")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No crítico: es solo una señal de telemetría best-effort.
+        }
+    }
 
     // ────────────────────────────────────────────────────────
     //  Households
@@ -737,31 +760,42 @@ open class FirestoreRepository(
             // que el nombre real de quien se fue quedaba visible para
             // siempre en el historial de chat (panel v4, Experto 10 #4).
             // Best-effort: ver KDoc de [HouseholdRepository.anonymizeMemberMessages].
-            householdRepository.anonymizeMemberMessages(
-                householdId,
-                toDelete.map { it.id }.toSet(),
-                AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+            // Panel v16 hallazgo I7: antes un fallo parcial era invisible —
+            // ahora se registra (sin PII, solo la señal "incompleto") para
+            // poder detectar/reintentar, sin bloquear el abandono del hogar.
+            reportAnonymizationIncomplete(
+                householdRepository.anonymizeMemberMessages(
+                    householdId,
+                    toDelete.map { it.id }.toSet(),
+                    AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+                )
             )
             // Ver KDoc de [deleteMember]: mismo tratamiento para los
             // comentarios de tarea de quien abandona.
-            taskRepository.anonymizeMemberComments(
-                householdId,
-                toDelete.map { it.id }.toSet(),
-                AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+            reportAnonymizationIncomplete(
+                taskRepository.anonymizeMemberComments(
+                    householdId,
+                    toDelete.map { it.id }.toSet(),
+                    AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+                )
             )
             // Igual que arriba, pero sobre el UID crudo de taskHistory/
             // rewardRedemptions en vez de un nombre mostrado — ver KDoc de
             // [TaskRepository.anonymizeMemberTaskHistory] (panel v14
             // 2026-09-20, Experto 10, IMPORTANTE).
-            taskRepository.anonymizeMemberTaskHistory(
-                householdId,
-                toDelete.map { it.id }.toSet(),
-                ANONYMIZED_MEMBER_ID
+            reportAnonymizationIncomplete(
+                taskRepository.anonymizeMemberTaskHistory(
+                    householdId,
+                    toDelete.map { it.id }.toSet(),
+                    ANONYMIZED_MEMBER_ID
+                )
             )
-            rewardsRepository.anonymizeMemberRedemptions(
-                householdId,
-                toDelete.map { it.id }.toSet(),
-                ANONYMIZED_MEMBER_ID
+            reportAnonymizationIncomplete(
+                rewardsRepository.anonymizeMemberRedemptions(
+                    householdId,
+                    toDelete.map { it.id }.toSet(),
+                    ANONYMIZED_MEMBER_ID
+                )
             )
             taskCache.clearMembers(householdId)
             memberRepository.invalidateCurrentMember(householdId)
@@ -882,10 +916,13 @@ open class FirestoreRepository(
         // visible para siempre en el chat. Best-effort, igual que en
         // leaveHousehold.
         try {
-            householdRepository.anonymizeMemberMessages(
-                householdId,
-                setOf(memberId),
-                AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+            // Panel v16 hallazgo I7: ver reportAnonymizationIncomplete.
+            reportAnonymizationIncomplete(
+                householdRepository.anonymizeMemberMessages(
+                    householdId,
+                    setOf(memberId),
+                    AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+                )
             )
         } catch (e: CancellationException) {
             throw e
@@ -897,10 +934,12 @@ open class FirestoreRepository(
         // Experto 2/10): sin esto, su nombre real queda visible para siempre
         // en los comentarios de cualquier tarea que haya comentado.
         try {
-            taskRepository.anonymizeMemberComments(
-                householdId,
-                setOf(memberId),
-                AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+            reportAnonymizationIncomplete(
+                taskRepository.anonymizeMemberComments(
+                    householdId,
+                    setOf(memberId),
+                    AppStrings.get("member_deleted_name", settingsStore.getLanguage())
+                )
             )
         } catch (e: CancellationException) {
             throw e
@@ -912,14 +951,18 @@ open class FirestoreRepository(
         // [TaskRepository.anonymizeMemberTaskHistory] (panel v14
         // 2026-09-20, Experto 10, IMPORTANTE).
         try {
-            taskRepository.anonymizeMemberTaskHistory(householdId, setOf(memberId), ANONYMIZED_MEMBER_ID)
+            reportAnonymizationIncomplete(
+                taskRepository.anonymizeMemberTaskHistory(householdId, setOf(memberId), ANONYMIZED_MEMBER_ID)
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
             // No crítico: ver KDoc de deleteMember.
         }
         try {
-            rewardsRepository.anonymizeMemberRedemptions(householdId, setOf(memberId), ANONYMIZED_MEMBER_ID)
+            reportAnonymizationIncomplete(
+                rewardsRepository.anonymizeMemberRedemptions(householdId, setOf(memberId), ANONYMIZED_MEMBER_ID)
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {

@@ -50,7 +50,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.datetime.*
 import org.taskhub.network.models.AssignmentSlot
-import org.taskhub.network.models.MemberResponse
 import org.taskhub.network.models.Subtask
 import org.taskhub.ui.models.MemberScreenModel
 import org.taskhub.ui.models.MemberUiState
@@ -214,14 +213,30 @@ data class CreateTaskScreen(
         var otrosExpanded by remember { mutableStateOf(false) }
         var puntuacionExpanded by remember { mutableStateOf(true) }
 
+        // Panel v16 (2026-09-24, hallazgo I11): antes, crear una tarea era
+        // indistinguible de "se canceló sin guardar" — la pantalla
+        // simplemente desaparecía. Snackbar de confirmación, mismo patrón ya
+        // usado en MemberRewardScreen para canjear recompensas.
+        val snackbarHostState = remember { SnackbarHostState() }
+        val successCoroutineScope = rememberCoroutineScope()
+
         // Handle success
         LaunchedEffect(actionState) {
             if (actionState is TaskActionState.Success) {
                 taskModel.loadTasks(householdId)
+                successCoroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = s("create_task_success"),
+                        duration = SnackbarDuration.Short
+                    )
+                }
                 navigator.pop()
             }
         }
 
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { _ ->
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -472,6 +487,12 @@ data class CreateTaskScreen(
                                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                                 )
                                 Button(
+                                    // Panel v16 (2026-09-24), hallazgo UX: antes
+                                    // el botón se veía activo con el campo vacío
+                                    // pero pulsar no hacía nada (affordance
+                                    // engañosa, la comprobación de blank solo
+                                    // vivía dentro del onClick).
+                                    enabled = subtaskText.isNotBlank(),
                                     onClick = {
                                         val text = subtaskText.trim()
                                         if (text.isNotBlank()) {
@@ -746,6 +767,8 @@ data class CreateTaskScreen(
                                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                                     )
                                     Button(
+                                        // Panel v16, hallazgo UX: ver el mismo motivo en el botón de añadir subtarea.
+                                        enabled = tagsText.isNotBlank(),
                                         onClick = {
                                             val tag = tagsText.trim()
                                             if (tag.isNotBlank() && tag !in tags) {
@@ -1125,7 +1148,18 @@ data class CreateTaskScreen(
                         item {
                             OutlinedTextField(
                                 value = pointsText,
-                                onValueChange = { pointsText = it },
+                                onValueChange = { newValue ->
+                                    // Panel v16 (2026-09-24), hallazgo UX: sin
+                                    // límite de longitud, tecleando ~10+ dígitos
+                                    // `toIntOrNull()` da null por overflow de Int
+                                    // y el error mostrado era "Debe ser un
+                                    // número" pese a que el usuario sí tecleó
+                                    // solo dígitos — mismo límite ya usado en
+                                    // CreateRewardScreen para `costText`.
+                                    if (newValue.all { it.isDigit() } && newValue.length <= 5) {
+                                        pointsText = newValue
+                                    }
+                                },
                                 label = { Text(s("public_profile_stat_points")) },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
@@ -1301,6 +1335,7 @@ data class CreateTaskScreen(
                     item { Spacer(modifier = Modifier.height(80.dp)) }
                 }
             }
+        }
         }
     }
 }

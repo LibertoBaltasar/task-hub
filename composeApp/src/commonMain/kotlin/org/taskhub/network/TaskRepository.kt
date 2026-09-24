@@ -834,16 +834,17 @@ class TaskRepository(
      * miembro anonimizado y quedan sin tocar — limitación conocida, no
      * retro-migrable.
      */
-    suspend fun anonymizeMemberComments(householdId: String, memberIds: Set<String>, anonymizedName: String) {
-        if (memberIds.isEmpty()) return
+    /** @return `true` si TODOS los comentarios se anonimizaron correctamente (ver KDoc de [HouseholdRepository.anonymizeMemberMessages], panel v16 hallazgo I7). */
+    suspend fun anonymizeMemberComments(householdId: String, memberIds: Set<String>, anonymizedName: String): Boolean {
+        if (memberIds.isEmpty()) return true
         val tasks = try {
             getTasks(householdId)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            return
+            return false
         }
-        coroutineScope {
+        return coroutineScope {
             tasks.map { task ->
                 async {
                     val comments = try {
@@ -851,8 +852,9 @@ class TaskRepository(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
-                        emptyList()
+                        return@async false
                     }
+                    var allOk = true
                     comments.filter { it.memberId in memberIds }.forEach { comment ->
                         try {
                             client.patch(
@@ -866,11 +868,14 @@ class TaskRepository(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (_: Exception) {
-                            // No crítico: se prioriza anonimizar el resto de comentarios.
+                            // Se prioriza anonimizar el resto de comentarios
+                            // (best-effort), pero el fallo se acumula — ver KDoc arriba.
+                            allOk = false
                         }
                     }
+                    allOk
                 }
-            }.awaitAll()
+            }.awaitAll().all { it }
         }
     }
 
@@ -890,15 +895,17 @@ class TaskRepository(
      * el sentinel no rompe ninguna pantalla existente. Best-effort por
      * registro, igual que el resto de anonimizaciones.
      */
-    suspend fun anonymizeMemberTaskHistory(householdId: String, memberIds: Set<String>, anonymizedMemberId: String) {
-        if (memberIds.isEmpty()) return
+    /** @return `true` si TODO el historial se anonimizó correctamente (ver KDoc de [HouseholdRepository.anonymizeMemberMessages], panel v16 hallazgo I7). */
+    suspend fun anonymizeMemberTaskHistory(householdId: String, memberIds: Set<String>, anonymizedMemberId: String): Boolean {
+        if (memberIds.isEmpty()) return true
         val history = try {
             getTaskHistory(householdId)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            return
+            return false
         }
+        var allOk = true
         history.filter { it.memberId in memberIds }.forEach { record ->
             try {
                 client.patch("$baseUrl/households/$householdId/taskHistory/${record.id}") {
@@ -910,9 +917,12 @@ class TaskRepository(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // No crítico: se prioriza anonimizar el resto del historial.
+                // Se prioriza anonimizar el resto del historial (best-effort),
+                // pero el fallo se acumula en el resultado — ver KDoc arriba.
+                allOk = false
             }
         }
         taskCache.clearTaskHistory(householdId)
+        return allOk
     }
 }

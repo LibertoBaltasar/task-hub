@@ -151,7 +151,12 @@ private val DefaultLightColorScheme = lightColorScheme(
     surfaceVariant = Sand100,
     onSurfaceVariant = Color(0xFF49454F),
 
-    outline = Color(0xFF79747E),
+    // Panel v16 (2026-09-24), hallazgo accesibilidad: 0xFF79747E sobre
+    // Sand50 daba 4.44:1 — por debajo del umbral AA de texto normal (4.5:1),
+    // aunque el único uso actual (StatusDot en TaskListScreen) es no-textual
+    // (umbral 3:1). Se oscurece para blindar el token si se reutiliza como
+    // texto en el futuro: 5.45:1 verificado sobre Sand50.
+    outline = Color(0xFF6B6670),
     outlineVariant = Color(0xFFCAC4D0),
 )
 
@@ -217,7 +222,10 @@ private val NaturalezaLightColorScheme = lightColorScheme(
     surfaceVariant = Earth100,
     onSurfaceVariant = Brown700,
 
-    outline = Color(0xFF8D6E63),
+    // Panel v16, hallazgo accesibilidad: 0xFF8D6E63 (= Brown400) sobre
+    // Earth50 daba 4.26:1 — mismo motivo que el tema DEFAULT de arriba.
+    // Brown500 da 6.03:1 verificado sobre Earth50.
+    outline = Brown500,
     outlineVariant = Color(0xFFBCAAA4),
 )
 

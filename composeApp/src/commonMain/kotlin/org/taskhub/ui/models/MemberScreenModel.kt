@@ -372,6 +372,15 @@ class MemberScreenModel(
                     is MemberRepository.AppreciateResult.Error -> {
                         _appreciateActionState.value = AppreciateActionState.Error(appreciateErrorKey(result.reason))
                         buzz(HapticKind.ERROR)
+                        // Panel v16, hallazgo I19: UNCERTAIN significa que el
+                        // acreditado al receptor pudo haber llegado a aplicarse
+                        // en el servidor pese al error — recargar, igual que ya
+                        // hace redeemReward, para no dejar el saldo mostrado
+                        // "congelado" justo en el caso en que el propio mensaje
+                        // le pide al usuario comprobarlo.
+                        if (result.reason == MemberRepository.AppreciateErrorReason.UNCERTAIN) {
+                            loadMembers(householdId)
+                        }
                     }
                 }
             } catch (e: CancellationException) {
@@ -403,6 +412,10 @@ class MemberScreenModel(
                     is MemberRepository.DonateResult.Error -> {
                         _donateActionState.value = DonateActionState.Error(donateErrorKey(result.reason))
                         buzz(HapticKind.ERROR)
+                        // Panel v16, hallazgo I19: ver el mismo motivo en appreciateMember().
+                        if (result.reason == MemberRepository.DonateErrorReason.UNCERTAIN) {
+                            loadMembers(householdId)
+                        }
                     }
                 }
             } catch (e: CancellationException) {

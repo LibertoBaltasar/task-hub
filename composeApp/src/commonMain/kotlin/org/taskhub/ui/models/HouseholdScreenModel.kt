@@ -93,6 +93,14 @@ class HouseholdScreenModel(
 
     /** Crea un hogar nuevo con [name] y lo guarda como hogar actual del usuario. */
     fun createHousehold(name: String) {
+        // Panel v16 (2026-09-24), hallazgo QA: `createHousehold` NO es
+        // idempotente (cada llamada crea un documento Firestore nuevo con ID
+        // autogenerado) — era la única mutación del código sin esta guarda
+        // ya usada de forma consistente en el resto de acciones
+        // (createTask/completeTask/addMember/redeemReward...). Sin ella, un
+        // doble-tap muy rápido podía crear dos hogares distintos, uno de
+        // ellos huérfano en Firestore.
+        if (_uiState.value == HouseholdUiState.Loading) return
         screenModelScope.launch {
             _uiState.value = HouseholdUiState.Loading
             try {
@@ -119,6 +127,8 @@ class HouseholdScreenModel(
      * para que la UI navegue directo al hogar sin duplicar el alta.
      */
     fun joinHousehold(inviteCode: String) {
+        // Panel v16, hallazgo QA: ver mismo motivo en createHousehold().
+        if (_uiState.value == HouseholdUiState.Loading) return
         screenModelScope.launch {
             _uiState.value = HouseholdUiState.Loading
             try {

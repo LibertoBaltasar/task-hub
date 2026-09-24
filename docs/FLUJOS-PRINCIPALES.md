@@ -49,20 +49,31 @@ escribir este documento; si el archivo cambia, pueden desactualizarse.
 
 **Completar una tarea (puntos + racha):**
 
-1. `ui/screens/TaskDetailScreen.kt:182-187` — botón "Completar" → `model.completeTask(householdId, taskId)`.
-2. `ui/models/TaskScreenModel.kt:436-475` — `completeTask()`: resuelve el miembro actual (`_currentMemberId.value ?: repo.resolveCurrentMember(householdId)`, líneas 445-446), guarda el estado previo para deshacer (`UndoState`, líneas 456-468) y llama a `repo.completeTask(householdId, taskId, memberId, task)` (línea 470).
-3. `network/FirestoreRepository.kt:930-1071` — `completeTask()`, la orquestación central:
-   - Líneas 941-946: calcula `effectiveDueDate` (ajustado con `RecurrenceRules.endOfDueDay()` para recurrentes, línea 944 — la medianoche del día programado no es la hora límite real) y llama a `PenaltyRules.resolveCompletionOutcome(task, effectiveDueDate, now)` (línea 946).
-   - Líneas 966-971: concurrencia optimista — compara el `lastCompletedDate` recién leído de Firestore contra el que tenía el `task` que pasó el caller; si difieren, lanza `TaskCompletionConflictException` (otro dispositivo ya completó la tarea).
-   - Línea 998: `addMemberPoints(householdId, memberId, outcome.pointsAwarded)` — otorga los puntos.
-   - Líneas 1001-1008: `saveTaskHistory(...)` — registra el historial de auditoría (`taskHistory`).
-   - Líneas 1022-1049: cierra como "completed" **todas** las asignaciones "assigned" de ese ciclo (no solo la de quien completó) con `pointsAwarded=0` para las demás (comentario líneas 1010-1021: "cualquier miembro puede completar cualquier tarea").
-   - Líneas 1059-1068: si es recurrente, `regenerateNextAssignment(...)` (definida en línea 1687) crea la asignación de la siguiente ocurrencia respetando `assignmentRotation` vía `RecurrenceRules.resolveRotationAssignee()` (línea 298-307) / `resolveNextAssignmentDecision()` (línea 324-336).
-4. `network/PenaltyRules.kt:27-36` — `resolveCompletionOutcome()`: `onTime = dueDate == 0L || now <= dueDate`; si es tarde, resta la penalización de `calculatePenalty()` (línea 45-67: modo `"fixed"` o `"percentage"`, con tope `penaltyMax` y nunca por debajo de 0).
-5. `ui/models/TaskScreenModel.kt:527-534` — tras `completeTask`, actualiza racha con `updateMemberStreak(householdId, memberBefore)` (línea 529, definida en líneas 978-1019) y comprueba logros con `checkAndAwardAchievements(...)` (línea 533).
-6. `ui/models/TaskScreenModel.kt:978-1019` — `updateMemberStreak()`: si `lastStreakDate` ya es hoy, no hace nada (líneas 986-989); si el último día registrado fue ayer, `currentStreak + 1` (línea 1002); si hay un hueco, reinicia a `1` (línea 1005); `bestStreak = maxOf(newStreak, member.bestStreak)` (línea 1009); persiste con `repo.updateMemberStreak(...)` (línea 1011, → `network/MemberRepository.kt:444-468`).
+> Actualizado en el panel de expertos v16 (2026-09-24, hallazgo I8): la
+> versión anterior de esta sección describía `completeTask()` como
+> orquestación 100% client-side dentro de `FirestoreRepository.kt` — eso ya
+> **no** es así. Desde la migración documentada en
+> `docs/recurrencia-backend-cloud-functions-diseno-2026-09-11.md`, otorgar
+> puntos/historial/asignaciones es responsabilidad de una Cloud Function
+> transaccional real (`functions/src/completeRecurringTask.ts`), no del
+> cliente. Ver también `docs/ARQUITECTURA.md` §8 (nota sobre el backend).
 
-**Deshacer una compleción:** `ui/models/TaskScreenModel.kt:577` en adelante (`undoCompleteTask`, no detallado aquí) revierte puntos/racha/`lastCompletedDate` y usa `revertTaskCompletion` (`network/TaskRepository.kt:285-314`) + `undoTaskCompletionAssignments` (`network/FirestoreRepository.kt:1112-1152`) para no dejar asignaciones huérfanas.
+1. `ui/screens/TaskDetailScreen.kt:182-187` — botón "Completar" → `model.completeTask(householdId, taskId)`.
+2. `ui/models/TaskScreenModel.kt:494-628` — `completeTask()`: resuelve el miembro actual, publica un `UndoState` OPTIMISTA (con `completedAt = 0L`, antes de conocer el resultado real — panel v16 hallazgo C4: si el usuario deshace en ese margen, el undo espera al resultado real en vez de perderse, ver `completeTaskJob`/`pendingCompletion`) y llama a `repo.completeTask(householdId, taskId, memberId, task)`.
+3. `network/FirestoreRepository.kt:1129-1164` — `completeTask()`: ya NO contiene la lógica de negocio; delega en una única llamada a la Cloud Function callable `completeRecurringTask` vía `cloudFunctionsClient.call(...)`, invalidando la caché local (`TaskCache`) en `finally` (un timeout no distingue "nunca llegó" de "se aplicó pero se perdió la respuesta").
+4. `functions/src/completeRecurringTask.ts` — la transacción real (Firestore `runTransaction`, todo o nada):
+   - Valida que el llamador y el `memberId` destino sean miembros activos del hogar (`auth.ts`, `loadActiveMember`).
+   - Guard de concurrencia optimista OBLIGATORIO sobre `expectedLastCompletedDate` (panel v16 hallazgo C1/C3: antes se saltaba cuando el valor era `null`, permitiendo duplicar puntos con dos dispositivos completando casi a la vez una tarea nunca completada) + guard de "no completar la misma tarea dos veces el mismo día de calendario" (cierra el vector de farmear puntos con llamadas directas repetidas al endpoint, sin pasar por `isDueToday` del cliente).
+   - Calcula `effectiveDueDate` (`completionHelpers.ts`, equivalente a `RecurrenceRules.endOfDueDay()`) y el resultado con `resolveCompletionOutcome()` (`penalty.ts`, port de `network/PenaltyRules.kt` — **REGLA DE ORO**: debe mantenerse idéntico al `.kt` original a mano, sin test de paridad automatizado, ver `docs/review-panel-expertos-v16-2026-09-24.md` hallazgo de arquitectura).
+   - Escribe atómicamente: puntos del miembro (`FieldValue.increment`), el registro de `taskHistory`, cierra como `"completed"` **todas** las asignaciones `"assigned"` de ese ciclo (no solo la del `memberId` que recibe los puntos — "cualquier miembro puede completar cualquier tarea"), y si es recurrente, regenera la asignación del siguiente ciclo respetando `assignmentRotation` (`resolveNextAssignmentDecision()`, `rules.ts`).
+5. `ui/models/TaskScreenModel.kt:598-606` — tras el resultado, efectos best-effort encadenados (ninguno puede convertir la acción en error, ya que el servidor ya otorgó los puntos): cancelar el recordatorio pendiente, sincronizar Calendar, actualizar racha (`updateMemberStreak`, aún client-side — la función no la toca) y comprobar logros (`checkAndAwardAchievements`). Panel v16 hallazgo C5: el interstitial de AdMob (`adController.maybeShowInterstitial()`) se omite si el miembro que completó es un perfil `role == "child"`.
+
+**Deshacer una compleción:**
+
+1. `ui/screens/TaskDetailScreen.kt` (snackbar "Deshacer" tras completar) → `model.undoCompleteTask()`.
+2. `ui/models/TaskScreenModel.kt:665-708` — `undoCompleteTask()`: si `completeTask()` sigue en vuelo (`completedAt == 0L` en el `UndoState` optimista), espera su resultado real (`completeTaskJob?.join()`) antes de decidir — panel v16 hallazgo C4. Llama a `repo.undoTaskCompletion(...)`, que ahora devuelve `Boolean` (`reverted`) — solo revierte la racha/da feedback háptico si el servidor confirmó `reverted == true` (panel v16 hallazgo I10: antes se revertía la racha aunque el servidor hiciera un no-op idempotente).
+3. `network/FirestoreRepository.kt:1200-1214` — `undoTaskCompletion()`: delega en la Cloud Function callable `undoTaskCompletion`.
+4. `functions/src/undoTaskCompletion.ts` — transacción real: el SERVIDOR deriva el estado previo leyendo el registro de `taskHistory` inmediatamente anterior (no depende de un `UndoState` volátil en memoria del cliente). Idempotente: si el registro ya no existe (undo repetido desde dos dispositivos), devuelve `{ reverted: false }` sin fallar. Panel v16 hallazgo C2: exige que quien deshace sea el propio autor de la compleción (`historyRecord.memberId`) o `isTrusted` (owner/admin) — antes cualquier miembro activo del hogar podía deshacer compleciones ajenas, restando puntos de otros miembros sin permiso.
 
 ## 3. Recompensas y ranking
 

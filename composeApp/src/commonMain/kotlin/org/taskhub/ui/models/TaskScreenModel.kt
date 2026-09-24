@@ -644,8 +644,19 @@ class TaskScreenModel(
                     )
                     loadTasks(householdId)
                 } else {
+                    // Panel v16, hallazgo I18: un timeout (AMBIGUOUS) puede
+                    // significar que el servidor SÍ completó la tarea —
+                    // recargar para no dejar el botón "Completar" activo
+                    // sobre una tarea ya completada (lo que empujaba al
+                    // reintento manual que duplica puntos, ver hallazgo C3),
+                    // y usar un mensaje específico de tareas en vez del
+                    // texto de "transferencia"/"saldo" pensado para donar
+                    // puntos.
+                    if (e.errorCategory() == ErrorCategory.AMBIGUOUS) {
+                        loadTasks(householdId)
+                    }
                     _actionState.value = TaskActionState.Error(
-                        e.toUserMessage(settingsStore.getLanguage(), "task_error_completing")
+                        e.toUserMessage(settingsStore.getLanguage(), "task_error_completing", ambiguousKey = "task_error_uncertain")
                     )
                 }
                 buzz(HapticKind.ERROR)
@@ -855,8 +866,12 @@ class TaskScreenModel(
                     )
                     loadTaskDetail(householdId, taskId)
                 } else {
+                    // Panel v16, hallazgo I18: ver el mismo tratamiento en completeTask().
+                    if (e.errorCategory() == ErrorCategory.AMBIGUOUS) {
+                        loadTaskDetail(householdId, taskId)
+                    }
                     _actionState.value = TaskActionState.Error(
-                        e.toUserMessage(settingsStore.getLanguage(), "task_error_completing")
+                        e.toUserMessage(settingsStore.getLanguage(), "task_error_completing", ambiguousKey = "task_error_uncertain")
                     )
                 }
                 buzz(HapticKind.ERROR)

@@ -1041,7 +1041,11 @@ private fun TaskCard(
                 // Points badge — degradado sutil solo si la tarea ya está
                 // completada (puntos YA ganados, no solo el valor que vale
                 // la tarea): informe delight #10, aprobado.
-                PointsBadge(text = "${task.points} ${s("transfer_points_suffix")}", gradient = isDone)
+                // Panel v16 (2026-09-24), hallazgo estética: "⭐ N" es el
+                // formato usado en el resto de la app (perfil, ranking,
+                // recompensas, calendario, detalle de tarea); esta era la
+                // única pantalla con "N pts" en texto plano.
+                PointsBadge(text = "⭐ ${task.points}", gradient = isDone)
 
                 // Progreso de subtareas — antes invisible fuera del detalle de la
                 // tarea (revisión UX 2026-09-17, L2/H1).

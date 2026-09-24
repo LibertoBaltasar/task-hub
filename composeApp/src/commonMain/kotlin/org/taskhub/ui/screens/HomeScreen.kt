@@ -35,7 +35,6 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.taskhub.storage.SavedHousehold
 import org.taskhub.ui.components.AppLogo
 import org.taskhub.ui.components.EmptyHouseholdsIllustration
 import org.taskhub.ui.components.HouseholdSettingsDialog

@@ -41,10 +41,9 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.datetime.*
 import org.taskhub.network.models.TaskResponse
-import org.taskhub.network.models.MemberResponse
-import org.taskhub.network.models.AssignmentSlot
 import org.taskhub.network.models.Subtask
 import org.taskhub.ui.models.TaskActionState
 import org.taskhub.ui.models.TaskScreenModel
@@ -198,9 +197,21 @@ data class EditTaskScreen(
             }
         }
 
+        // Panel v16 (2026-09-24, hallazgo I11): ver el mismo motivo en
+        // CreateTaskScreen — guardar una edición era indistinguible de
+        // "se canceló sin guardar".
+        val snackbarHostState = remember { SnackbarHostState() }
+        val successCoroutineScope = rememberCoroutineScope()
+
         // Handle success — navigate back and refresh detail
         LaunchedEffect(actionState) {
             if (actionState is TaskActionState.Success) {
+                successCoroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = s("edit_task_success"),
+                        duration = SnackbarDuration.Short
+                    )
+                }
                 navigator.pop()
             }
         }
@@ -236,6 +247,9 @@ data class EditTaskScreen(
             }
         }
 
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { _ ->
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -423,6 +437,8 @@ data class EditTaskScreen(
                                     keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                                 )
                                 Button(
+                                    // Panel v16 (2026-09-24), hallazgo UX: ver mismo motivo en CreateTaskScreen.
+                                    enabled = subtaskText.isNotBlank(),
                                     onClick = {
                                         val text = subtaskText.trim()
                                         if (text.isNotBlank()) {
@@ -694,6 +710,8 @@ data class EditTaskScreen(
                                         keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
                                     )
                                     Button(
+                                        // Panel v16, hallazgo UX: ver mismo motivo en CreateTaskScreen.
+                                        enabled = tagsText.isNotBlank(),
                                         onClick = {
                                             val tag = tagsText.trim()
                                             if (tag.isNotBlank() && tag !in tags) {
@@ -1072,7 +1090,12 @@ data class EditTaskScreen(
                         item {
                             OutlinedTextField(
                                 value = pointsText,
-                                onValueChange = { pointsText = it },
+                                onValueChange = { newValue ->
+                                    // Panel v16, hallazgo UX: ver mismo motivo en CreateTaskScreen.
+                                    if (newValue.all { it.isDigit() } && newValue.length <= 5) {
+                                        pointsText = newValue
+                                    }
+                                },
                                 label = { Text(s("public_profile_stat_points")) },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
@@ -1241,6 +1264,7 @@ data class EditTaskScreen(
                     item { Spacer(modifier = Modifier.height(80.dp)) }
                 }
             }
+        }
         }
     }
 }

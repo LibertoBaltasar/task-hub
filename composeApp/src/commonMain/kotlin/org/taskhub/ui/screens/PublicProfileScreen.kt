@@ -28,6 +28,7 @@ import org.taskhub.ui.components.AnimatedCounter
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.components.defaultRoleEmoji
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.models.ProfileScreenModel
 import org.taskhub.ui.models.ProfileUiState
@@ -155,10 +156,13 @@ private fun PublicProfileContent(
         // ── Avatar grande ──
         UserAvatar(
             avatarUrl = avatarUrl,
-            fallbackEmoji = avatarEmoji.ifEmpty { if (role == "admin") "👑" else "👤" },
+            fallbackEmoji = avatarEmoji.ifEmpty { defaultRoleEmoji(role) },
             displayName = displayName,
             contentDescription = displayName,
-            size = 100.dp,
+            // Panel v16 (2026-09-24), hallazgo estética: mismo tamaño que
+            // EditProfileScreen (96dp) para el mismo patrón "avatar hero de
+            // perfil" — antes 100dp, un salto de 4dp sin razón aparente.
+            size = 96.dp,
             backgroundColor = if (role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer
         )
 

@@ -92,3 +92,14 @@ fun UserAvatar(
         }
     }
 }
+
+/**
+ * Emoji de fallback por defecto para [UserAvatar.fallbackEmoji] según el rol
+ * de un miembro. Panel v16 (2026-09-24), hallazgo UI/Material3: la expresión
+ * `if (role == "admin") "👑" else "👤"` estaba duplicada literalmente en 4
+ * pantallas (`HouseholdMemberList`, `RankingScreen`, `TaskDetailScreen`,
+ * `PublicProfileScreen`) — se extrae aquí, junto al propio [UserAvatar], para
+ * que un cambio futuro del emoji de rol (o de la condición) solo requiera
+ * tocar un sitio.
+ */
+fun defaultRoleEmoji(role: String): String = if (role == "admin") "👑" else "👤"

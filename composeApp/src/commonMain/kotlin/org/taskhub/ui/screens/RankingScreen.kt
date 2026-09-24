@@ -35,6 +35,7 @@ import org.taskhub.ui.components.EmptyRankingIllustration
 import org.taskhub.ui.components.LocalAppSettings
 import org.taskhub.ui.components.ShimmerList
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.components.defaultRoleEmoji
 import org.taskhub.ui.components.effectsEnabled
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.i18n.AppStrings
@@ -264,9 +265,14 @@ private fun RankingRow(
             // fondo tertiaryContainer de la medalla de oro en 1er puesto.
             UserAvatar(
                 avatarUrl = member.avatarUrl,
-                fallbackEmoji = if (member.role == "admin") "👑" else "👤",
+                fallbackEmoji = defaultRoleEmoji(member.role),
                 displayName = member.displayName,
                 contentDescription = member.displayName,
+                // Panel v16 (2026-09-24), hallazgo estética: mismo tamaño que
+                // HouseholdMemberList (48dp) para el mismo patrón "fila de
+                // miembro" — antes usaba el default de 40dp, salto perceptible
+                // al navegar entre Ranking y la lista de miembros del hogar.
+                size = 48.dp,
                 backgroundColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.primaryContainer,
                 ringColor = if (member.role == "admin") MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primaryContainer
             )

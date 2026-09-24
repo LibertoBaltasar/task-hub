@@ -61,8 +61,14 @@ class TaskHubApplication : Application() {
 
         // Inicializar el SDK de AdMob (Google Mobile Ads). Aquí no se carga
         // ningún anuncio; solo deja el SDK listo para el interstitial (tras
-        // completar tarea) y el banner (preparado, deshabilitado de momento).
-        MobileAds.initialize(this)
+        // completar tarea, mucho después del primer frame) y el banner
+        // (preparado, deshabilitado de momento). Panel v16 (2026-09-24,
+        // hallazgo I17): antes se llamaba en el hilo principal dentro de
+        // Application.onCreate(), compitiendo por CPU/IO con la inflación de
+        // la primera Activity y la composición inicial de Compose en CADA
+        // arranque — se difiere a un hilo de fondo, ya que nada necesita el
+        // SDK de AdMob listo antes del primer frame.
+        Thread { MobileAds.initialize(this) }.start()
 
         scheduleNotificationPolling()
     }

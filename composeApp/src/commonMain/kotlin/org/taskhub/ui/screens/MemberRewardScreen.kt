@@ -10,6 +10,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -156,8 +158,13 @@ data class MemberRewardScreen(
                 )
 
                 Column(
+                    // Panel v16 (2026-09-24), hallazgo UX: sin scroll, una
+                    // recompensa con icono + título + descripción largos podía
+                    // empujar el botón "Canjear" fuera de la pantalla visible
+                    // en un móvil pequeño, sin forma de llegar a él.
                     modifier = Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -279,7 +286,11 @@ data class MemberRewardScreen(
                         }
                     }
 
-                    Spacer(Modifier.weight(1f))
+                    // Panel v16: `Modifier.weight(1f)` (empujar el botón al
+                    // fondo) es incompatible con `verticalScroll` (constraints
+                    // no acotados) — un espaciador fijo mantiene el botón
+                    // justo debajo del contenido, visible con scroll si hace falta.
+                    Spacer(Modifier.height(32.dp))
 
                     // Redeem button
                     val isRedeeming = actionState is RewardActionState.Loading

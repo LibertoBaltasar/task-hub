@@ -245,6 +245,87 @@ class TaskScreenModelTest {
         assertEquals(listOf(3), repo.updateMemberStreakCalls, "debe restaurar la racha PREVIA (3), no la actual")
     }
 
+    /**
+     * Panel v16 (2026-09-24), hallazgo CRÍTICO C4: [completeTask] publicaba
+     * [TaskScreenModel.undoState] de forma optimista (con `completedAt = 0L`)
+     * ANTES de que la llamada de red real (Cloud Function) resolviera. Si
+     * [undoCompleteTask] se invocaba en ese margen, veía `completedAt == 0L`
+     * y se SALTABA la llamada real a `repo.undoTaskCompletion` — la tarea
+     * quedaba completada y los puntos otorgados en el servidor de forma
+     * permanente, sin ningún error visible. Este test reproduce exactamente
+     * esa secuencia con [FakeFirestoreRepository.hangCompleteTask] (simula el
+     * round-trip de red aún en curso) y verifica que el undo ahora ESPERA el
+     * resultado real antes de decidir, en vez de perderse en silencio.
+     */
+    @Test
+    fun undoCompleteTask_disparadoMientrasCompleteTaskSigueEnVuelo_esperaYDeshaceConElCompletedAtReal() = runTest {
+        val repo = FakeFirestoreRepository().apply {
+            tasks = listOf(task("t1"))
+            members = listOf(member("m1", streak = 3))
+            completeTaskResult = FirestoreRepository.TaskCompletionResult(completedAt = 777L, pointsAwarded = 10, onTime = true)
+            hangCompleteTask = true // simula que la respuesta del servidor aún no ha llegado
+        }
+        val model = newModel(repo)
+        model.setCurrentMemberId("m1")
+
+        model.completeTask("h1", "t1")
+        // completeTask() sigue en vuelo (ver hangCompleteTask): el estado de
+        // undo ya se publicó de forma OPTIMISTA, con completedAt = 0L —
+        // exactamente la ventana de carrera del hallazgo C4.
+        assertEquals(TaskActionState.Loading, model.actionState.value)
+        check(model.undoState.value != null) { "precondición: completeTask debió publicar undoState optimista" }
+        assertEquals(0L, model.undoState.value?.completedAt)
+
+        // El usuario pulsa "Deshacer" DENTRO de esa ventana.
+        model.undoCompleteTask()
+        assertNull(model.undoState.value)
+        // Antes del fix, esto se saltaba silenciosamente el undo real
+        // (completedAt == 0L => no se llamaba a repo.undoTaskCompletion).
+        // Ahora debe estar esperando, no haberse rendido ya.
+        assertEquals(0, repo.undoTaskCompletionCalls.size, "el undo debe esperar la respuesta real, no perderse")
+
+        // El servidor por fin responde a la compleción original.
+        repo.releaseCompleteTask()
+
+        assertEquals(TaskActionState.Success, model.actionState.value, "completeTask() debe seguir resolviendo en éxito")
+        assertEquals(
+            listOf(777L), repo.undoTaskCompletionCalls,
+            "el undo diferido debe llamar al servidor con el completedAt REAL devuelto por completeTask, no perderse"
+        )
+        // La lista incluye también la propia llamada interna de
+        // completeTask() (que registra la racha NUEVA al completar, antes de
+        // que el undo diferido revierta a la previa) — lo relevante para
+        // este hallazgo es que la ÚLTIMA llamada (la del undo diferido) use
+        // la racha PREVIA (3), no que se haya perdido.
+        assertEquals(3, repo.updateMemberStreakCalls.last(), "el undo diferido debe restaurar la racha PREVIA (3) una vez confirmado el undo real")
+    }
+
+    /**
+     * Panel v16, hallazgo I10: el servidor puede hacer un no-op idempotente
+     * (`reverted = false`, p.ej. undo ya aplicado desde otro dispositivo) —
+     * la racha NO debe revertirse en ese caso, para no desincronizarla del
+     * resto del estado (puntos/historial) que el servidor conservó intacto.
+     */
+    @Test
+    fun undoCompleteTask_servidorDevuelveRevertedFalse_noRevierteLaRacha() = runTest {
+        val repo = FakeFirestoreRepository().apply {
+            tasks = listOf(task("t1"))
+            members = listOf(member("m1", streak = 3))
+            completeTaskResult = FirestoreRepository.TaskCompletionResult(completedAt = 999L, pointsAwarded = 10, onTime = true)
+            undoTaskCompletionReverted = false // no-op idempotente del servidor
+        }
+        val model = newModel(repo)
+        model.setCurrentMemberId("m1")
+        model.completeTask("h1", "t1")
+        check(model.undoState.value != null) { "precondición: completeTask debió guardar undoState" }
+        repo.updateMemberStreakCalls.clear()
+
+        model.undoCompleteTask()
+
+        assertEquals(listOf(999L), repo.undoTaskCompletionCalls, "sí debe llamar al servidor")
+        assertEquals(emptyList(), repo.updateMemberStreakCalls, "NO debe revertir la racha si el servidor no revirtió nada")
+    }
+
     // ── deleteTask ────────────────────────────────────────────
 
     @Test

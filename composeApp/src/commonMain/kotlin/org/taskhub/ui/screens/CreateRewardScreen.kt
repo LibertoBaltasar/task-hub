@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import kotlinx.coroutines.launch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,9 +42,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import org.taskhub.ui.components.BadgeTone
 import org.taskhub.ui.components.LocalAppSettings
-import org.taskhub.ui.components.PointsBadge
 import org.taskhub.ui.components.TaskHubTopBar
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.components.rememberHouseholdName
@@ -94,14 +93,29 @@ data class CreateRewardScreen(val householdId: String) : Screen {
             "🌟", "💎", "🔥", "❤️", "🎉", "✨", "💫", "🌈"
         )
 
+        // Panel v16 (2026-09-24, hallazgo I11): ver el mismo motivo en
+        // CreateTaskScreen — crear una recompensa era indistinguible de
+        // "se canceló sin guardar".
+        val snackbarHostState = remember { SnackbarHostState() }
+        val successCoroutineScope = rememberCoroutineScope()
+
         // Navigate back on success
         LaunchedEffect(actionState) {
             if (actionState is RewardActionState.Success) {
+                successCoroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = s("create_reward_success"),
+                        duration = SnackbarDuration.Short
+                    )
+                }
                 memberModel.clearRewardAction()
                 navigator.pop()
             }
         }
 
+        Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { _ ->
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
@@ -388,6 +402,7 @@ data class CreateRewardScreen(val householdId: String) : Screen {
                     Spacer(Modifier.height(16.dp))
                 }
             }
+        }
         }
     }
 }

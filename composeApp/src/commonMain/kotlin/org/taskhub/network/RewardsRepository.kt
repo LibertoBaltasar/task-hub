@@ -191,15 +191,17 @@ class RewardsRepository(
      * expuesto para siempre en hogares compartidos tras
      * `leaveHousehold`/`deleteMember`. Best-effort por registro.
      */
-    suspend fun anonymizeMemberRedemptions(householdId: String, memberIds: Set<String>, anonymizedMemberId: String) {
-        if (memberIds.isEmpty()) return
+    /** @return `true` si TODOS los canjes se anonimizaron correctamente (ver KDoc de [HouseholdRepository.anonymizeMemberMessages], panel v16 hallazgo I7). */
+    suspend fun anonymizeMemberRedemptions(householdId: String, memberIds: Set<String>, anonymizedMemberId: String): Boolean {
+        if (memberIds.isEmpty()) return true
         val redemptions = try {
             getRewardRedemptions(householdId)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            return
+            return false
         }
+        var allOk = true
         redemptions.filter { it.memberId in memberIds }.forEach { redemption ->
             try {
                 client.patch("$baseUrl/households/$householdId/rewardRedemptions/${redemption.id}") {
@@ -211,9 +213,12 @@ class RewardsRepository(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // No crítico: se prioriza anonimizar el resto de canjes.
+                // Se prioriza anonimizar el resto de canjes (best-effort),
+                // pero el fallo se acumula en el resultado — ver KDoc arriba.
+                allOk = false
             }
         }
         taskCache.clearRewardRedemptions(householdId)
+        return allOk
     }
 }

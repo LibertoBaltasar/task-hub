@@ -508,15 +508,25 @@ class HouseholdRepository(
      * no poder ni listar los mensajes) no debe abortar el resto del
      * abandono del hogar.
      */
-    suspend fun anonymizeMemberMessages(householdId: String, memberIds: Set<String>, anonymizedName: String) {
-        if (memberIds.isEmpty()) return
+    /**
+     * @return `true` si TODOS los mensajes se anonimizaron correctamente;
+     *   `false` si al menos uno falló (panel v16, 2026-09-24, hallazgo I7:
+     *   antes cada fallo individual se tragaba en silencio — el nombre real
+     *   de quien se fue podía quedar expuesto para siempre sin que nadie lo
+     *   detectara, pese a que `privacy.html` promete anonimizarlo. El
+     *   llamador decide qué hacer con `false` — no se bloquea el borrado de
+     *   cuenta/abandono por esto, solo se hace el fallo observable).
+     */
+    suspend fun anonymizeMemberMessages(householdId: String, memberIds: Set<String>, anonymizedName: String): Boolean {
+        if (memberIds.isEmpty()) return true
         val messages = try {
             getMessages(householdId)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            return
+            return false
         }
+        var allOk = true
         messages.filter { it.memberId in memberIds }.forEach { message ->
             try {
                 client.patch("$baseUrl/households/$householdId/messages/${message.id}") {
@@ -528,9 +538,12 @@ class HouseholdRepository(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // No crítico: se prioriza anonimizar el resto de mensajes.
+                // Se prioriza anonimizar el resto de mensajes (best-effort),
+                // pero el fallo se acumula en el resultado — ver KDoc arriba.
+                allOk = false
             }
         }
+        return allOk
     }
 
     private fun toHouseholdResponse(

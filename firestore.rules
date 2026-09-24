@@ -3,7 +3,24 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ══════════════════════════════════════════════════════════
-    //  Task Hub — Reglas de seguridad (v10)
+    //  Task Hub — Reglas de seguridad (v11)
+    //
+    //  v11 editada 2026-09-24 (panel de expertos v16, auditoría desde cero,
+    //  hallazgo I4 — Seguridad/AppSec). Antes, `households/{hid}/members/
+    //  {mid}/achievements/{achid}` y `households/{hid}/messages/{mid}`
+    //  tenían `write` completamente abierto a cualquier miembro del hogar
+    //  sobre el documento de CUALQUIER OTRO miembro: un miembro podía
+    //  desbloquear logros ajenos arbitrariamente, o editar/borrar mensajes
+    //  de chat de otro miembro. Impacto bajo (logros son cosméticos, no
+    //  mueven puntos; el chat ya es un espacio de confianza compartida),
+    //  pero es la vía de suplantación/vandalismo más laxa de todo el árbol
+    //  de reglas. Se restringe: `achievements/{achid}` — `write` solo al
+    //  propio dueño (`request.auth.uid == mid`, el propio segmento de ruta
+    //  ya es el ID del miembro) o `isTrusted(hid)`; `messages/{mid}` —
+    //  `create` se mantiene abierto a cualquier miembro (mandar un mensaje
+    //  nuevo), `update`/`delete` se restringen al propio autor
+    //  (`resource.data.memberId == request.auth.uid`) o `isTrusted(hid)`,
+    //  mismo patrón ya usado en `taskHistory`/`notifications`.
     //
     //  v10 editada 2026-09-12 (tarjeta kanban "[Seguridad] Expulsión del
     //  owner: corregir reglas de sucesión (403)" — decisión de Liberto:
@@ -576,11 +593,25 @@ service cloud.firestore {
            == get(/databases/$(database)/documents/households/$(hid)/rewards/$(request.resource.data.rewardId)).data.cost;
       allow update, delete: if isTrusted(hid);
     }
+    // Panel v16 (2026-09-24, hallazgo I4): antes, `write` estaba abierto a
+    // cualquier miembro del hogar sobre el documento `_meta` de CUALQUIER
+    // otro miembro — permitía desbloquear logros ajenos arbitrariamente.
+    // `{mid}` ya es el propio ID del miembro dueño de la subcolección (no
+    // hace falta comparar contra un campo `memberId`, a diferencia de
+    // `taskHistory`/`notifications`).
     match /households/{hid}/members/{mid}/achievements/{achid} {
-      allow read, write: if isMember(hid) || isOwner(hid);
+      allow read: if isMember(hid) || isOwner(hid);
+      allow write: if isTrusted(hid) || request.auth.uid == mid;
     }
+    // Panel v16, hallazgo I4: antes, `write` estaba abierto a cualquier
+    // miembro sobre el mensaje de CUALQUIER otro miembro — permitía
+    // editar/borrar mensajes de chat ajenos. `create` sigue abierto a
+    // cualquier miembro (mandar un mensaje nuevo); `update`/`delete` se
+    // restringen al propio autor (`memberId`) o a `isTrusted`, mismo patrón
+    // que `taskHistory`/`notifications`.
     match /households/{hid}/messages/{mid} {
-      allow read, write: if isMember(hid) || isOwner(hid);
+      allow read, create: if isMember(hid) || isOwner(hid);
+      allow update, delete: if isTrusted(hid) || (isMember(hid) && resource.data.memberId == request.auth.uid);
     }
 
     // Denegación por defecto: no hay un `match /{document=**}` de cierre.

@@ -165,4 +165,22 @@ Se han añadido en esta ronda tests unitarios puros para los hallazgos C4 (race 
 - **19 IMPORTANTES**: 9 aplicados, 10 marcados PROPUESTA (requieren decisión de producto/arquitectura o son refactors de mayor alcance).
 - **MENORES**: aplicados los de bajo riesgo y alta confianza; refactors de extracción quedan como PROPUESTA.
 
-Ver commit de esta ronda para el diff completo. Verificación: `compileDebugKotlinAndroid` + `jvmTest` (ver sección final del commit/PR).
+### Tests añadidos en esta ronda
+
+Cierra 2 de los 4 huecos del TOP-10 de cobertura (los únicos cerrables sin infraestructura nueva de emulador — ver arriba):
+
+- `TaskScreenModelTest.undoCompleteTask_disparadoMientrasCompleteTaskSigueEnVuelo_esperaYDeshaceConElCompletedAtReal` — reproduce el hallazgo C4 con `FakeFirestoreRepository.hangCompleteTask`/`releaseCompleteTask` (nuevos hooks) y verifica que el undo ya no se pierde en silencio.
+- `TaskScreenModelTest.undoCompleteTask_servidorDevuelveRevertedFalse_noRevierteLaRacha` — cubre el hallazgo I10 (no-op idempotente del servidor).
+
+Los 8 huecos restantes del TOP-10 (integración con emulador de Firestore/Functions para las 4 Cloud Functions transaccionales, incluidos los hallazgos C1/C2/C3) requieren infraestructura no presente en el repo (`firebase-functions-test`, `@firebase/rules-unit-testing`) — quedan como PROPUESTA de trabajo futuro.
+
+### Verificación final (ejecutada, no solo descrita)
+
+```
+./gradlew :composeApp:compileDebugKotlinAndroid --console=plain   → BUILD SUCCESSFUL
+./gradlew :composeApp:jvmTest --rerun-tasks --console=plain       → BUILD SUCCESSFUL (277 tests, 0 fallos)
+cd functions && npm run build                                     → sin errores (tsc)
+cd functions && npm test                                          → 2 suites / 54 tests, 0 fallos
+```
+
+Ver el diff de esta ronda (working tree en el momento de escribir esto, sobre `82b514c`) para el detalle completo de archivos tocados.

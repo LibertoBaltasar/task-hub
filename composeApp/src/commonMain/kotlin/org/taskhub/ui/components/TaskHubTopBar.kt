@@ -29,7 +29,7 @@ import org.taskhub.ui.i18n.AppStrings
  * que fallaban contraste WCAG (blanco sobre #009884 = 3.61:1). Usa
  * [CenterAlignedTopAppBar] con fondo `surface` y texto `onSurface`, centra el título por
  * construcción (evita los hacks de `Spacer(72.dp)`) y estandariza el botón de volver con
- * el icono [Icons.Filled.ArrowBack] + `contentDescription`.
+ * el icono [Icons.AutoMirrored.Filled.ArrowBack] + `contentDescription`.
  *
  * @param title    Título de la pantalla. Sin emoji: el texto ya es suficiente.
  * @param subtitle Texto secundario opcional bajo el título (p.ej. el nombre del

@@ -63,6 +63,7 @@ import org.taskhub.ui.components.rememberHouseholdName
 import org.taskhub.ui.components.shouldReduceMotion
 import org.taskhub.ui.components.taskHubTextFieldColors
 import org.taskhub.ui.components.UserAvatar
+import org.taskhub.ui.components.defaultRoleEmoji
 import org.taskhub.ui.i18n.AppStrings
 import org.taskhub.ui.theme.*
 
@@ -174,7 +175,15 @@ data class TaskDetailScreen(
                     subtitle = householdName,
                     onBack = { navigator.pop() },
                     actions = {
+                        // Panel v16 (2026-09-24, hallazgo I12): sin `enabled`,
+                        // ambos iconos seguían pulsables mientras se borraba
+                        // la tarea de forma asíncrona — tocar "Editar" abría
+                        // una tarea a punto de desaparecer, y un segundo toque
+                        // en "Borrar" reintentaba sobre un documento ya
+                        // borrado, en ambos casos con un error de red confuso
+                        // en vez de bloquear la interacción de origen.
                         IconButton(
+                            enabled = actionState !is TaskActionState.Loading,
                             onClick = {
                                 val state = detailState
                                 if (state is TaskDetailUiState.Success) {
@@ -184,7 +193,10 @@ data class TaskDetailScreen(
                         ) {
                             Icon(Icons.Default.Edit, contentDescription = s("task_detail_edit_content_desc"))
                         }
-                        IconButton(onClick = { showDeleteDialog = true }) {
+                        IconButton(
+                            enabled = actionState !is TaskActionState.Loading,
+                            onClick = { showDeleteDialog = true }
+                        ) {
                             Icon(Icons.Default.Delete, contentDescription = s("common_delete"))
                         }
                     }
@@ -1432,7 +1444,7 @@ private fun AssignmentCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     UserAvatar(
                         avatarUrl = member?.avatarUrl,
-                        fallbackEmoji = if (member?.role == "admin") "👑" else "👤",
+                        fallbackEmoji = defaultRoleEmoji(member?.role ?: ""),
                         displayName = member?.displayName ?: "",
                         contentDescription = member?.displayName ?: "",
                         size = 32.dp,
