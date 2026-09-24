@@ -1197,13 +1197,14 @@ open class FirestoreRepository(
      * a mano. Streak/racha del miembro sigue siendo responsabilidad del
      * cliente (la función no la toca) — ver `TaskScreenModel.undoCompleteTask`.
      */
-    open suspend fun undoTaskCompletion(householdId: String, taskId: String, completedAt: Long) {
+    open suspend fun undoTaskCompletion(householdId: String, taskId: String, completedAt: Long): Boolean {
         // Invalidación en `finally`: mismo motivo que [completeTask].
         try {
-            cloudFunctionsClient.call<UndoTaskCompletionRequest, UndoTaskCompletionResult>(
+            val result = cloudFunctionsClient.call<UndoTaskCompletionRequest, UndoTaskCompletionResult>(
                 "undoTaskCompletion",
                 UndoTaskCompletionRequest(householdId = householdId, taskId = taskId, completedAt = completedAt)
             )
+            return result.reverted
         } finally {
             taskCache.clearTasks(householdId)
             taskCache.clearTaskHistory(householdId)

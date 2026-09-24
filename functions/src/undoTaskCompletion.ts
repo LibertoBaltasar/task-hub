@@ -25,7 +25,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { DocumentSnapshot, FieldValue } from "firebase-admin/firestore";
 import { db, REGION } from "./admin.js";
-import { requireAuth, loadActiveMember } from "./auth.js";
+import { requireAuth, loadActiveMember, requireTrusted } from "./auth.js";
 import { calculateNextDueDate } from "./completionHelpers.js";
 import { TaskAssignmentDoc, TaskDoc, TaskHistoryDoc } from "./types.js";
 
@@ -68,6 +68,17 @@ export const undoTaskCompletion = onCall<UndoTaskCompletionRequest, Promise<Undo
         return { reverted: false };
       }
       const historyRecord = historyDoc.data() as TaskHistoryDoc;
+
+      // Panel v16 (2026-09-24, hallazgo C2): antes, cualquier miembro activo
+      // del hogar podía deshacer la compleción de CUALQUIER otro miembro
+      // (leer su `taskHistory` ya es de lectura amplia, `isMember(hid)`), sin
+      // ser el autor ni admin/owner — restando puntos ajenos a voluntad.
+      // Antes de la migración a Cloud Functions, `firestore.rules` exigía
+      // `isTrusted(hid) || resource.data.memberId == request.auth.uid` para
+      // borrar un registro de `taskHistory`; se restaura la misma regla aquí.
+      if (uid !== historyRecord.memberId) {
+        await requireTrusted(tx, householdId, uid);
+      }
 
       const previousHistorySnap = await tx.get(
         db

@@ -271,6 +271,7 @@ object AppStrings {
             "transfer_error_member_not_found" to "Miembro no encontrado",
             "transfer_error_failed" to "No se pudo completar la transferencia. Tus puntos no se han visto afectados.",
             "transfer_error_uncertain" to "No se pudo confirmar si la transferencia se completó. Antes de reintentar, comprueba el saldo para evitar duplicarla.",
+            "task_error_uncertain" to "No se pudo confirmar si la tarea se completó. Antes de reintentar, comprueba su estado para evitar duplicar los puntos.",
             "transfer_error_rollback_failed" to "No se pudo completar la transferencia y no se pudo revertir el descuento. Contacta con el administrador del hogar para revisar tu saldo de puntos.",
             "appreciate_error_limit" to "Límite semanal alcanzado",
             "donate_error_insufficient_balance" to "Saldo insuficiente",

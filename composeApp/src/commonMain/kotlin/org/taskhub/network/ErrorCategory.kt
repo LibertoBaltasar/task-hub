@@ -63,10 +63,11 @@ fun Throwable.errorCategory(): ErrorCategory = when (this) {
  * [org.taskhub.ui.models.MemberScreenModel.appreciateMember], que expone
  * una CLAVE sin traducir en su estado) puedan usarla directamente.
  */
-fun Throwable.toUserMessageKey(operationKey: String): String = when (errorCategory()) {
-    ErrorCategory.AMBIGUOUS -> "transfer_error_uncertain"
-    ErrorCategory.NO_CONNECTION -> "error_no_connection"
-    ErrorCategory.GONE_OR_FORBIDDEN -> "error_gone_or_forbidden"
-    ErrorCategory.SERVER -> "error_server"
-    ErrorCategory.OPERATION -> operationKey
-}
+fun Throwable.toUserMessageKey(operationKey: String, ambiguousKey: String = "transfer_error_uncertain"): String =
+    when (errorCategory()) {
+        ErrorCategory.AMBIGUOUS -> ambiguousKey
+        ErrorCategory.NO_CONNECTION -> "error_no_connection"
+        ErrorCategory.GONE_OR_FORBIDDEN -> "error_gone_or_forbidden"
+        ErrorCategory.SERVER -> "error_server"
+        ErrorCategory.OPERATION -> operationKey
+    }

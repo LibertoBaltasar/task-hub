@@ -48,6 +48,16 @@ class FakeFirestoreRepository(
     var hangGetTask: Boolean = false
     private val getTaskHangGate = CompletableDeferred<Unit>()
 
+    /** Si es `true`, [completeTask] se queda colgada hasta [releaseCompleteTask] — usado para reproducir el hallazgo C4 (panel v16): undo disparado mientras completeTask() sigue en vuelo. */
+    var hangCompleteTask: Boolean = false
+    private val completeTaskHangGate = CompletableDeferred<Unit>()
+    fun releaseCompleteTask() {
+        completeTaskHangGate.complete(Unit)
+    }
+
+    /** Valor que devuelve [undoTaskCompletion] — controla si el servidor "revirtió" de verdad (ver KDoc de `UndoTaskCompletionResult`). */
+    var undoTaskCompletionReverted: Boolean = true
+
     val createTaskCalls = mutableListOf<String>()
     val assignTaskCalls = mutableListOf<List<String>>()
     val completeTaskCalls = mutableListOf<Triple<String, String, String>>()
@@ -131,12 +141,14 @@ class FakeFirestoreRepository(
         task: TaskResponse
     ): TaskCompletionResult {
         completeTaskCalls += Triple(householdId, taskId, memberId)
+        if (hangCompleteTask) completeTaskHangGate.await()
         completeTaskError?.let { throw it }
         return completeTaskResult
     }
 
-    override suspend fun undoTaskCompletion(householdId: String, taskId: String, completedAt: Long) {
+    override suspend fun undoTaskCompletion(householdId: String, taskId: String, completedAt: Long): Boolean {
         undoTaskCompletionCalls += completedAt
+        return undoTaskCompletionReverted
     }
 
     override suspend fun getTaskHistory(householdId: String): List<TaskHistoryResponse> = taskHistory

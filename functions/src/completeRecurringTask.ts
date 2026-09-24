@@ -17,8 +17,9 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db, REGION } from "./admin.js";
 import { requireAuth, loadActiveMember } from "./auth.js";
 import { resolveCompletionOutcome } from "./penalty.js";
-import { resolveNextAssignmentDecision } from "./rules.js";
+import { resolveNextAssignmentDecision, DEFAULT_TZ } from "./rules.js";
 import { calculateNextDueDate, effectiveDueDateForTask } from "./completionHelpers.js";
+import { epochToLocalDate, compareLocalDate } from "./dates.js";
 import { TaskAssignmentDoc, TaskDoc } from "./types.js";
 
 export interface CompleteRecurringTaskRequest {
@@ -76,12 +77,34 @@ export const completeRecurringTask = onCall<CompleteRecurringTaskRequest, Promis
         db.collection(`households/${householdId}/tasks/${taskId}/assignments`).where("status", "==", "assigned")
       );
 
-      if (
-        expectedLastCompletedDate !== undefined &&
-        expectedLastCompletedDate !== null &&
-        (task.lastCompletedDate ?? null) !== expectedLastCompletedDate
-      ) {
+      // Panel v16 (2026-09-24, hallazgo C1/C3): antes, este guard solo se
+      // ejecutaba si el cliente mandaba un `expectedLastCompletedDate` no
+      // nulo — para una tarea nunca completada (o justo tras un undo, que
+      // deja `lastCompletedDate = null`), el guard se saltaba por completo,
+      // permitiendo llamadas repetidas/duplicadas sin detectar el conflicto.
+      // Ahora la comparación es SIEMPRE obligatoria: `undefined`/`null`
+      // significa "el caller espera que la tarea nunca se haya completado".
+      const expectedValue = expectedLastCompletedDate ?? null;
+      if ((task.lastCompletedDate ?? null) !== expectedValue) {
         throw new HttpsError("aborted", "conflict");
+      }
+
+      // Panel v16, hallazgo C1: sin esto, un caller que refresque el estado
+      // antes de cada llamada (script directo con el ID token del usuario,
+      // sin pasar por `isDueToday` del cliente) podía volver a completar la
+      // MISMA tarea recurrente tantas veces como quisiera en el mismo día,
+      // otorgándose puntos sin límite. `isDueToday`/`isDueOn` completas (con
+      // ventana de "atrasada") siguen siendo responsabilidad del cliente
+      // (ver cabecera de `rules.ts`), pero este chequeo mínimo —no se puede
+      // volver a completar la MISMA tarea el MISMO día de calendario (zona
+      // `DEFAULT_TZ`)— acota el abuso a como máximo 1 otorgamiento por
+      // tarea y día, cerrando el vector de farming ilimitado.
+      if (task.lastCompletedDate != null) {
+        const lastLocalDate = epochToLocalDate(task.lastCompletedDate, DEFAULT_TZ);
+        const nowLocalDate = epochToLocalDate(now, DEFAULT_TZ);
+        if (compareLocalDate(lastLocalDate, nowLocalDate) === 0) {
+          throw new HttpsError("failed-precondition", "already-completed-today");
+        }
       }
 
       const effectiveDueDate = effectiveDueDateForTask(task);

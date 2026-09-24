@@ -463,6 +463,21 @@ class TaskScreenModel(
     private val _undoState = MutableStateFlow<UndoState?>(null)
     val undoState: StateFlow<UndoState?> = _undoState.asStateFlow()
 
+    /**
+     * Panel v16 (2026-09-24, hallazgo C4): [completeTask] publica
+     * [_undoState] de forma optimista (con `completedAt = 0L`) ANTES de que
+     * la llamada de red real (Cloud Function) resuelva. Si [undoCompleteTask]
+     * se invocaba en ese margen, veía `completedAt == 0L` y se saltaba
+     * SILENCIOSAMENTE la llamada real a `repo.undoTaskCompletion` (aunque sí
+     * revertía la racha y daba feedback háptico de éxito) — la tarea quedaba
+     * completada y los puntos otorgados en el servidor de forma permanente,
+     * sin ningún error visible. [completeTaskJob]/[pendingCompletion]
+     * permiten que [undoCompleteTask] espere el resultado real antes de
+     * decidir qué revertir, en vez de asumir que no hay nada que deshacer.
+     */
+    private var completeTaskJob: Job? = null
+    private var pendingCompletion: UndoState? = null
+
     private val _undoError = MutableStateFlow<String?>(null)
     /**
      * Error de [undoCompleteTask] — antes un fallo ahí quedaba silencioso
@@ -493,7 +508,7 @@ class TaskScreenModel(
      */
     fun completeTask(householdId: String, taskId: String) {
         if (_actionState.value == TaskActionState.Loading) return // evita doble-tap / doble suma de puntos
-        screenModelScope.launch {
+        completeTaskJob = screenModelScope.launch {
             _actionState.value = TaskActionState.Loading
             try {
                 // Resolución robusta del miembro: si la UI no lo ha establecido
@@ -512,7 +527,7 @@ class TaskScreenModel(
 
                 // Save undo info BEFORE completing (racha previa incluida —
                 // ver KDoc de [UndoState]: el resto lo deriva el servidor).
-                _undoState.value = UndoState(
+                val undoState = UndoState(
                     householdId = householdId,
                     taskId = taskId,
                     memberId = memberId,
@@ -521,6 +536,8 @@ class TaskScreenModel(
                     previousLastStreakDate = memberBefore?.lastStreakDate ?: 0L,
                     completedAt = 0L
                 )
+                pendingCompletion = undoState
+                _undoState.value = undoState
 
                 val result = repo.completeTask(
                     householdId = householdId,
@@ -529,6 +546,7 @@ class TaskScreenModel(
                     task = task
                 )
                 val completedAt = result.completedAt
+                pendingCompletion = pendingCompletion?.copy(completedAt = completedAt)
                 _undoState.value = _undoState.value?.copy(completedAt = completedAt)
 
                 // Nota: sincronizar la asignación pendiente de este miembro como
@@ -597,13 +615,21 @@ class TaskScreenModel(
                 // sobrescribir el TaskActionState.Success que ya se ha publicado.
                 try {
                     logAnalyticsEvent("task_completed")
-                    adController.maybeShowInterstitial()
+                    // Panel v16, hallazgo C5: nunca mostrar anuncios a perfiles
+                    // infantiles (docs/guia-publicacion.md exige explícitamente
+                    // no hacerlo, y la app ya marca
+                    // TAG_FOR_CHILD_DIRECTED_TREATMENT_TRUE reconociendo que hay
+                    // menores usando la app).
+                    if (memberBefore?.role != "child") {
+                        adController.maybeShowInterstitial()
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) { }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                pendingCompletion = null
                 _undoState.value = null
                 if (e is FirestoreRepository.TaskCompletionConflictException) {
                     // Mensaje vía AppStrings (no e.message, que viene fijo en
@@ -646,19 +672,42 @@ class TaskScreenModel(
     fun undoCompleteTask() {
         val state = _undoState.value ?: return
         _undoState.value = null
-        buzz(HapticKind.LIGHT)
+        val jobToAwait = completeTaskJob
         screenModelScope.launch {
             try {
-                if (state.completedAt != 0L) {
-                    repo.undoTaskCompletion(state.householdId, state.taskId, state.completedAt)
+                var target = state
+                if (target.completedAt == 0L) {
+                    // completeTask() todavía no ha recibido respuesta del
+                    // servidor (ver KDoc de [completeTaskJob]/[pendingCompletion]
+                    // arriba) — esperar su resultado real antes de decidir qué
+                    // deshacer, en vez de asumir que no hay nada que revertir.
+                    jobToAwait?.join()
+                    target = pendingCompletion?.takeIf {
+                        it.householdId == state.householdId && it.taskId == state.taskId
+                    } ?: target
                 }
-                repo.updateMemberStreak(
-                    householdId = state.householdId,
-                    memberId = state.memberId,
-                    currentStreak = state.previousStreak,
-                    bestStreak = state.previousBestStreak,
-                    lastStreakDate = state.previousLastStreakDate
-                )
+                if (target.completedAt != 0L) {
+                    // Panel v16, hallazgo I10: el servidor puede hacer un
+                    // no-op idempotente (`reverted = false`, p.ej. undo ya
+                    // aplicado desde otro dispositivo) — solo revertir la
+                    // racha/dar feedback háptico si de verdad se revirtió
+                    // algo, para no desincronizar la racha mostrada con el
+                    // resto del estado (puntos/historial) que el servidor
+                    // conservó intacto.
+                    val reverted = repo.undoTaskCompletion(target.householdId, target.taskId, target.completedAt)
+                    if (reverted) {
+                        repo.updateMemberStreak(
+                            householdId = target.householdId,
+                            memberId = target.memberId,
+                            currentStreak = target.previousStreak,
+                            bestStreak = target.previousBestStreak,
+                            lastStreakDate = target.previousLastStreakDate
+                        )
+                        buzz(HapticKind.LIGHT)
+                    }
+                }
+                // Si completeTask() terminó en error (nunca llegó a
+                // completarse en el servidor), no hay nada que deshacer.
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
